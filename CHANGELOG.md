@@ -1,5 +1,75 @@
 # Changelog
 
+## 1.0.0 — 2026-11-10
+
+Trace first, delete when necessary. New name: Exchange Message Trail (EMT).
+
+**New name**
+
+- The program is now Exchange Message Trail (EMT). The older name was MailCleaner.
+- New file names: `ExchangeMessageTrail.ps1`, `EMT.cmd`, `src/EMT.Core.ps1`, `src/EMT.Strings.ps1`,
+  `tests/EMT.Core.Tests.ps1`.
+- New prefix of the functions: `Emt` (for example `Invoke-EmtSearch`). The older prefix was `Mc`.
+- New prefix of the searches on the server: `EMT_yyyyMMdd_HHmmss`. The cleanup also removes the older `MC_*` searches.
+- New data folders: `%USERPROFILE%\ExchangeMessageTrail` and `%APPDATA%\ExchangeMessageTrail`.
+  At the first start, EMT copies `audit.csv` and `settings.json` from the MailCleaner folders. The log shows each copy.
+- The function for translators is now `Test-EmtLanguageFile`.
+
+**Window**
+
+- Two tabs in one window: **Trace** and **Delete**. The connection line, the log, the progress and **Cancel** are common.
+- The tab **Trace** opens at the start. The tab **Delete** is always available.
+  Its buttons are disabled without the necessary roles.
+- Enter starts the operation of the open tab.
+
+**Trace**
+
+- New operation: find messages in the tracking log only. It needs only the Message Tracking role.
+  A trace takes some seconds. It does not make a Compliance Search.
+- Criteria: senders, recipient, subject, message ID, period. A recipient alone is a usable criterion.
+- Buttons for the period: **Today**, **Yesterday**, **7 days**.
+- The message table shows a delivery status for each message, for example "2 delivered, 1 failed".
+  Messages with an error are red. Messages in transit or deferred are yellow.
+- The tab **Recipients** shows the status of each recipient: Delivered, Sent to an external system, Delivery failed,
+  Dropped, Deferred, In transit, Group, No delivery data. Each status has a color.
+- The column **Explanation** tells the cause of an error from the enhanced status code
+  (for example `5.1.1`: the address does not exist).
+- The tab **Events** shows all tracking events of the message in time order.
+- No result: the log shows hints (period, 30 days of the tracking log, sender, recipient, subject, Sent Items).
+- Export of the trace to CSV.
+
+**Mailbox check**
+
+- New button **Check the recipient mailbox** for a delivered message and an internal recipient.
+- The check reads the inbox rules, the junk e-mail settings, the mailbox forwarding and the quota. It changes nothing.
+- The findings tell if a rule moves, deletes or forwards the message, if the sender is blocked,
+  if the mailbox forwards the messages without a copy, and if the mailbox is almost full.
+- A check without permission gives the finding "not examined: no permission".
+- The tab **Recipient mailbox** shows the findings. Important findings are red, cautions are yellow.
+
+**Delete**
+
+- New button **Delete this message…** on the tab **Trace**. It opens the tab **Delete** and fills the criteria
+  from the selected message: sender, subject, message ID, recipients, period.
+- A source line on the tab **Delete**: "Data from the tracking log" (green) or "Data typed by the user" (orange).
+  A change of a criterion clears the result and sets the orange line.
+- The search button on the tab **Delete** is now **Find copies**.
+
+**Audit**
+
+- New actions in `audit.csv`: `Trace` and `MailboxCheck`.
+
+**Texts**
+
+- 106 new keys in `Lang/en.lng` and `Lang/ru.lng`.
+- After a language change, the window makes all texts again: statuses, explanations, status lines and findings.
+
+**Documentation**
+
+- README: the work order (trace, mailbox check, delete), the roles for the help desk, the statuses and the codes.
+- New document `docs/TODO.md`: possible future work.
+- `docs/ARCHITECTURE.md`, `docs/TESTING.md` and `docs/TRANSLATING.md` are updated for EMT.
+
 ## 0.6.0 — 2026-11-10
 
 Recipient and safety.

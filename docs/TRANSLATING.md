@@ -1,6 +1,6 @@
-# Translating MailCleaner
+# Translating Exchange Message Trail
 
-This document tells you how to add a language to the MailCleaner user interface.
+This document tells you how to add a language to the user interface of Exchange Message Trail (EMT).
 You do not have to change the code.
 
 ## Contents
@@ -15,10 +15,10 @@ You do not have to change the code.
 ## How languages work
 
 - Each language is one file in the folder `Lang`: `Lang\<code>.lng`.
-- MailCleaner reads all `.lng` files when it starts.
+- EMT reads all `.lng` files when it starts.
 - The language list in the top line of the window shows all languages that it found.
-- The language changes immediately. MailCleaner keeps the selection for the next start.
-- If a key is not in your file, MailCleaner uses the English text for this key.
+- The language changes immediately. EMT keeps the selection for the next start.
+- If a key is not in your file, EMT uses the English text for this key.
   Thus a partial translation is possible.
 
 The bundled files are:
@@ -31,7 +31,7 @@ The bundled files are:
 ## File format
 
 ```
-# MailCleaner language file
+# EMT language file
 @code = de
 @name = Deutsch
 @author = Your Name
@@ -43,8 +43,8 @@ log.connected = Verbunden mit {0}.
 
 | Line | Meaning |
 |---|---|
-| `# text` or `; text` | Comment. MailCleaner ignores it. |
-| Empty line | MailCleaner ignores it. |
+| `# text` or `; text` | Comment. EMT ignores it. |
+| Empty line | EMT ignores it. |
 | `@code = de` | The language code (ISO 639-1, two letters). If this line is missing, the file name is the code. |
 | `@name = Deutsch` | The name in the language list. Write it in your language. |
 | `@author = …` | Your name or your team. Optional. |
@@ -52,7 +52,7 @@ log.connected = Verbunden mit {0}.
 
 - The encoding is UTF-8. A BOM is permitted.
 - The text can contain `=`. Only the first `=` separates the key and the text.
-- MailCleaner removes the spaces at the start and at the end of the key and of the text.
+- EMT removes the spaces at the start and at the end of the key and of the text.
 - One text is one line. A line break in a text is not possible.
 
 ## Procedure: add a language
@@ -66,21 +66,21 @@ log.connected = Verbunden mit {0}.
 7. Translate the text after `=` in each line.
 8. Do not change the keys (the text before `=`).
 9. Save the file in UTF-8.
-10. Start MailCleaner.
+10. Start EMT.
 11. Select your language in the language list.
 12. Examine each part of the window (see [Rules for the texts](#rules-for-the-texts)).
 
 ## Procedure: examine your file
 
-MailCleaner has a check for language files. Do these steps:
+EMT has a check for language files. Do these steps:
 
 1. Open Windows PowerShell 5.1.
-2. Go to the MailCleaner folder.
+2. Go to the EMT folder.
 3. Type these commands:
 
 ```powershell
-. .\src\MailCleaner.Strings.ps1
-Test-McLanguageFile .\Lang\de.lng
+. .\src\EMT.Strings.ps1
+Test-EmtLanguageFile .\Lang\de.lng
 ```
 
 No output = the file is correct.
@@ -90,7 +90,7 @@ The check finds these problems:
 | Message | Cause | Action |
 |---|---|---|
 | `unknown key '…'` | The key is not in `en.lng` | Correct the key, or remove the line |
-| `missing key '…'` | The key is not in your file | Add the line. Until then, MailCleaner uses the English text. |
+| `missing key '…'` | The key is not in your file | Add the line. Until then, EMT uses the English text. |
 | `key '…': placeholders …` | The `{0}`, `{1}` in your text are not the same as in `en.lng` | Use the same placeholders |
 | `duplicate key '…'` | The key occurs two times | Remove one line |
 | `line N: no 'key = text'` | The line has no `=` | Correct the line, or make it a comment |
@@ -99,12 +99,12 @@ The check finds these problems:
 To accept a partial translation, add `-AllowMissing`:
 
 ```powershell
-Test-McLanguageFile .\Lang\de.lng -AllowMissing
+Test-EmtLanguageFile .\Lang\de.lng -AllowMissing
 ```
 
 ## Rules for the texts
 
-**Placeholders.** `{0}`, `{1}`, `{2}` are values that MailCleaner puts in the text:
+**Placeholders.** `{0}`, `{1}`, `{2}` are values that EMT puts in the text:
 a server name, a count, an address. Keep each placeholder. You can change the order in the sentence.
 A format in a placeholder, for example `{2:N1}` or `{1:N0}`, must stay the same.
 
@@ -112,7 +112,7 @@ A format in a placeholder, for example `{2:N1}` or `{1:N0}`, must stay the same.
 
 - Cmdlet and product names: `Search-Mailbox`, `Compliance Search`, `SoftDelete`, `Exchange`, `Outlook`, `KQL`, `MessageId`, `FQDN`.
 - Role names: `Mailbox Search`, `Mailbox Import Export`, `Discovery Management`, `Message Tracking`.
-- The search name prefix `MC_*`.
+- The search name prefixes `EMT_*` and `MC_*`.
 
 **Date formats.** The keys `fmt.picker`, `fmt.datetime` and `fmt.date` are .NET date formats
 (for example `dd.MM.yyyy HH:mm`). Use the usual format of your language.

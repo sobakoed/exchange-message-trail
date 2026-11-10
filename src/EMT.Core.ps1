@@ -1,80 +1,82 @@
 ﻿<#
-    MailCleaner.Core.ps1 — UI-independent logic for MailCleaner.
+    EMT.Core.ps1 — UI-independent logic for Exchange Message Trail (EMT).
 
     Loaded (dot-sourced) by:
-      * MailCleaner.ps1 (the GUI) inside its background runspace;
-      * tests\MailCleaner.Core.Tests.ps1 (Pester 5).
+      * ExchangeMessageTrail.ps1 (the GUI) inside its background runspace;
+      * tests\EMT.Core.Tests.ps1 (Pester 5).
 
     Pure helpers (no Exchange calls) come first and are fully unit-tested.
     Exchange-dependent operations follow; they expect the Exchange cmdlets to be
-    imported into the session (see Connect-McExchange).
+    imported into the session (see Connect-EmtExchange).
 #>
 
 Set-StrictMode -Version 2.0
 
 # User interface texts (ru/en) and the T function.
-. (Join-Path $PSScriptRoot 'MailCleaner.Strings.ps1')
+. (Join-Path $PSScriptRoot 'EMT.Strings.ps1')
 
-function Get-McSearchPrefix { 'MC_' }
+# New searches use EMT_. The older version (MailCleaner) used MC_: the cleanup accepts both.
+function Get-EmtSearchPrefix { 'EMT_' }
 
 # Up to this number of mailboxes, the search uses Search-Mailbox (seconds) instead of Compliance Search (minutes).
-function Get-McQuickSearchLimit { 10 }
+function Get-EmtQuickSearchLimit { 10 }
 
-function Get-McExchangeCommandNames {
+function Get-EmtExchangeCommandNames {
     @(
         'Get-TransportService', 'Get-MessageTrackingLog', 'Get-Recipient', 'Get-AcceptedDomain',
         'New-ComplianceSearch', 'Start-ComplianceSearch', 'Stop-ComplianceSearch',
         'Get-ComplianceSearch', 'Remove-ComplianceSearch',
         'New-ComplianceSearchAction', 'Get-ComplianceSearchAction', 'Remove-ComplianceSearchAction',
-        'Search-Mailbox', 'Get-MailboxSearch', 'Remove-MailboxSearch'
+        'Search-Mailbox', 'Get-MailboxSearch', 'Remove-MailboxSearch',
+        'Get-InboxRule', 'Get-MailboxJunkEmailConfiguration', 'Get-Mailbox', 'Get-MailboxStatistics'
     )
 }
 
-#region ---------- Logging / progress / cancellation (shared with the UI via $global:McSync) ----------
+#region ---------- Logging / progress / cancellation (shared with the UI via $global:EmtSync) ----------
 
-function Write-McLog {
+function Write-EmtLog {
     param(
         [Parameter(Mandatory)] [string] $Message,
         [ValidateSet('Info', 'Ok', 'Warn', 'Error')] [string] $Level = 'Info'
     )
     $line = '{0:HH:mm:ss} [{1}] {2}' -f (Get-Date), $Level.ToUpperInvariant().PadRight(5), $Message
-    if ((Get-Variable -Name McSync -Scope Global -ErrorAction SilentlyContinue) -and $global:McSync) {
-        $global:McSync.Log.Enqueue($line)
+    if ((Get-Variable -Name EmtSync -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtSync) {
+        $global:EmtSync.Log.Enqueue($line)
     } else {
         Write-Verbose $line
     }
 }
 
-function Set-McProgress {
+function Set-EmtProgress {
     param([int] $Percent, [string] $Status = '')
-    if ((Get-Variable -Name McSync -Scope Global -ErrorAction SilentlyContinue) -and $global:McSync) {
-        $global:McSync.Progress = [math]::Max(0, [math]::Min(100, $Percent))
-        $global:McSync.Status   = $Status
+    if ((Get-Variable -Name EmtSync -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtSync) {
+        $global:EmtSync.Progress = [math]::Max(0, [math]::Min(100, $Percent))
+        $global:EmtSync.Status   = $Status
     }
 }
 
-function Test-McCancelRequested {
-    [bool]((Get-Variable -Name McSync -Scope Global -ErrorAction SilentlyContinue) -and
-           $global:McSync -and $global:McSync.Cancel)
+function Test-EmtCancelRequested {
+    [bool]((Get-Variable -Name EmtSync -Scope Global -ErrorAction SilentlyContinue) -and
+           $global:EmtSync -and $global:EmtSync.Cancel)
 }
 
-function Test-McCancel {
-    if (Test-McCancelRequested) {
+function Test-EmtCancel {
+    if (Test-EmtCancelRequested) {
         throw [System.OperationCanceledException]::new((T 'core.cancelled'))
     }
 }
 
-function Wait-McSeconds {
+function Wait-EmtSeconds {
     <# Waits and checks for cancel each second. #>
     param([int] $Seconds)
-    for ($i = 0; $i -lt $Seconds; $i++) { Test-McCancel; Start-Sleep -Seconds 1 }
+    for ($i = 0; $i -lt $Seconds; $i++) { Test-EmtCancel; Start-Sleep -Seconds 1 }
 }
 
 #endregion
 
 #region ---------- Pure helpers ----------
 
-function Split-McAddressList {
+function Split-EmtAddressList {
     <#
         "a@x; b@x, c@x" -> lower-case unique array.
         The separators are the comma, the semicolon and the line break.
@@ -87,19 +89,19 @@ function Split-McAddressList {
         $p = $part.Trim()
         if (-not $p) { continue }
         $words = @($p -split '\s+' | Where-Object { $_ })
-        if ($words.Count -gt 1 -and @($words | Where-Object { Test-McFullAddress $_ }).Count -eq $words.Count) { $words }
+        if ($words.Count -gt 1 -and @($words | Where-Object { Test-EmtFullAddress $_ }).Count -eq $words.Count) { $words }
         else { $p -replace '\s+', ' ' }
     }
     @($items | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
 }
 
-function Test-McFullAddress {
+function Test-EmtFullAddress {
     <# True for a full SMTP address: name@domain.tld. A part of an address or a name is not full. #>
     param([string] $Text)
     [bool]($Text -match '^[^@\s]+@[^@\s]+\.[^@\s]+$')
 }
 
-function Get-McKqlDateRange {
+function Get-EmtKqlDateRange {
     <#
         KQL filters by whole days only. Returns From (inclusive) and To (exclusive) as yyyy-MM-dd.
         An End exactly at midnight does not pull in the next day.
@@ -123,19 +125,19 @@ function Get-McKqlDateRange {
     }
 }
 
-function Get-McBaseSubject {
+function Get-EmtBaseSubject {
     <# Subject without reply/forward prefixes (RE:, FW:, Fwd:, AW:, WG:, Отв:, Пересл: …), lower case. #>
     param([string] $Subject)
     $rx = '^\s*((re|fw|fwd|aw|wg|tr|rv|sv|vs|отв|ответ|пересл|переслано)\s*(\[\d+\])?\s*:\s*)+'
     (([string]$Subject) -replace $rx, '').Trim().ToLowerInvariant()
 }
 
-function ConvertTo-McKqlPhrase {
+function ConvertTo-EmtKqlPhrase {
     param([string] $Text)
     '"' + ($Text -replace '"', '').Trim() + '"'
 }
 
-function New-McSearchQuery {
+function New-EmtSearchQuery {
     <#
         Builds the KQL for Compliance Search / Search-Mailbox.
         Refuses to build a query that is limited by dates only (it would match everything).
@@ -153,9 +155,9 @@ function New-McSearchQuery {
     $parts = New-Object System.Collections.Generic.List[string]
     $senders = @($Senders | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
     if ($senders.Count) { $parts.Add('(' + (($senders | ForEach-Object { "from:$_" }) -join ' OR ') + ')') }
-    if ($Subject)    { $parts.Add('(subject:' + (ConvertTo-McKqlPhrase $Subject) + ')') }
-    if ($Attachment) { $parts.Add('(attachment:' + (ConvertTo-McKqlPhrase $Attachment) + ')') }
-    if ($Keywords)   { $parts.Add('(' + (ConvertTo-McKqlPhrase $Keywords) + ')') }
+    if ($Subject)    { $parts.Add('(subject:' + (ConvertTo-EmtKqlPhrase $Subject) + ')') }
+    if ($Attachment) { $parts.Add('(attachment:' + (ConvertTo-EmtKqlPhrase $Attachment) + ')') }
+    if ($Keywords)   { $parts.Add('(' + (ConvertTo-EmtKqlPhrase $Keywords) + ')') }
     if ($parts.Count -eq 0) {
         throw (T 'crit.datesOnly')
     }
@@ -165,13 +167,13 @@ function New-McSearchQuery {
     if ($rcpts.Count) {
         $parts.Add('(' + (($rcpts | ForEach-Object { "to:$_ OR cc:$_ OR bcc:$_" }) -join ' OR ') + ')')
     }
-    $range = Get-McKqlDateRange -Start $Start -End $End -UtcOffset $UtcOffset
+    $range = Get-EmtKqlDateRange -Start $Start -End $End -UtcOffset $UtcOffset
     $parts.Add("(sent>=$($range.From))")
     $parts.Add("(sent<$($range.To))")
     $parts -join ' AND '
 }
 
-function Complete-McCriteria {
+function Complete-EmtCriteria {
     <# Returns a copy of the criteria with all keys present (StrictMode refuses missing hashtable keys). #>
     param([Parameter(Mandatory)] [hashtable] $Criteria)
     $c = @{
@@ -184,13 +186,17 @@ function Complete-McCriteria {
     $c
 }
 
-function Test-McCriteria {
-    <# Returns a list of problems; empty list = criteria are usable. #>
-    param([Parameter(Mandatory)] [hashtable] $Criteria)
-    $Criteria = Complete-McCriteria $Criteria
+function Test-EmtCriteria {
+    <#
+        Returns a list of problems; empty list = criteria are usable.
+        -ForTrace: the trace only reads the tracking log. A recipient alone is a usable criterion there
+        ("what did this address receive"). The delete needs more: a query by dates and recipient only is too wide.
+    #>
+    param([Parameter(Mandatory)] [hashtable] $Criteria, [switch] $ForTrace)
+    $Criteria = Complete-EmtCriteria $Criteria
     $problems = @()
     $hasKey = @($Criteria.Senders).Count -or $Criteria.Subject -or $Criteria.Attachment -or
-              $Criteria.Keywords -or $Criteria.MessageId
+              $Criteria.Keywords -or $Criteria.MessageId -or ($ForTrace -and $Criteria.Recipient)
     if (-not $hasKey) { $problems += (T 'crit.noKey') }
     if ($Criteria.End -le $Criteria.Start) { $problems += (T 'crit.endBeforeStart') }
     if ($Criteria.OnlyRecipient -and -not $Criteria.Recipient) { $problems += (T 'crit.onlyNeedsRecipient') }
@@ -199,7 +205,7 @@ function Test-McCriteria {
     $problems
 }
 
-function Get-McSearchHits {
+function Get-EmtSearchHits {
     <# Parses ComplianceSearch.SuccessResults: "Location: x, Item count: N, Total size: S" (separators , or ;). #>
     param([string] $SuccessResults)
     $rx = 'Location:\s*(?<loc>[^,;}\r\n]+)[,;]\s*Item count:\s*(?<cnt>\d+)[,;]\s*Total size:\s*(?<size>\d+)'
@@ -212,7 +218,7 @@ function Get-McSearchHits {
     }
 }
 
-function Get-McSum {
+function Get-EmtSum {
     <#
         Sum of a numeric property. 0 for an empty list.
         Not "Measure-Object -Sum": with an empty list it has no Sum property, and StrictMode stops.
@@ -223,7 +229,7 @@ function Get-McSum {
     $sum
 }
 
-function Test-McInternalDomain {
+function Test-EmtInternalDomain {
     <#
         True when the address belongs to an accepted domain.
         Accepted domain names can have the form "contoso.com" or "*.contoso.com".
@@ -239,7 +245,7 @@ function Test-McInternalDomain {
     $false
 }
 
-function ConvertFrom-McSizeText {
+function ConvertFrom-EmtSizeText {
     <# Search-Mailbox gives the size as text, e.g. "1.25 MB (1,310,720 bytes)". Returns KB. #>
     param([string] $Text)
     if ($Text -match '\((?<b>[\d,\.\s ]+)\s*bytes\)') {
@@ -249,7 +255,7 @@ function ConvertFrom-McSizeText {
     0
 }
 
-function Test-McServerGeneratedId {
+function Test-EmtServerGeneratedId {
     <#
         True when a MessageId was generated by an Exchange server itself
         (host part = a transport server name or *.local). Typical for
@@ -267,7 +273,7 @@ function Test-McServerGeneratedId {
     $false
 }
 
-function Get-McMessageSummary {
+function Get-EmtMessageSummary {
     <# One row per MessageId: first submit/receive time, sender, subject, recipient count, server-generated flag. #>
     param([object[]] $Events = @(), [string[]] $ServerNames = @())
     # An event without MessageId (for example NOTIFYMAPI) is not a message: no row for it.
@@ -277,7 +283,7 @@ function Get-McMessageSummary {
         if (-not $first) { $first = $g[0] }
         $rcpt   = @($g | ForEach-Object { $_.Recipients } | Where-Object { $_ } |
                     ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
-        $auto   = Test-McServerGeneratedId -MessageId $_.Name -ServerNames $ServerNames
+        $auto   = Test-EmtServerGeneratedId -MessageId $_.Name -ServerNames $ServerNames
         [pscustomobject]@{
             Time       = $first.Timestamp
             Sender     = ([string]$first.Sender).ToLowerInvariant()
@@ -290,7 +296,7 @@ function Get-McMessageSummary {
     } | Sort-Object Time
 }
 
-function Get-McMissingMailboxes {
+function Get-EmtMissingMailboxes {
     <# Locations that were searched but returned no items. #>
     param([string[]] $Locations = @(), [object[]] $Hits = @())
     if ($Locations -contains 'All') { return @() }
@@ -298,7 +304,7 @@ function Get-McMissingMailboxes {
     @($Locations | ForEach-Object { $_.ToLowerInvariant() } | Where-Object { $_ -notin $found } | Sort-Object -Unique)
 }
 
-function Get-McLargeDeleteWarning {
+function Get-EmtLargeDeleteWarning {
     <# Text of the warning for a large delete. Empty text = no warning. #>
     param([int] $Items, [int] $Messages, [int] $MaxItems = 100, [int] $MaxMessages = 5)
     $reasons = @()
@@ -307,28 +313,28 @@ function Get-McLargeDeleteWarning {
     if ($reasons.Count) { T 'large.warning' ($reasons -join ', ') } else { '' }
 }
 
-function Test-McSearchName {
-    <# True only for the names that MailCleaner makes: MC_yyyyMMdd_HHmmss, with or without "-shadow". #>
+function Test-EmtSearchName {
+    <# True only for the names that EMT makes: EMT_yyyyMMdd_HHmmss (or the older MC_...), with or without "-shadow". #>
     param([string] $Name)
-    $Name -cmatch '^MC_\d{8}_\d{6}(-shadow)?$'
+    $Name -cmatch '^(EMT|MC)_\d{8}_\d{6}(-shadow)?$'
 }
 
-function Get-McSearchNameTime {
-    <# The creation time from a MailCleaner search name (MC_yyyyMMdd_HHmmss[-shadow]), or $null. #>
+function Get-EmtSearchNameTime {
+    <# The creation time from an EMT search name (EMT_ or MC_ + yyyyMMdd_HHmmss[-shadow]), or $null. #>
     param([string] $Name)
-    if ($Name -notmatch '^MC_(?<t>\d{8}_\d{6})') { return $null }
+    if ($Name -cnotmatch '^(EMT|MC)_(?<t>\d{8}_\d{6})') { return $null }
     $t = [datetime]::MinValue
     if ([datetime]::TryParseExact($Matches['t'], 'yyyyMMdd_HHmmss', [Globalization.CultureInfo]::InvariantCulture,
                                   [Globalization.DateTimeStyles]::None, [ref]$t)) { return $t }
     $null
 }
 
-function New-McSearchName {
+function New-EmtSearchName {
     param([datetime] $Now = (Get-Date))
-    '{0}{1:yyyyMMdd_HHmmss}' -f (Get-McSearchPrefix), $Now
+    '{0}{1:yyyyMMdd_HHmmss}' -f (Get-EmtSearchPrefix), $Now
 }
 
-function Write-McAudit {
+function Write-EmtAudit {
     <# Appends one row to the CSV audit trail. #>
     param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [hashtable] $Record)
     $dir = Split-Path -Parent $Path
@@ -354,45 +360,45 @@ function Write-McAudit {
 
 #region ---------- Exchange operations ----------
 
-function Connect-McExchange {
+function Connect-EmtExchange {
     <# Opens an Exchange remote session and imports the needed cmdlets globally. Returns capabilities. #>
     param([Parameter(Mandatory)] [string] $Server)
-    if ((Get-Variable -Name McExSession -Scope Global -ErrorAction SilentlyContinue) -and $global:McExSession) {
-        Remove-PSSession $global:McExSession -ErrorAction SilentlyContinue
-        $global:McExSession = $null
+    if ((Get-Variable -Name EmtExSession -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtExSession) {
+        Remove-PSSession $global:EmtExSession -ErrorAction SilentlyContinue
+        $global:EmtExSession = $null
     }
-    Write-McLog (T 'log.connecting' $Server)
+    Write-EmtLog (T 'log.connecting' $Server)
     $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$Server/PowerShell/" `
                    -Authentication Kerberos -ErrorAction Stop
-    $module = Import-PSSession $session -CommandName (Get-McExchangeCommandNames) -DisableNameChecking `
+    $module = Import-PSSession $session -CommandName (Get-EmtExchangeCommandNames) -DisableNameChecking `
                   -AllowClobber -ErrorAction Stop -WarningAction SilentlyContinue
     Import-Module $module -Global -DisableNameChecking -WarningAction SilentlyContinue
-    $global:McExSession = $session
+    $global:EmtExSession = $session
 
     # Accepted domains: an address in another domain is external without a Get-Recipient call.
-    $global:McAcceptedDomains = @()
+    $global:EmtAcceptedDomains = @()
     if (Get-Command Get-AcceptedDomain -ErrorAction SilentlyContinue) {
         try {
-            $global:McAcceptedDomains = @(Get-AcceptedDomain -ErrorAction Stop |
+            $global:EmtAcceptedDomains = @(Get-AcceptedDomain -ErrorAction Stop |
                                           ForEach-Object { ([string]$_.DomainName).ToLowerInvariant() })
-            Write-McLog (T 'log.domains' ($global:McAcceptedDomains -join ', '))
+            Write-EmtLog (T 'log.domains' ($global:EmtAcceptedDomains -join ', '))
         } catch {
-            Write-McLog (T 'log.domainsFailed' $_.Exception.Message) 'Warn'
+            Write-EmtLog (T 'log.domainsFailed' $_.Exception.Message) 'Warn'
         }
     }
-    $caps = Get-McCapabilities
-    Write-McLog (T 'log.connected' $Server) 'Ok'
+    $caps = Get-EmtCapabilities
+    Write-EmtLog (T 'log.connected' $Server) 'Ok'
     $caps
 }
 
-function Get-McAcceptedDomains {
-    if ((Get-Variable -Name McAcceptedDomains -Scope Global -ErrorAction SilentlyContinue) -and $global:McAcceptedDomains) {
-        return @($global:McAcceptedDomains)
+function Get-EmtAcceptedDomains {
+    if ((Get-Variable -Name EmtAcceptedDomains -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtAcceptedDomains) {
+        return @($global:EmtAcceptedDomains)
     }
     @()
 }
 
-function Get-McCapabilities {
+function Get-EmtCapabilities {
     $has = { param($n) [bool](Get-Command $n -ErrorAction SilentlyContinue) }
     $sm  = Get-Command Search-Mailbox -ErrorAction SilentlyContinue
     [pscustomobject]@{
@@ -401,10 +407,11 @@ function Get-McCapabilities {
         Verify     = [bool]$sm
         SoftDelete = (& $has 'New-ComplianceSearchAction') -and (& $has 'Get-ComplianceSearchAction')
         HardDelete = [bool]($sm -and $sm.Parameters.ContainsKey('DeleteContent'))
+        MailboxCheck = (& $has 'Get-Mailbox') -and (& $has 'Get-InboxRule')
     }
 }
 
-function Find-McTrackingEvents {
+function Find-EmtTrackingEvents {
     <#
         Message tracking, tolerant to one wrong filter:
           a) by each sender (no subject), b) by subject (no sender), c) by MessageId, d) by recipient only.
@@ -421,7 +428,7 @@ function Find-McTrackingEvents {
         [switch] $IncludeForwards, [switch] $CompleteRecipients
     )
     $servers = @(Get-TransportService | ForEach-Object { [string]$_.Name })
-    Write-McLog (T 'log.trackServers' $servers.Count)
+    Write-EmtLog (T 'log.trackServers' $servers.Count)
     $common = @{ Start = $Start; End = $End; ResultSize = 'Unlimited' }
     if ($Recipient) { $common.Recipients = $Recipient }
     $trackErrors = New-Object System.Collections.Generic.List[string]
@@ -438,8 +445,8 @@ function Find-McTrackingEvents {
     $total = [math]::Max(1, $queries.Count * $servers.Count); $n = 0
     foreach ($q in $queries) {
         foreach ($srv in $servers) {
-            Test-McCancel
-            $n++; Set-McProgress ([int](30 * $n / $total)) (T 'progress.tracking' $srv)
+            Test-EmtCancel
+            $n++; Set-EmtProgress ([int](30 * $n / $total)) (T 'progress.tracking' $srv)
             $p = $common + $q
             $ev = $null
             foreach ($e in @(Get-MessageTrackingLog -Server $srv @p -ErrorAction SilentlyContinue -ErrorVariable ev)) {
@@ -459,16 +466,16 @@ function Find-McTrackingEvents {
             if ($IncludeForwards) {
                 # A forward is a message from another sender with the same base subject
                 # (subject without RE:/FW: prefixes). A different subject that only contains the text is not a forward.
-                $bases = @($orig | ForEach-Object { Get-McBaseSubject $_.MessageSubject } | Sort-Object -Unique)
+                $bases = @($orig | ForEach-Object { Get-EmtBaseSubject $_.MessageSubject } | Sort-Object -Unique)
                 $fw = @($hits | Where-Object {
-                    ([string]$_.Sender).ToLowerInvariant() -notin $Senders -and (Get-McBaseSubject $_.MessageSubject) -in $bases
+                    ([string]$_.Sender).ToLowerInvariant() -notin $Senders -and (Get-EmtBaseSubject $_.MessageSubject) -in $bases
                 })
                 $hits = @($orig) + @($fw)
             } else {
                 $hits = $orig
             }
         } elseif ($IncludeForwards -and $Subject) {
-            Write-McLog (T 'log.noOriginal') 'Warn'
+            Write-EmtLog (T 'log.noOriginal') 'Warn'
         } else {
             $hits = @()
         }
@@ -476,17 +483,17 @@ function Find-McTrackingEvents {
     # Events without MessageId (for example NOTIFYMAPI) are not messages. They stay in the event list only.
     $ids   = @($hits | ForEach-Object { [string]$_.MessageId } | Where-Object { $_ } | Sort-Object -Unique)
     $blank = @($hits | Where-Object { -not $_.MessageId })
-    Write-McLog (T 'log.trackCount' $ids.Count)
+    Write-EmtLog (T 'log.trackCount' $ids.Count)
 
     $source = $raw
     if ($Recipient -and $CompleteRecipients -and $ids.Count) {
-        Write-McLog (T 'log.secondPass')
+        Write-EmtLog (T 'log.secondPass')
         $source = New-Object System.Collections.Generic.List[object]
         $total = [math]::Max(1, $ids.Count * $servers.Count); $n = 0
         foreach ($id in $ids) {
             foreach ($srv in $servers) {
-                Test-McCancel
-                $n++; Set-McProgress (30 + [int](5 * $n / $total)) (T 'progress.trackingId' $srv)
+                Test-EmtCancel
+                $n++; Set-EmtProgress (30 + [int](5 * $n / $total)) (T 'progress.trackingId' $srv)
                 $ev = $null
                 foreach ($e in @(Get-MessageTrackingLog -Server $srv -MessageId $id -Start $Start -End $End.AddDays(1) `
                                      -ResultSize Unlimited -ErrorAction SilentlyContinue -ErrorVariable ev)) {
@@ -497,8 +504,8 @@ function Find-McTrackingEvents {
         }
     }
     $errs = @($trackErrors | Sort-Object -Unique)
-    foreach ($t in $errs) { Write-McLog (T 'log.trackError' $t) 'Error' }
-    $events = @(Select-McUniqueEvents -Events $source -MessageIds $ids) + @(Select-McUniqueEvents -Events $blank -KeepBlank)
+    foreach ($t in $errs) { Write-EmtLog (T 'log.trackError' $t) 'Error' }
+    $events = @(Select-EmtUniqueEvents -Events $source -MessageIds $ids) + @(Select-EmtUniqueEvents -Events $blank -KeepBlank)
     [pscustomobject]@{
         Events  = @($events | Sort-Object Timestamp)
         Servers = $servers
@@ -506,7 +513,7 @@ function Find-McTrackingEvents {
     }
 }
 
-function Select-McUniqueEvents {
+function Select-EmtUniqueEvents {
     <#
         Keeps the events of the given MessageIds. Removes duplicates (one event can match two queries).
         -KeepBlank also keeps the events without MessageId.
@@ -519,7 +526,7 @@ function Select-McUniqueEvents {
     } | Sort-Object Timestamp
 }
 
-function Resolve-McRecipients {
+function Resolve-EmtRecipients {
     <#
         Classifies addresses: Internal mailbox / External / Group / Other.
         Addresses outside the accepted domains are external without a call.
@@ -528,13 +535,13 @@ function Resolve-McRecipients {
     #>
     param([string[]] $Addresses = @(), [string[]] $AcceptedDomains = @(), [int] $BatchSize = 20)
     $list = @($Addresses | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
-    $lookup = @($list | Where-Object { -not $AcceptedDomains.Count -or (Test-McInternalDomain $_ $AcceptedDomains) })
+    $lookup = @($list | Where-Object { -not $AcceptedDomains.Count -or (Test-EmtInternalDomain $_ $AcceptedDomains) })
     $byAddress = @{}
 
     for ($b = 0; $b -lt $lookup.Count; $b += $BatchSize) {
-        Test-McCancel
+        Test-EmtCancel
         $batch = @($lookup[$b..([math]::Min($b + $BatchSize, $lookup.Count) - 1)])
-        Set-McProgress (35 + [int](5 * ($b + $batch.Count) / [math]::Max(1, $lookup.Count))) (T 'progress.recipients' ($b + $batch.Count) $lookup.Count)
+        Set-EmtProgress (35 + [int](5 * ($b + $batch.Count) / [math]::Max(1, $lookup.Count))) (T 'progress.recipients' ($b + $batch.Count) $lookup.Count)
         $filter = ($batch | ForEach-Object { "EmailAddresses -eq 'smtp:$($_ -replace "'", "''")'" }) -join ' -or '
         try {
             foreach ($r in @(Get-Recipient -Filter $filter -ResultSize Unlimited -ErrorAction Stop)) {
@@ -543,7 +550,7 @@ function Resolve-McRecipients {
                 foreach ($a in $batch) { if ($a -in $proxies) { $byAddress[$a] = $r } }
             }
         } catch {
-            Write-McLog (T 'log.batchFailed' $_.Exception.Message) 'Warn'
+            Write-EmtLog (T 'log.batchFailed' $_.Exception.Message) 'Warn'
             foreach ($a in $batch) {
                 try { $byAddress[$a] = Get-Recipient -Identity $a -ErrorAction Stop } catch { }
             }
@@ -567,7 +574,7 @@ function Resolve-McRecipients {
     }
 }
 
-function Find-McAddressCandidates {
+function Find-EmtAddressCandidates {
     <#
         Address book search for a partial address or a name (Get-Recipient -Anr). ANR compares
         the text with the alias, the display name, the first name, the last name and the start
@@ -578,7 +585,7 @@ function Find-McAddressCandidates {
     try {
         $found = @(Get-Recipient -Anr $Text -ResultSize $Max -ErrorAction Stop)
     } catch {
-        Write-McLog (T 'log.resolveFailed' $Text $_.Exception.Message) 'Warn'
+        Write-EmtLog (T 'log.resolveFailed' $Text $_.Exception.Message) 'Warn'
     }
     @($found | ForEach-Object {
         [pscustomobject]@{
@@ -590,35 +597,35 @@ function Find-McAddressCandidates {
     } | Where-Object { $_.Address } | Sort-Object Name, Address)
 }
 
-function Resolve-McAddressInputs {
-    <# For each partial address: Input and Candidates (see Find-McAddressCandidates). #>
+function Resolve-EmtAddressInputs {
+    <# For each partial address: Input and Candidates (see Find-EmtAddressCandidates). #>
     param([Parameter(Mandatory)] [string[]] $Inputs, [int] $Max = 25)
-    Write-McLog (T 'log.resolveStart' ($Inputs -join ', '))
+    Write-EmtLog (T 'log.resolveStart' ($Inputs -join ', '))
     $i = 0
     foreach ($t in $Inputs) {
-        Test-McCancel
-        $i++; Set-McProgress ([int](100 * $i / $Inputs.Count)) (T 'status.resolve')
-        [pscustomobject]@{ Input = $t; Candidates = @(Find-McAddressCandidates -Text $t -Max $Max); Max = $Max }
+        Test-EmtCancel
+        $i++; Set-EmtProgress ([int](100 * $i / $Inputs.Count)) (T 'status.resolve')
+        [pscustomobject]@{ Input = $t; Candidates = @(Find-EmtAddressCandidates -Text $t -Max $Max); Max = $Max }
     }
 }
 
-function Wait-McComplianceSearch {
+function Wait-EmtComplianceSearch {
     param([Parameter(Mandatory)] [string] $Name, [int] $TimeoutMinutes = 60, [int] $ProgressFrom = 40, [int] $ProgressTo = 95)
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     while ($true) {
         Start-Sleep -Seconds 3
-        if ((Get-Variable -Name McSync -Scope Global -ErrorAction SilentlyContinue) -and $global:McSync -and $global:McSync.Cancel) {
-            Write-McLog (T 'log.csStopping' $Name) 'Warn'
+        if ((Get-Variable -Name EmtSync -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtSync -and $global:EmtSync.Cancel) {
+            Write-EmtLog (T 'log.csStopping' $Name) 'Warn'
             $stopErr = $null
             Stop-ComplianceSearch -Identity $Name -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable stopErr
-            if ($stopErr) { Write-McLog (T 'log.stopError' $Name (@($stopErr)[0].Exception.Message)) 'Warn' }
+            if ($stopErr) { Write-EmtLog (T 'log.stopError' $Name (@($stopErr)[0].Exception.Message)) 'Warn' }
             # Exchange on-premises can continue the search after Stop-ComplianceSearch until it completes.
-            Write-McLog (T 'log.stopNote' $Name) 'Warn'
-            Test-McCancel
+            Write-EmtLog (T 'log.stopNote' $Name) 'Warn'
+            Test-EmtCancel
         }
         $s = Get-ComplianceSearch -Identity $Name
         $pct = [int]$s.JobProgress
-        Set-McProgress ($ProgressFrom + [int](($ProgressTo - $ProgressFrom) * $pct / 100)) (T 'progress.cs' $s.Status $pct)
+        Set-EmtProgress ($ProgressFrom + [int](($ProgressTo - $ProgressFrom) * $pct / 100)) (T 'progress.cs' $s.Status $pct)
         if ($s.Status -in 'Completed', 'Stopped', 'Failed') { break }
         if ((Get-Date) -gt $deadline) { throw (T 'err.csTimeout' $Name $TimeoutMinutes) }
     }
@@ -626,59 +633,59 @@ function Wait-McComplianceSearch {
     $s
 }
 
-function Invoke-McSearch {
+function Invoke-EmtSearch {
     <# Full pipeline: tracking -> recipients -> KQL -> Compliance Search -> hits. #>
     param([Parameter(Mandatory)] [hashtable] $Criteria, [int] $TimeoutMinutes = 60)
 
-    $Criteria = Complete-McCriteria $Criteria
-    $problems = @(Test-McCriteria $Criteria)
+    $Criteria = Complete-EmtCriteria $Criteria
+    $problems = @(Test-EmtCriteria $Criteria)
     if ($problems.Count) { throw ($problems -join ' ') }
 
     $senders = @($Criteria.Senders)
-    $caps = Get-McCapabilities
+    $caps = Get-EmtCapabilities
     if (-not $caps.Search -and -not $caps.Verify) {
         throw (T 'err.noSearchRights')
     }
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
-    $stage = { param($text) Write-McLog (T 'log.stage' $text $timer.Elapsed.TotalSeconds) }
+    $stage = { param($text) Write-EmtLog (T 'log.stage' $text $timer.Elapsed.TotalSeconds) }
 
     # ---- 0. Only the recipient mailbox ----
     $onlyMailbox = ''
     if ($Criteria.OnlyRecipient) {
-        $r = @(Resolve-McRecipients -Addresses $Criteria.Recipient)
+        $r = @(Resolve-EmtRecipients -Addresses $Criteria.Recipient)
         if (-not $r.Count -or $r[0].Kind -ne 'Internal') {
             throw (T 'err.notInternal' $Criteria.Recipient)
         }
         $onlyMailbox = $r[0].Mailbox
-        Write-McLog (T 'log.onlyMode' $onlyMailbox)
+        Write-EmtLog (T 'log.onlyMode' $onlyMailbox)
     }
 
     # ---- 1. Message tracking ----
     $tracking = [pscustomobject]@{ Events = @(); Servers = @(); Errors = @() }
     if ($caps.Tracking) {
-        $tracking = Find-McTrackingEvents -Senders $senders -Subject $Criteria.Subject -Recipient $Criteria.Recipient `
+        $tracking = Find-EmtTrackingEvents -Senders $senders -Subject $Criteria.Subject -Recipient $Criteria.Recipient `
                         -MessageId $Criteria.MessageId -Start $Criteria.Start -End $Criteria.End `
                         -IncludeForwards:([bool]$Criteria.IncludeForwards) -CompleteRecipients:(-not $onlyMailbox)
         & $stage (T 'stage.tracking')
     } else {
-        Write-McLog (T 'log.noTrackRights') 'Warn'
+        Write-EmtLog (T 'log.noTrackRights') 'Warn'
     }
     $events  = @($tracking.Events)
     $trackErrors = @($tracking.Errors)
-    $summary = @(Get-McMessageSummary -Events $events -ServerNames $tracking.Servers)
-    if (-not $events.Count) { Write-McLog (T 'log.trackEmpty') 'Warn' }
-    foreach ($m in @($summary | Where-Object ServerGenerated)) { Write-McLog (T 'log.serverGenerated' $m.MessageId $m.Sender) 'Warn' }
+    $summary = @(Get-EmtMessageSummary -Events $events -ServerNames $tracking.Servers)
+    if (-not $events.Count) { Write-EmtLog (T 'log.trackEmpty') 'Warn' }
+    foreach ($m in @($summary | Where-Object ServerGenerated)) { Write-EmtLog (T 'log.serverGenerated' $m.MessageId $m.Sender) 'Warn' }
 
     # ---- 2. Recipients ----
     $addresses = @($events | ForEach-Object { $_.Recipients } | Where-Object { $_ } |
                    ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
     $trackSenders = @($events | ForEach-Object { [string]$_.Sender } | Where-Object { $_ } |
                       ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
-    $recipients = @(Resolve-McRecipients -Addresses (@($addresses) + @($trackSenders) | Sort-Object -Unique) `
-                        -AcceptedDomains (Get-McAcceptedDomains))
+    $recipients = @(Resolve-EmtRecipients -Addresses (@($addresses) + @($trackSenders) | Sort-Object -Unique) `
+                        -AcceptedDomains (Get-EmtAcceptedDomains))
     $internal = @($recipients | Where-Object Kind -eq 'Internal' | ForEach-Object Mailbox | Sort-Object -Unique)
     $external = @($recipients | Where-Object { $_.Kind -eq 'External' -and $_.Address -in $addresses })
-    if ($external.Count) { Write-McLog (T 'log.external' $external.Count) 'Warn' }
+    if ($external.Count) { Write-EmtLog (T 'log.external' $external.Count) 'Warn' }
     & $stage (T 'stage.recipients' $recipients.Count)
 
     # ---- 3. KQL ----
@@ -688,7 +695,7 @@ function Invoke-McSearch {
     if (-not $kqlSubject -and $Criteria.MessageId -and $summary.Count) { $kqlSubject = $summary[0].Subject }
     $kqlRecipients = @()
     if ($Criteria.Recipient) { $kqlRecipients = @($Criteria.Recipient) }
-    $query = New-McSearchQuery -Senders $kqlSenders -Subject $kqlSubject -Attachment $Criteria.Attachment `
+    $query = New-EmtSearchQuery -Senders $kqlSenders -Subject $kqlSubject -Attachment $Criteria.Attachment `
                  -Keywords $Criteria.Keywords -Start $Criteria.Start -End $Criteria.End -Recipients $kqlRecipients
 
     $locations = @($internal)
@@ -699,37 +706,37 @@ function Invoke-McSearch {
     } elseif (-not $locations.Count) {
         # No recipient mailboxes from the tracking log. With a recipient or senders in the criteria,
         # search only their mailboxes: a search of all mailboxes is slow and not necessary.
-        $own = @(Resolve-McRecipients -Addresses (@($kqlRecipients) + @($senders)) -AcceptedDomains (Get-McAcceptedDomains) |
+        $own = @(Resolve-EmtRecipients -Addresses (@($kqlRecipients) + @($senders)) -AcceptedDomains (Get-EmtAcceptedDomains) |
                  Where-Object Kind -eq 'Internal' | ForEach-Object Mailbox | Sort-Object -Unique)
         if ($kqlRecipients.Count -and $own.Count) {
             $locations = $own
-            Write-McLog (T 'log.recipientScope' ($own -join ', ')) 'Warn'
+            Write-EmtLog (T 'log.recipientScope' ($own -join ', ')) 'Warn'
         } else {
-            Write-McLog (T 'log.searchAll') 'Warn'
+            Write-EmtLog (T 'log.searchAll') 'Warn'
             $locations = @('All')
         }
     }
-    Write-McLog "KQL: $query"
+    Write-EmtLog "KQL: $query"
 
     # ---- 4. Mailbox search ----
-    Test-McCancel
+    Test-EmtCancel
     $isAll = $locations[0] -eq 'All'
-    $quick = (-not $isAll) -and $caps.Verify -and ($locations.Count -le (Get-McQuickSearchLimit) -or -not $caps.Search)
+    $quick = (-not $isAll) -and $caps.Verify -and ($locations.Count -le (Get-EmtQuickSearchLimit) -or -not $caps.Search)
     if ($isAll -and -not $caps.Search) { throw (T 'err.allNeedsCs') }
 
     if ($quick) {
-        Write-McLog (T 'log.quick' $locations.Count)
-        $hits = @(Invoke-McQuickSearch -Mailboxes $locations -Query $query)
+        Write-EmtLog (T 'log.quick' $locations.Count)
+        $hits = @(Invoke-EmtQuickSearch -Mailboxes $locations -Query $query)
         $name      = ''
-        $items     = [int](Get-McSum -Items @($hits | Where-Object { $_.Items -gt 0 }) -Property Items)
-        $sizeKB    = [double](Get-McSum -Items @($hits | Where-Object { $_.Items -gt 0 }) -Property SizeKB)
+        $items     = [int](Get-EmtSum -Items @($hits | Where-Object { $_.Items -gt 0 }) -Property Items)
+        $sizeKB    = [double](Get-EmtSum -Items @($hits | Where-Object { $_.Items -gt 0 }) -Property SizeKB)
         $unindexed = -1
         $errors    = (@($hits | Where-Object { $_.Error } | ForEach-Object { "$($_.Mailbox): $($_.Error)" }) -join '; ')
     } else {
-        $name = New-McSearchName
-        Write-McLog (T 'log.cs' $name $(if ($isAll) { T 'common.all' } else { $locations.Count }))
-        $s = New-McComplianceSearchRun -Name $name -Locations $locations -Query $query -TimeoutMinutes $TimeoutMinutes
-        $hits      = @(Get-McSearchHits -SuccessResults ([string]$s.SuccessResults))
+        $name = New-EmtSearchName
+        Write-EmtLog (T 'log.cs' $name $(if ($isAll) { T 'common.all' } else { $locations.Count }))
+        $s = New-EmtComplianceSearchRun -Name $name -Locations $locations -Query $query -TimeoutMinutes $TimeoutMinutes
+        $hits      = @(Get-EmtSearchHits -SuccessResults ([string]$s.SuccessResults))
         $items     = [int]$s.Items
         $sizeKB    = [math]::Round($s.Size / 1KB, 1)
         $unindexed = [int]$s.UnindexedItems
@@ -746,15 +753,15 @@ function Invoke-McSearch {
     $found   = @($hits | Where-Object { $_.Items -gt 0 } | Sort-Object Mailbox)
     # "Not found in a mailbox" is useful only when the message is in other mailboxes.
     # When no mailbox has it, the message probably does not exist: no list.
-    $missing = if ($found.Count) { @(Get-McMissingMailboxes -Locations $locations -Hits $hits) } else { @() }
-    Write-McLog (T 'log.found' $items $found.Count $sizeKB) 'Ok'
-    if ($errors) { Write-McLog (T 'log.searchErrors' $errors) 'Error' }
-    if ($unindexed -gt 0) { Write-McLog (T 'log.unindexed' $unindexed) 'Warn' }
+    $missing = if ($found.Count) { @(Get-EmtMissingMailboxes -Locations $locations -Hits $hits) } else { @() }
+    Write-EmtLog (T 'log.found' $items $found.Count $sizeKB) 'Ok'
+    if ($errors) { Write-EmtLog (T 'log.searchErrors' $errors) 'Error' }
+    if ($unindexed -gt 0) { Write-EmtLog (T 'log.unindexed' $unindexed) 'Warn' }
     # The search found items, but the tracking log has no message: nothing confirms that these are the
     # messages the user wants. The window shows this and asks for the typed word before a delete.
     $unconfirmed = ($found.Count -gt 0) -and ($summary.Count -eq 0)
-    if ($unconfirmed) { Write-McLog (T 'log.unconfirmed' $items) 'Warn' }
-    Set-McProgress 100 (T 'progress.done')
+    if ($unconfirmed) { Write-EmtLog (T 'log.unconfirmed' $items) 'Warn' }
+    Set-EmtProgress 100 (T 'progress.done')
 
     [pscustomobject]@{
         Method     = $(if ($quick) { 'SearchMailbox' } else { 'ComplianceSearch' })
@@ -777,7 +784,7 @@ function Invoke-McSearch {
     }
 }
 
-function New-McComplianceSearchRun {
+function New-EmtComplianceSearchRun {
     <# Makes, starts and waits for one Compliance Search. Returns the search object. #>
     param(
         [Parameter(Mandatory)] [string] $Name, [Parameter(Mandatory)] [string[]] $Locations,
@@ -785,10 +792,10 @@ function New-McComplianceSearchRun {
     )
     New-ComplianceSearch -Name $Name -ExchangeLocation $Locations -ContentMatchQuery $Query | Out-Null
     Start-ComplianceSearch -Identity $Name
-    Wait-McComplianceSearch -Name $Name -TimeoutMinutes $TimeoutMinutes
+    Wait-EmtComplianceSearch -Name $Name -TimeoutMinutes $TimeoutMinutes
 }
 
-function Invoke-McQuickSearch {
+function Invoke-EmtQuickSearch {
     <#
         Search-Mailbox -EstimateResultOnly for each mailbox. For a few mailboxes this takes
         seconds, a Compliance Search takes minutes. The count includes Recoverable Items,
@@ -797,14 +804,14 @@ function Invoke-McQuickSearch {
     param([Parameter(Mandatory)] [string[]] $Mailboxes, [Parameter(Mandatory)] [string] $Query)
     $i = 0
     foreach ($m in $Mailboxes) {
-        Test-McCancel
-        $i++; Set-McProgress (40 + [int](55 * $i / $Mailboxes.Count)) (T 'progress.quick' $m)
+        Test-EmtCancel
+        $i++; Set-EmtProgress (40 + [int](55 * $i / $Mailboxes.Count)) (T 'progress.quick' $m)
         try {
             $r = Search-Mailbox -Identity $m -SearchQuery $Query -EstimateResultOnly `
                      -WarningAction SilentlyContinue -ErrorAction Stop
             [pscustomobject]@{
                 Mailbox = $m.ToLowerInvariant(); Items = [int]$r.ResultItemsCount
-                SizeKB = ConvertFrom-McSizeText ([string]$r.ResultItemsSize); Error = ''
+                SizeKB = ConvertFrom-EmtSizeText ([string]$r.ResultItemsSize); Error = ''
             }
         } catch {
             [pscustomobject]@{ Mailbox = $m.ToLowerInvariant(); Items = 0; SizeKB = 0; Error = $_.Exception.Message }
@@ -812,25 +819,25 @@ function Invoke-McQuickSearch {
     }
 }
 
-function Invoke-McSoftDelete {
+function Invoke-EmtSoftDelete {
     <# Purge (SoftDelete) of an existing Compliance Search: items go to Recoverable Items. #>
     param([Parameter(Mandatory)] [string] $SearchName, [int] $TimeoutMinutes = 60)
-    Write-McLog (T 'log.softStart' $SearchName)
+    Write-EmtLog (T 'log.softStart' $SearchName)
     New-ComplianceSearchAction -SearchName $SearchName -Purge -PurgeType SoftDelete -Confirm:$false | Out-Null
     $actionName = "${SearchName}_Purge"
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     do {
         Start-Sleep -Seconds 3
         $a = Get-ComplianceSearchAction -Identity $actionName
-        Set-McProgress 50 (T 'progress.soft' $a.Status)
+        Set-EmtProgress 50 (T 'progress.soft' $a.Status)
         if ((Get-Date) -gt $deadline) { throw (T 'err.softTimeout' $TimeoutMinutes) }
     } while ($a.Status -notin 'Completed', 'PartiallySucceeded', 'Failed')
-    if ($a.Errors) { Write-McLog (T 'log.softErrors' $a.Errors) 'Error' }
-    Write-McLog (T 'log.softStatus' $a.Status) $(if ($a.Status -eq 'Completed') { 'Ok' } else { 'Warn' })
+    if ($a.Errors) { Write-EmtLog (T 'log.softErrors' $a.Errors) 'Error' }
+    Write-EmtLog (T 'log.softStatus' $a.Status) $(if ($a.Status -eq 'Completed') { 'Ok' } else { 'Warn' })
     [pscustomobject]@{ Status = [string]$a.Status; Errors = [string]$a.Errors }
 }
 
-function Test-McHardDeleteScope {
+function Test-EmtHardDeleteScope {
     <#
         Safety check before a hard delete. Search-Mailbox must not find more items than the search did.
         More items = the query reads differently in Search-Mailbox (for example, the date format)
@@ -847,7 +854,7 @@ function Test-McHardDeleteScope {
     }
 }
 
-function Invoke-McHardDelete {
+function Invoke-EmtHardDelete {
     <#
         Permanent delete with Search-Mailbox -DeleteContent (incl. Recoverable Items), mailbox by mailbox.
         On cancel, it stops before the next mailbox and returns the partial result (Cancelled = true).
@@ -857,23 +864,24 @@ function Invoke-McHardDelete {
     $cancelled = $false
     $i = 0
     foreach ($m in $Mailboxes) {
-        if (Test-McCancelRequested) { $cancelled = $true; break }
-        $i++; Set-McProgress ([int](60 * $i / $Mailboxes.Count)) (T 'progress.hard' $m)
+        if (Test-EmtCancelRequested) { $cancelled = $true; break }
+        $i++; Set-EmtProgress ([int](60 * $i / $Mailboxes.Count)) (T 'progress.hard' $m)
         try {
             $r = Search-Mailbox -Identity $m -SearchQuery $Query -SearchDumpster -DeleteContent -Force `
                      -Confirm:$false -WarningAction SilentlyContinue -ErrorAction Stop
-            Write-McLog (T 'log.hardDeleted' $m $r.ResultItemsCount) 'Ok'
+            Write-EmtLog (T 'log.hardDeleted' $m $r.ResultItemsCount) 'Ok'
             $results.Add([pscustomobject]@{ Mailbox = $m; Deleted = [int]$r.ResultItemsCount; Error = '' })
         } catch {
-            Write-McLog (T 'log.hardError' $m $_.Exception.Message) 'Error'
+            Write-EmtLog (T 'log.hardError' $m $_.Exception.Message) 'Error'
             $results.Add([pscustomobject]@{ Mailbox = $m; Deleted = 0; Error = $_.Exception.Message })
         }
     }
-    if ($cancelled) { Write-McLog (T 'log.hardStopped' $results.Count $Mailboxes.Count) 'Warn' }
-    [pscustomobject]@{ Results = @($results); Cancelled = $cancelled }
+    if ($cancelled) { Write-EmtLog (T 'log.hardStopped' $results.Count $Mailboxes.Count) 'Warn' }
+    # ToArray(), not @(): PowerShell 5.1 can fail on @() of a generic List.
+    [pscustomobject]@{ Results = $results.ToArray(); Cancelled = $cancelled }
 }
 
-function Get-McCopyStatus {
+function Get-EmtCopyStatus {
     <#
         Verification via Search-Mailbox (Compliance Search also sees Recoverable Items and would
         report the same numbers after a SoftDelete). Two counts per mailbox:
@@ -882,8 +890,8 @@ function Get-McCopyStatus {
     param([Parameter(Mandatory)] [string[]] $Mailboxes, [Parameter(Mandatory)] [string] $Query, [switch] $TotalOnly)
     $i = 0
     foreach ($m in $Mailboxes) {
-        Test-McCancel
-        $i++; Set-McProgress ([int](100 * $i / $Mailboxes.Count)) (T 'progress.check' $m)
+        Test-EmtCancel
+        $i++; Set-EmtProgress ([int](100 * $i / $Mailboxes.Count)) (T 'progress.check' $m)
         try {
             $t = Search-Mailbox -Identity $m -SearchQuery $Query -SearchDumpster -EstimateResultOnly `
                      -WarningAction SilentlyContinue -ErrorAction Stop
@@ -900,7 +908,7 @@ function Get-McCopyStatus {
     }
 }
 
-function Get-McSettledCopyStatus {
+function Get-EmtSettledCopyStatus {
     <#
         Verification after a delete. The search index can lag behind the delete for some seconds.
         If the user can still see the message in a mailbox, it waits and examines that mailbox again.
@@ -909,51 +917,51 @@ function Get-McSettledCopyStatus {
         [Parameter(Mandatory)] [string[]] $Mailboxes, [Parameter(Mandatory)] [string] $Query,
         [int] $Retries = 3, [int] $DelaySeconds = 15
     )
-    $check = @(Get-McCopyStatus -Mailboxes $Mailboxes -Query $Query)
+    $check = @(Get-EmtCopyStatus -Mailboxes $Mailboxes -Query $Query)
     for ($n = 1; $n -le $Retries; $n++) {
         $left = @($check | Where-Object { $_.Visible -gt 0 } | ForEach-Object Mailbox)
         if (-not $left.Count) { break }
-        Write-McLog (T 'log.checkRetry' $left.Count $DelaySeconds $n $Retries)
-        Wait-McSeconds $DelaySeconds
-        $again = @(Get-McCopyStatus -Mailboxes $left -Query $Query)
+        Write-EmtLog (T 'log.checkRetry' $left.Count $DelaySeconds $n $Retries)
+        Wait-EmtSeconds $DelaySeconds
+        $again = @(Get-EmtCopyStatus -Mailboxes $left -Query $Query)
         $check = @($check | Where-Object { $_.Mailbox -notin $left }) + $again
     }
     @($check | Sort-Object Mailbox)
 }
 
-function Get-McOldSearches {
+function Get-EmtOldSearches {
     <#
-        MailCleaner searches older than the limit:
-          * Compliance Searches MC_yyyyMMdd_HHmmss;
-          * the shadow In-Place eDiscovery searches MC_yyyyMMdd_HHmmss-shadow that Exchange makes
+        EMT searches older than the limit (EMT_ and the older MC_):
+          * Compliance Searches EMT_yyyyMMdd_HHmmss;
+          * the shadow In-Place eDiscovery searches EMT_yyyyMMdd_HHmmss-shadow that Exchange makes
             for each Compliance Search. Exchange can keep them after the Compliance Search is removed.
         The age comes from the name. Kind = ComplianceSearch or Shadow.
     #>
     param([int] $OlderThanDays = 7)
     $limit = (Get-Date).AddDays(-$OlderThanDays)
     $list = New-Object System.Collections.Generic.List[object]
-    foreach ($s in @(Get-ComplianceSearch | Where-Object { Test-McSearchName $_.Name })) {
-        $when = Get-McSearchNameTime $s.Name
+    foreach ($s in @(Get-ComplianceSearch | Where-Object { Test-EmtSearchName $_.Name })) {
+        $when = Get-EmtSearchNameTime $s.Name
         if ($when -and $when -lt $limit) { $list.Add([pscustomobject]@{ Name = $s.Name; When = $when; Kind = 'ComplianceSearch' }) }
     }
     if (Get-Command Get-MailboxSearch -ErrorAction SilentlyContinue) {
-        foreach ($m in @(Get-MailboxSearch -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*-shadow' -and (Test-McSearchName $_.Name) })) {
-            $when = Get-McSearchNameTime $m.Name
+        foreach ($m in @(Get-MailboxSearch -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*-shadow' -and (Test-EmtSearchName $_.Name) })) {
+            $when = Get-EmtSearchNameTime $m.Name
             if ($when -and $when -lt $limit) { $list.Add([pscustomobject]@{ Name = $m.Name; When = $when; Kind = 'Shadow' }) }
         }
     } else {
-        Write-McLog (T 'log.noShadowCmd') 'Warn'
+        Write-EmtLog (T 'log.noShadowCmd') 'Warn'
     }
     @($list | Sort-Object When, Name)
 }
 
-function Test-McNotFoundText {
+function Test-EmtNotFoundText {
     <# True for an Exchange "not found" message. "couldn.t": Exchange can write a typographic apostrophe (’). #>
     param([string] $Text)
     [bool]($Text -match 'couldn.t be found|could not be found|not found|не найден')
 }
 
-function Get-McComplianceSearchInfo {
+function Get-EmtComplianceSearchInfo {
     <#
         Reads one Compliance Search by -Identity. Returns Exists ($true, $false or $null = unknown),
         Status and Error.
@@ -971,7 +979,7 @@ function Get-McComplianceSearchInfo {
         $ge = @($_)
     }
     $err = (@($ge) | Where-Object { $_ } | ForEach-Object { [string]$_.Exception.Message }) -join ' '
-    $exists = if ($s) { $true } elseif ($err -and -not (Test-McNotFoundText $err)) { $null } else { $false }
+    $exists = if ($s) { $true } elseif ($err -and -not (Test-EmtNotFoundText $err)) { $null } else { $false }
     [pscustomobject]@{
         Exists = $exists
         Status = $(if ($s -and @($s)[0].PSObject.Properties['Status']) { [string]@($s)[0].Status } else { '' })
@@ -979,27 +987,27 @@ function Get-McComplianceSearchInfo {
     }
 }
 
-function Get-McComplianceSearchStatus {
+function Get-EmtComplianceSearchStatus {
     <# The status of a Compliance Search (Completed, InProgress, ...), or '' if it is not found or not readable. #>
     param([Parameter(Mandatory)] [string] $Name)
-    (Get-McComplianceSearchInfo $Name).Status
+    (Get-EmtComplianceSearchInfo $Name).Status
 }
 
-function Test-McComplianceSearchExists {
+function Test-EmtComplianceSearchExists {
     <#
         True if the Compliance Search exists. Uses -Identity: the full list of searches is not reliable
         on all servers. "Not found" = false. Another error = true (unknown: do not report a removal).
     #>
     param([Parameter(Mandatory)] [string] $Name)
-    $i = Get-McComplianceSearchInfo $Name
+    $i = Get-EmtComplianceSearchInfo $Name
     $i.Exists -ne $false
 }
 
-function Remove-McSearches {
+function Remove-EmtSearches {
     <#
-        Removes MailCleaner searches. A name with "-shadow" is a shadow In-Place eDiscovery search.
+        Removes EMT searches. A name with "-shadow" is a shadow In-Place eDiscovery search.
         For a Compliance Search, it also removes its actions and its shadow search, if Exchange kept it.
-        Names that MailCleaner does not make are skipped.
+        Names that EMT does not make are skipped.
     #>
     # Exchange 2019 removes a Compliance Search in the background: it can stay in the list for more
     # than 10 seconds after a remove without errors. Thus up to 60 seconds of checks.
@@ -1015,25 +1023,25 @@ function Remove-McSearches {
     foreach ($n in $ordered) {
         if ($done.ContainsKey($n)) { continue }
         $done[$n] = $true
-        if (-not (Test-McSearchName $n)) { Write-McLog (T 'log.cleanupSkip' $n) 'Warn'; continue }
-        Test-McCancel
+        if (-not (Test-EmtSearchName $n)) { Write-EmtLog (T 'log.cleanupSkip' $n) 'Warn'; continue }
+        Test-EmtCancel
         # One failed search must not stop the cleanup of the others.
         try {
             if ($n -like '*-shadow') {
-                if (-not $hasShadowCmd) { Write-McLog (T 'log.noShadowCmd') 'Warn'; continue }
-                if (-not (& $shadowExists $n)) { Write-McLog (T 'log.shadowGone' $n); continue }
+                if (-not $hasShadowCmd) { Write-EmtLog (T 'log.noShadowCmd') 'Warn'; continue }
+                if (-not (& $shadowExists $n)) { Write-EmtLog (T 'log.shadowGone' $n); continue }
                 Remove-MailboxSearch -Identity $n -Confirm:$false -ErrorAction Stop
-                Write-McLog (T 'log.shadowRemoved' $n) 'Ok'
+                Write-EmtLog (T 'log.shadowRemoved' $n) 'Ok'
                 continue
             }
             # The action first. Do NOT list all actions (Get-ComplianceSearchAction without -Identity):
             # on some servers one damaged action makes the full list fail with "Object reference not set".
-            # MailCleaner gives its purge action a known name: <search name>_Purge.
+            # EMT gives its purge action a known name: <search name>_Purge.
             # A search that still runs cannot be removed (Stop-ComplianceSearch does not always stop it).
             # Do not touch it or its shadow search: the cleanup can remove it later.
-            $status = Get-McComplianceSearchStatus $n
+            $status = Get-EmtComplianceSearchStatus $n
             if ($status -in 'Starting', 'InProgress', 'Stopping', 'NotStarted') {
-                Write-McLog (T 'log.stillRunning' $n $status) 'Warn'
+                Write-EmtLog (T 'log.stillRunning' $n $status) 'Warn'
                 $done["$n-shadow"] = $true
                 continue
             }
@@ -1056,12 +1064,12 @@ function Remove-McSearches {
                 if (& $shadowExists $shadow) {
                     try {
                         Remove-MailboxSearch -Identity $shadow -Confirm:$false -ErrorAction Stop
-                        Write-McLog (T 'log.shadowRemoved' $shadow) 'Ok'
+                        Write-EmtLog (T 'log.shadowRemoved' $shadow) 'Ok'
                     } catch {
-                        Write-McLog (T 'log.cleanupError' $shadow $_.Exception.Message) 'Warn'
+                        Write-EmtLog (T 'log.cleanupError' $shadow $_.Exception.Message) 'Warn'
                     }
                 } elseif ($shadow -in $Names) {
-                    Write-McLog (T 'log.shadowGone' $shadow)
+                    Write-EmtLog (T 'log.shadowGone' $shadow)
                 }
             }
 
@@ -1076,69 +1084,420 @@ function Remove-McSearches {
                 } catch {
                     $rmErr = @($_)
                 }
-                if (-not (Test-McComplianceSearchExists $n)) { $removed = $true }
+                if (-not (Test-EmtComplianceSearchExists $n)) { $removed = $true }
                 elseif ($rmErr) { $lastErr = @($rmErr)[0] }
             }
             if (-not $removed) {
                 # Exchange removes the search in the background. Wait for it.
                 for ($k = 1; $k -le [math]::Max(1, $RecheckTimes) -and -not $removed; $k++) {
-                    Set-McProgress ([int](100 * $k / [math]::Max(1, $RecheckTimes))) (T 'progress.removeWait' $n)
-                    if (-not (Test-McComplianceSearchExists $n)) { $removed = $true; break }
-                    if ($k -lt $RecheckTimes) { Wait-McSeconds $RecheckSeconds }
+                    Set-EmtProgress ([int](100 * $k / [math]::Max(1, $RecheckTimes))) (T 'progress.removeWait' $n)
+                    if (-not (Test-EmtComplianceSearchExists $n)) { $removed = $true; break }
+                    if ($k -lt $RecheckTimes) { Wait-EmtSeconds $RecheckSeconds }
                 }
             }
             if (-not $removed) {
-                $info = Get-McComplianceSearchInfo $n
+                $info = Get-EmtComplianceSearchInfo $n
                 $seen = if ($info.Status) { $info.Status } elseif ($info.Error) { $info.Error } else { '?' }
                 if ($lastErr) {
                     # Exchange returned an error and the search is still there: a real error.
                     throw (T 'err.stillThere' $lastErr.Exception.Message ($RecheckTimes * $RecheckSeconds))
                 }
                 # No error from Exchange: the remove is probably still running in the background.
-                Write-McLog (T 'log.removePending' $n ($RecheckTimes * $RecheckSeconds) $seen) 'Warn'
+                Write-EmtLog (T 'log.removePending' $n ($RecheckTimes * $RecheckSeconds) $seen) 'Warn'
                 continue
             }
-            Write-McLog (T 'log.cleanupRemoved' $n) 'Ok'
+            Write-EmtLog (T 'log.cleanupRemoved' $n) 'Ok'
         } catch {
-            Write-McLog (T 'log.cleanupError' $n $_.Exception.Message) 'Error'
+            Write-EmtLog (T 'log.cleanupError' $n $_.Exception.Message) 'Error'
         }
     }
 }
 
-function Invoke-McOperation {
+#endregion
+
+#region ---------- Trace: delivery status for each recipient ----------
+
+function Get-EmtProp {
+    <# The value of a property, or $null. StrictMode stops on a missing property: this function does not. #>
+    param($Object, [Parameter(Mandatory)] [string] $Name)
+    if ($null -eq $Object) { return $null }
+    $p = $Object.PSObject.Properties[$Name]
+    if ($p) { $p.Value } else { $null }
+}
+
+function Get-EmtStatusRank {
+    <# The order of the delivery statuses. A higher status replaces a lower one for the same recipient. #>
+    param([string] $Status)
+    switch ($Status) {
+        'Delivered' { 7 } 'External' { 6 } 'Failed' { 5 } 'Dropped' { 4 }
+        'Deferred'  { 3 } 'InTransit' { 2 } 'Group' { 1 } default { 0 }
+    }
+}
+
+function Get-EmtEventStatus {
+    <#
+        The delivery status that one tracking event gives to one recipient, or $null (no status).
+        Kind = Internal / External / Group / Other (from Resolve-EmtRecipients).
+        SEND to an internal recipient is a transfer to another Exchange server, not the end of the delivery.
+    #>
+    param([string] $EventId, [string] $Kind)
+    switch ($EventId.ToUpperInvariant()) {
+        'DELIVER'       { 'Delivered' }
+        'SEND'          { if ($Kind -eq 'Internal') { 'InTransit' } else { 'External' } }
+        'FAIL'          { 'Failed' }
+        'DROP'          { 'Dropped' }
+        'POISONMESSAGE' { 'Dropped' }
+        'DEFER'         { 'Deferred' }
+        'EXPAND'        { 'InTransit' }
+        'REDIRECT'      { 'InTransit' }
+        'HAREDIRECT'    { 'InTransit' }
+        'TRANSFER'      { 'InTransit' }
+        'RESOLVE'       { 'InTransit' }
+        'RECEIVE'       { 'Unknown' }
+        'SUBMIT'        { 'Unknown' }
+        default         { $null }
+    }
+}
+
+function Get-EmtStatusHint {
+    <#
+        A short explanation of an SMTP status text (enhanced status code x.y.z). Empty text: no explanation.
+        Example: "550 5.1.1 RESOLVER.ADR.RecipNotFound; not found" -> "The address does not exist".
+    #>
+    param([string] $Text)
+    if (-not $Text) { return '' }
+    if ($Text -notmatch '\b(?<c>[245])\.(?<s>\d{1,3})\.(?<d>\d{1,3})\b') { return '' }
+    $code = "$($Matches['c']).$($Matches['s']).$($Matches['d'])"
+    $key = switch -Regex ($code) {
+        '^2\.'               { ''; break }
+        '^5\.1\.(0|1|10)$'   { 'hint.noAddress'; break }
+        '^5\.1\.8$'          { 'hint.badSender'; break }
+        '^5\.2\.2$'          { 'hint.full'; break }
+        '^5\.(2\.3|3\.4)$'   { 'hint.tooBig'; break }
+        '^[45]\.4\.7$'       { 'hint.expired'; break }
+        '^5\.4\.(1|4|6|14)$' { 'hint.route'; break }
+        '^4\.4\.\d+$'        { 'hint.noConnect'; break }
+        '^5\.7\.\d+$'        { 'hint.denied'; break }
+        '^4\.3\.\d+$'        { 'hint.resources'; break }
+        '^5\.6\.\d+$'        { 'hint.content'; break }
+        '^4\.7\.\d+$'        { 'hint.tempPolicy'; break }
+        '^5\.'               { 'hint.permanent'; break }
+        '^4\.'               { 'hint.temporary'; break }
+        default              { '' }
+    }
+    if ($key) { T $key $code } else { '' }
+}
+
+function Get-EmtDeliveryReport {
+    <#
+        One row for each message and recipient: the final delivery status from the tracking events.
+        The status with the highest rank wins (DELIVER after DEFER = Delivered). With the same rank, the later event wins.
+        Kinds: address -> Internal / External / Group / Other.
+    #>
+    param([object[]] $Events = @(), [hashtable] $Kinds = @{})
+    $state = [ordered]@{}
+    foreach ($e in @($Events | Where-Object { $_ -and $_.MessageId } | Sort-Object Timestamp)) {
+        $rcpts = @(Get-EmtProp $e 'Recipients')
+        $stats = @(Get-EmtProp $e 'RecipientStatus')
+        for ($i = 0; $i -lt $rcpts.Count; $i++) {
+            $a = ([string]$rcpts[$i]).Trim().ToLowerInvariant()
+            if (-not $a) { continue }
+            $kind = if ($Kinds.ContainsKey($a)) { [string]$Kinds[$a] } else { '' }
+            $code = Get-EmtEventStatus -EventId ([string]$e.EventId) -Kind $kind
+            if (-not $code) { continue }
+            $key = "$($e.MessageId)|$a"
+            $old = if ($state.Contains($key)) { $state[$key] } else { $null }
+            if ($old -and (Get-EmtStatusRank $code) -lt (Get-EmtStatusRank $old.Status)) { continue }
+            $state[$key] = [pscustomobject]@{
+                MessageId = [string]$e.MessageId
+                Recipient = $a
+                Kind      = $kind
+                Status    = $code
+                Time      = $e.Timestamp
+                Server    = [string](Get-EmtProp $e 'ServerHostname')
+                Event     = [string]$e.EventId
+                Detail    = $(if ($i -lt $stats.Count) { [string]$stats[$i] } else { '' })
+            }
+        }
+    }
+    foreach ($row in $state.Values) {
+        # A group address has no own delivery: the members get the message.
+        if ($row.Kind -eq 'Group' -and (Get-EmtStatusRank $row.Status) -le (Get-EmtStatusRank 'InTransit')) { $row.Status = 'Group' }
+        $row | Add-Member -NotePropertyName Hint -NotePropertyValue (Get-EmtStatusHint $row.Detail) -PassThru
+    }
+}
+
+function Get-EmtMessageStatusLine {
+    <# The status line of one message from its report rows: "Delivered: 5, External: 1, Failed: 1". #>
+    param([object[]] $Rows = @())
+    $order = 'Delivered', 'External', 'Failed', 'Dropped', 'Deferred', 'InTransit', 'Group', 'Unknown'
+    $parts = foreach ($s in $order) {
+        $n = @($Rows | Where-Object { $_.Status -eq $s }).Count
+        if ($n) { T "line.$s" $n }
+    }
+    if ($parts) { @($parts) -join ', ' } else { T 'line.none' }
+}
+
+function Get-EmtNoResultHints {
+    <# What to examine when the trace finds nothing. #>
+    param([Parameter(Mandatory)] [hashtable] $Criteria, [datetime] $Now = (Get-Date))
+    $c = Complete-EmtCriteria $Criteria
+    $hints = @()
+    if ($c.Start -lt $Now.AddDays(-30)) { $hints += (T 'nores.tooOld') } else { $hints += (T 'nores.period') }
+    if (@($c.Senders).Count) { $hints += (T 'nores.sender') }
+    if ($c.Recipient)        { $hints += (T 'nores.recipient') }
+    if ($c.Subject)          { $hints += (T 'nores.subject') }
+    $hints += (T 'nores.notSent')
+    $hints
+}
+
+function Invoke-EmtTrace {
+    <#
+        Trace: only the message tracking log, no mailbox search. Seconds, not minutes.
+        Needs only the Message Tracking role. Returns the messages, the delivery report and the events.
+    #>
+    param([Parameter(Mandatory)] [hashtable] $Criteria)
+    $Criteria = Complete-EmtCriteria $Criteria
+    $problems = @(Test-EmtCriteria $Criteria -ForTrace)
+    if ($problems.Count) { throw ($problems -join ' ') }
+    $caps = Get-EmtCapabilities
+    if (-not $caps.Tracking) { throw (T 'log.noTrackRole') }
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $tracking = Find-EmtTrackingEvents -Senders @($Criteria.Senders) -Subject $Criteria.Subject -Recipient $Criteria.Recipient `
+                    -MessageId $Criteria.MessageId -Start $Criteria.Start -End $Criteria.End -CompleteRecipients
+    $events = @($tracking.Events)
+    $summary = @(Get-EmtMessageSummary -Events $events -ServerNames $tracking.Servers)
+
+    $addresses = @($events | ForEach-Object { @(Get-EmtProp $_ 'Recipients') } | Where-Object { $_ } |
+                   ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object -Unique)
+    $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains))
+    $kinds = @{}
+    foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
+    $report = @(Get-EmtDeliveryReport -Events $events -Kinds $kinds)
+
+    $messages = @(foreach ($m in $summary) {
+        $rows = @($report | Where-Object MessageId -eq $m.MessageId)
+        [pscustomobject]@{
+            Time            = $m.Time
+            Sender          = $m.Sender
+            Subject         = $m.Subject
+            Recipients      = $rows.Count
+            Problems        = @($rows | Where-Object { $_.Status -in 'Failed', 'Dropped' }).Count
+            Pending         = @($rows | Where-Object { $_.Status -in 'Deferred', 'InTransit', 'Unknown' }).Count
+            StatusLine      = Get-EmtMessageStatusLine $rows
+            ServerGenerated = $m.ServerGenerated
+            MessageId       = $m.MessageId
+        }
+    })
+    $failed = @($report | Where-Object { $_.Status -in 'Failed', 'Dropped' }).Count
+    Write-EmtLog (T 'log.traceDone' $messages.Count $report.Count $failed ([int]$timer.Elapsed.TotalSeconds)) 'Ok'
+    Set-EmtProgress 100 (T 'progress.done')
+    [pscustomobject]@{
+        Criteria       = $Criteria
+        Messages       = $messages
+        Report         = $report
+        Events         = $events
+        Recipients     = $recipients
+        TrackingErrors = @($tracking.Errors)
+        NoResultHints  = $(if ($messages.Count) { @() } else { @(Get-EmtNoResultHints $Criteria) })
+        Seconds        = [int]$timer.Elapsed.TotalSeconds
+    }
+}
+
+#endregion
+
+#region ---------- Mailbox check (level 1: why a delivered message can be missing) ----------
+
+function Invoke-EmtReadOnly {
+    <#
+        Runs one read-only Exchange cmdlet. Returns Value and Error. No "-ErrorAction Stop" (see the Exchange 2019 rule).
+        A missing cmdlet (no role) gives the error "no permission".
+    #>
+    param([Parameter(Mandatory)] [string] $Command, [Parameter(Mandatory)] [hashtable] $Params)
+    if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{ Value = $null; Error = (T 'find.noCmd' $Command) }
+    }
+    $ev = $null
+    $val = $null
+    try {
+        $val = & $Command @Params -ErrorAction SilentlyContinue -WarningAction SilentlyContinue -ErrorVariable ev
+    } catch { $ev = @($_) }
+    $err = (@($ev) | Where-Object { $_ } | ForEach-Object { [string]$_.Exception.Message }) -join ' '
+    [pscustomobject]@{ Value = $val; Error = $err }
+}
+
+function Test-EmtAddressInList {
+    <# True if the address or its domain is in a list of senders and domains (junk e-mail lists). #>
+    param([string] $Address, [object[]] $List = @())
+    if (-not $Address) { return $false }
+    $a = $Address.ToLowerInvariant()
+    $d = ($a -split '@')[-1]
+    foreach ($x in $List) {
+        $v = ([string]$x).Trim().ToLowerInvariant()
+        if ($v -and ($v -eq $a -or $v -eq $d -or $v -eq "@$d")) { return $true }
+    }
+    $false
+}
+
+function Get-EmtRuleMatch {
+    <#
+        Does an inbox rule apply to the message? Returns All (no conditions), Yes, No or Unknown
+        (only conditions that EMT cannot examine, for example words in the body).
+    #>
+    param($Rule, [string] $Sender, [string] $Subject)
+    $s = ([string]$Sender).ToLowerInvariant()
+    $subj = ([string]$Subject).ToLowerInvariant()
+    $from      = @(@(Get-EmtProp $Rule 'From') | Where-Object { $_ })
+    $fromWords = @(@(Get-EmtProp $Rule 'FromAddressContainsWords') | Where-Object { $_ })
+    $subWords  = @(@(@(Get-EmtProp $Rule 'SubjectContainsWords') + @(Get-EmtProp $Rule 'SubjectOrBodyContainsWords')) | Where-Object { $_ })
+    $bodyWords = @(@(Get-EmtProp $Rule 'BodyContainsWords') | Where-Object { $_ })
+    $known = $from.Count + $fromWords.Count + $subWords.Count
+    if (-not $known -and -not $bodyWords.Count) { return 'All' }
+    foreach ($f in $from)      { if ($s -and ([string]$f).ToLowerInvariant().Contains($s)) { return 'Yes' } }
+    foreach ($w in $fromWords) { if ($s -and $s.Contains(([string]$w).ToLowerInvariant())) { return 'Yes' } }
+    foreach ($w in $subWords)  { if ($subj -and $subj.Contains(([string]$w).ToLowerInvariant())) { return 'Yes' } }
+    if (-not $known) { return 'Unknown' }
+    'No'
+}
+
+function Get-EmtMailboxFindings {
+    <#
+        The findings of the mailbox check. Data: Rules, Junk, Box (Get-Mailbox), Stats (Get-MailboxStatistics)
+        and an error text for each. Returns Severity (Alert / Warn / Info), Area and Text.
+    #>
+    param([Parameter(Mandatory)] $Data, [string] $Sender, [string] $Subject)
+    $out = New-Object System.Collections.Generic.List[object]
+    $add = { param($sev, $area, $text) $out.Add([pscustomobject]@{ Severity = $sev; Area = $area; Text = $text }) }
+
+    # ---- Inbox rules ----
+    if ($Data.RulesError) { & $add 'Warn' 'Rules' (T 'find.notChecked' $Data.RulesError) }
+    foreach ($r in @($Data.Rules | Where-Object { $_ })) {
+        if ((Get-EmtProp $r 'Enabled') -eq $false) { continue }
+        $name = [string](Get-EmtProp $r 'Name')
+        $move = [string](Get-EmtProp $r 'MoveToFolder')
+        $del  = (Get-EmtProp $r 'DeleteMessage') -eq $true
+        $fwd  = @(@(@(Get-EmtProp $r 'ForwardTo') + @(Get-EmtProp $r 'RedirectTo') + @(Get-EmtProp $r 'ForwardAsAttachmentTo')) |
+                  Where-Object { $_ } | ForEach-Object { [string]$_ })
+        if (-not $move -and -not $del -and -not $fwd.Count) { continue }
+        $match = Get-EmtRuleMatch -Rule $r -Sender $Sender -Subject $Subject
+        $sev = if ($match -in 'All', 'Yes') { 'Alert' } elseif ($match -eq 'Unknown') { 'Warn' } else { 'Info' }
+        $suffix = T "find.match$match"
+        if ($del)       { & $add $sev 'Rules' ((T 'find.ruleDelete' $name) + ' ' + $suffix) }
+        if ($move)      { & $add $sev 'Rules' ((T 'find.ruleMove' $name ($move -replace '^[^:]*:\\', '')) + ' ' + $suffix) }
+        if ($fwd.Count) { & $add $sev 'Rules' ((T 'find.ruleForward' $name ($fwd -join ', ')) + ' ' + $suffix) }
+    }
+
+    # ---- Junk e-mail ----
+    if ($Data.JunkError) { & $add 'Warn' 'Junk' (T 'find.notChecked' $Data.JunkError) }
+    elseif ($Data.Junk) {
+        if ((Get-EmtProp $Data.Junk 'Enabled') -eq $false) { & $add 'Info' 'Junk' (T 'find.junkOff') }
+        if (Test-EmtAddressInList $Sender @(Get-EmtProp $Data.Junk 'BlockedSendersAndDomains')) { & $add 'Alert' 'Junk' (T 'find.junkBlocked' $Sender) }
+        if (Test-EmtAddressInList $Sender @(Get-EmtProp $Data.Junk 'TrustedSendersAndDomains')) { & $add 'Info' 'Junk' (T 'find.junkTrusted' $Sender) }
+    }
+
+    # ---- Mailbox forwarding ----
+    if ($Data.BoxError) { & $add 'Warn' 'Forwarding' (T 'find.notChecked' $Data.BoxError) }
+    elseif ($Data.Box) {
+        $target = [string](Get-EmtProp $Data.Box 'ForwardingSmtpAddress')
+        if (-not $target) { $target = [string](Get-EmtProp $Data.Box 'ForwardingAddress') }
+        $target = $target -replace '^smtp:', ''
+        if ($target) {
+            if ((Get-EmtProp $Data.Box 'DeliverToMailboxAndForward') -eq $true) { & $add 'Warn' 'Forwarding' (T 'find.fwdKeep' $target) }
+            else { & $add 'Alert' 'Forwarding' (T 'find.fwdNoCopy' $target) }
+        }
+    }
+
+    # ---- Quota ----
+    if ($Data.StatsError) { & $add 'Warn' 'Quota' (T 'find.notChecked' $Data.StatsError) }
+    elseif ($Data.Stats -and $Data.Box) {
+        $usedKB = ConvertFrom-EmtSizeText ([string](Get-EmtProp $Data.Stats 'TotalItemSize'))
+        $usedText = '{0:N1} MB' -f ($usedKB / 1KB)
+        $quota = [string](Get-EmtProp $Data.Box 'ProhibitSendReceiveQuota')
+        if ((Get-EmtProp $Data.Box 'UseDatabaseQuotaDefaults') -eq $true) { & $add 'Info' 'Quota' (T 'find.quotaDb' $usedText) }
+        elseif (-not $quota -or $quota -match 'Unlimited') { & $add 'Info' 'Quota' (T 'find.quotaNone' $usedText) }
+        else {
+            $quotaKB = ConvertFrom-EmtSizeText $quota
+            if ($quotaKB -gt 0) {
+                $pct = [math]::Round(100 * $usedKB / $quotaKB)
+                if ($pct -ge 100)    { & $add 'Alert' 'Quota' (T 'find.quotaFull' $usedText) }
+                elseif ($pct -ge 90) { & $add 'Warn' 'Quota' (T 'find.quotaHigh' $pct $usedText) }
+                else                 { & $add 'Info' 'Quota' (T 'find.quotaOk' $pct $usedText) }
+            }
+        }
+    }
+
+    if (-not @($out | Where-Object { $_.Severity -in 'Alert', 'Warn' }).Count) { & $add 'Info' 'Note' (T 'find.nothing') }
+    & $add 'Info' 'Note' (T 'find.note')
+    # Not "@($out)": PowerShell 5.1 fails on @() of a generic List ("Argument types do not match").
+    $out.ToArray()
+}
+
+function Invoke-EmtMailboxCheck {
+    <# Reads the rules, the junk e-mail settings, the forwarding and the quota of one mailbox. Read-only. #>
+    param([Parameter(Mandatory)] [string] $Mailbox, [string] $Sender, [string] $Subject)
+    Write-EmtLog (T 'log.checkMailbox' $Mailbox)
+    $rules = Invoke-EmtReadOnly 'Get-InboxRule' @{ Mailbox = $Mailbox }
+    Set-EmtProgress 25 (T 'progress.checkMailbox' $Mailbox)
+    $junk  = Invoke-EmtReadOnly 'Get-MailboxJunkEmailConfiguration' @{ Identity = $Mailbox }
+    Set-EmtProgress 50 (T 'progress.checkMailbox' $Mailbox)
+    $box   = Invoke-EmtReadOnly 'Get-Mailbox' @{ Identity = $Mailbox }
+    Set-EmtProgress 75 (T 'progress.checkMailbox' $Mailbox)
+    $stats = Invoke-EmtReadOnly 'Get-MailboxStatistics' @{ Identity = $Mailbox }
+    $data = [pscustomobject]@{
+        Rules = @($rules.Value); RulesError = $rules.Error
+        Junk  = @($junk.Value)[0]; JunkError = $junk.Error
+        Box   = @($box.Value)[0];  BoxError = $box.Error
+        Stats = @($stats.Value)[0]; StatsError = $stats.Error
+    }
+    Set-EmtProgress 100 (T 'progress.done')
+    $findings = @(Get-EmtMailboxFindings -Data $data -Sender $Sender -Subject $Subject)
+    $alerts = @($findings | Where-Object Severity -eq 'Alert').Count
+    Write-EmtLog (T 'log.checkMailboxDone' $Mailbox $alerts) $(if ($alerts) { 'Warn' } else { 'Ok' })
+    # Data, Sender and Subject: the window makes the findings again after a language change.
+    [pscustomobject]@{ Mailbox = $Mailbox; Findings = $findings; Data = $data; Sender = $Sender; Subject = $Subject }
+}
+
+#endregion
+
+#region ---------- Entry point ----------
+
+function Invoke-EmtOperation {
     <# Single entry point used by the GUI's background runspace. #>
     param([Parameter(Mandatory)] [string] $Name, [hashtable] $Params = @{})
     switch ($Name) {
-        'Connect'      { Connect-McExchange -Server $Params.Server }
-        'Resolve'      { @(Resolve-McAddressInputs -Inputs $Params.Inputs) }
-        'Search'       { Invoke-McSearch -Criteria $Params.Criteria -TimeoutMinutes $Params.TimeoutMinutes }
+        'Connect'      { Connect-EmtExchange -Server $Params.Server }
+        'Trace'        { Invoke-EmtTrace -Criteria $Params.Criteria }
+        'CheckMailbox' { Invoke-EmtMailboxCheck -Mailbox $Params.Mailbox -Sender $Params.Sender -Subject $Params.Subject }
+        'Resolve'      { @(Resolve-EmtAddressInputs -Inputs $Params.Inputs) }
+        'Search'       { Invoke-EmtSearch -Criteria $Params.Criteria -TimeoutMinutes $Params.TimeoutMinutes }
         'SoftDelete'   { $searchName = $Params.SearchName
                          if (-not $searchName) {
                              # The quick search has no Compliance Search. Purge needs one: make it now.
-                             $searchName = New-McSearchName
-                             Write-McLog (T 'log.softSearch' $searchName @($Params.Mailboxes).Count)
-                             [void](New-McComplianceSearchRun -Name $searchName -Locations $Params.Mailboxes `
+                             $searchName = New-EmtSearchName
+                             Write-EmtLog (T 'log.softSearch' $searchName @($Params.Mailboxes).Count)
+                             [void](New-EmtComplianceSearchRun -Name $searchName -Locations $Params.Mailboxes `
                                         -Query $Params.Query -TimeoutMinutes $Params.TimeoutMinutes)
                          }
-                         $r = Invoke-McSoftDelete -SearchName $searchName -TimeoutMinutes $Params.TimeoutMinutes
+                         $r = Invoke-EmtSoftDelete -SearchName $searchName -TimeoutMinutes $Params.TimeoutMinutes
                          [pscustomobject]@{
                              Delete = $r; SearchName = $searchName
-                             Check = @(Get-McSettledCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query)
+                             Check = @(Get-EmtSettledCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query)
                          } }
-        'HardDelete'   { Write-McLog (T 'log.precheck')
-                         $pre = @(Get-McCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query -TotalOnly)
-                         $bad = @(Test-McHardDeleteScope -Status $pre -Expected $Params.Expected)
+        'HardDelete'   { Write-EmtLog (T 'log.precheck')
+                         $pre = @(Get-EmtCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query -TotalOnly)
+                         $bad = @(Test-EmtHardDeleteScope -Status $pre -Expected $Params.Expected)
                          if ($bad.Count) {
                              $list = ($bad | ForEach-Object { T 'scope.item' $_.Mailbox $_.Expected $_.Actual $_.Reason }) -join '; '
                              throw (T 'err.precheck' $list)
                          }
-                         Write-McLog (T 'log.precheckOk') 'Ok'
-                         $d = Invoke-McHardDelete -Mailboxes $Params.Mailboxes -Query $Params.Query
-                         $check = if ($d.Cancelled) { @() } else { @(Get-McSettledCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query) }
+                         Write-EmtLog (T 'log.precheckOk') 'Ok'
+                         $d = Invoke-EmtHardDelete -Mailboxes $Params.Mailboxes -Query $Params.Query
+                         $check = if ($d.Cancelled) { @() } else { @(Get-EmtSettledCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query) }
                          [pscustomobject]@{ Delete = @($d.Results); Cancelled = $d.Cancelled; Check = $check } }
-        'Verify'       { [pscustomobject]@{ Check = @(Get-McCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query) } }
-        'ListOld'      { Get-McOldSearches -OlderThanDays $Params.Days }
-        'RemoveOld'    { Remove-McSearches -Names $Params.Names }
+        'Verify'       { [pscustomobject]@{ Check = @(Get-EmtCopyStatus -Mailboxes $Params.Mailboxes -Query $Params.Query) } }
+        'ListOld'      { Get-EmtOldSearches -OlderThanDays $Params.Days }
+        'RemoveOld'    { Remove-EmtSearches -Names $Params.Names }
         default        { throw (T 'err.unknownOp' $Name) }
     }
 }

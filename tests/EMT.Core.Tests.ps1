@@ -1,15 +1,15 @@
 ﻿#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
 <#
-    Unit tests for src\MailCleaner.Core.ps1. Exchange is not necessary:
+    Unit tests for src\EMT.Core.ps1. Exchange is not necessary:
     Exchange cmdlets are replaced with stub functions and Pester mocks.
 
     Run:  Invoke-Pester -Path .\tests
 #>
 
 BeforeAll {
-    . (Join-Path $PSScriptRoot '..\src\MailCleaner.Core.ps1')
+    . (Join-Path $PSScriptRoot '..\src\EMT.Core.ps1')
     # Some tests examine Russian texts. The language tests set other languages themselves.
-    $global:McLang = 'ru'
+    $global:EmtLang = 'ru'
 
     # Stubs: Pester can mock only commands that exist.
     function Get-TransportService { [CmdletBinding()] param() }
@@ -38,114 +38,114 @@ BeforeAll {
     }
 }
 
-Describe 'Split-McAddressList' {
+Describe 'Split-EmtAddressList' {
     It 'splits on comma, semicolon and spaces, lower-cases and removes duplicates' {
-        Split-McAddressList 'B@x.com; a@x.com, A@X.com  c@x.com' | Should -Be @('a@x.com', 'b@x.com', 'c@x.com')
+        Split-EmtAddressList 'B@x.com; a@x.com, A@X.com  c@x.com' | Should -Be @('a@x.com', 'b@x.com', 'c@x.com')
     }
     It 'returns an empty array for empty text' {
-        @(Split-McAddressList '  ').Count | Should -Be 0
+        @(Split-EmtAddressList '  ').Count | Should -Be 0
     }
 }
 
-Describe 'Get-McKqlDateRange' {
+Describe 'Get-EmtKqlDateRange' {
     It 'does not include the next day when End is at midnight' {
-        $r = Get-McKqlDateRange -Start ([datetime]'2026-11-09') -End ([datetime]'2026-11-10') -UtcOffset 0
+        $r = Get-EmtKqlDateRange -Start ([datetime]'2026-11-09') -End ([datetime]'2026-11-10') -UtcOffset 0
         $r.From | Should -Be '2026-11-09'
         $r.To   | Should -Be '2026-11-10'
     }
     It 'includes the End day when End is not at midnight' {
-        $r = Get-McKqlDateRange -Start ([datetime]'2026-11-09 15:00') -End ([datetime]'2026-11-09 16:00') -UtcOffset 0
+        $r = Get-EmtKqlDateRange -Start ([datetime]'2026-11-09 15:00') -End ([datetime]'2026-11-09 16:00') -UtcOffset 0
         $r.From | Should -Be '2026-11-09'
         $r.To   | Should -Be '2026-11-10'
     }
     It 'refuses End before Start' {
-        { Get-McKqlDateRange -Start ([datetime]'2026-11-10') -End ([datetime]'2026-11-09') } | Should -Throw
+        { Get-EmtKqlDateRange -Start ([datetime]'2026-11-10') -End ([datetime]'2026-11-09') } | Should -Throw
     }
     It 'covers the local and the UTC day range (UTC+3, full local day)' {
         # Local 09.11 00:00 – 10.11 00:00 = UTC 08.11 21:00 – 09.11 21:00.
-        $r = Get-McKqlDateRange -Start ([datetime]'2026-11-09') -End ([datetime]'2026-11-10') -UtcOffset ([timespan]'03:00')
+        $r = Get-EmtKqlDateRange -Start ([datetime]'2026-11-09') -End ([datetime]'2026-11-10') -UtcOffset ([timespan]'03:00')
         $r.From | Should -Be '2026-11-08'
         $r.To   | Should -Be '2026-11-10'
     }
     It 'covers the local and the UTC day range (UTC+3, end after local midnight)' {
         # Local 09.11 22:00 – 10.11 01:00 = UTC 09.11 19:00 – 09.11 22:00. The local range needs 10.11.
-        $r = Get-McKqlDateRange -Start ([datetime]'2026-11-09 22:00') -End ([datetime]'2026-11-10 01:00') -UtcOffset ([timespan]'03:00')
+        $r = Get-EmtKqlDateRange -Start ([datetime]'2026-11-09 22:00') -End ([datetime]'2026-11-10 01:00') -UtcOffset ([timespan]'03:00')
         $r.From | Should -Be '2026-11-09'
         $r.To   | Should -Be '2026-11-11'
     }
 }
 
-Describe 'Get-McBaseSubject' {
+Describe 'Get-EmtBaseSubject' {
     It 'removes reply and forward prefixes' {
-        Get-McBaseSubject 'FW: RE: Отчёт' | Should -Be 'отчёт'
-        Get-McBaseSubject 'Пересл: Отв: Отчёт' | Should -Be 'отчёт'
-        Get-McBaseSubject 'Fwd:Report' | Should -Be 'report'
+        Get-EmtBaseSubject 'FW: RE: Отчёт' | Should -Be 'отчёт'
+        Get-EmtBaseSubject 'Пересл: Отв: Отчёт' | Should -Be 'отчёт'
+        Get-EmtBaseSubject 'Fwd:Report' | Should -Be 'report'
     }
     It 'keeps a tag in square brackets' {
-        Get-McBaseSubject 'FW: [EXTERNAL] Report' | Should -Be '[external] report'
+        Get-EmtBaseSubject 'FW: [EXTERNAL] Report' | Should -Be '[external] report'
     }
 }
 
-Describe 'Get-McLargeDeleteWarning' {
-    It 'gives no warning for a small delete' { Get-McLargeDeleteWarning -Items 50 -Messages 4 | Should -Be '' }
-    It 'warns for many items'    { Get-McLargeDeleteWarning -Items 101 -Messages 1 | Should -Match 'БОЛЬШОЙ ОБЪЁМ' }
-    It 'warns for many messages' { Get-McLargeDeleteWarning -Items 10 -Messages 6 | Should -Match 'разных писем' }
+Describe 'Get-EmtLargeDeleteWarning' {
+    It 'gives no warning for a small delete' { Get-EmtLargeDeleteWarning -Items 50 -Messages 4 | Should -Be '' }
+    It 'warns for many items'    { Get-EmtLargeDeleteWarning -Items 101 -Messages 1 | Should -Match 'БОЛЬШОЙ ОБЪЁМ' }
+    It 'warns for many messages' { Get-EmtLargeDeleteWarning -Items 10 -Messages 6 | Should -Match 'разных писем' }
 }
 
-Describe 'Test-McHardDeleteScope' {
+Describe 'Test-EmtHardDeleteScope' {
     It 'passes when Search-Mailbox finds the same or fewer items' {
         $st = @([pscustomobject]@{ Mailbox = 'a@x.com'; Total = 2; Note = '' }, [pscustomobject]@{ Mailbox = 'b@x.com'; Total = 0; Note = '' })
-        @(Test-McHardDeleteScope -Status $st -Expected @{ 'a@x.com' = 2; 'b@x.com' = 1 }).Count | Should -Be 0
+        @(Test-EmtHardDeleteScope -Status $st -Expected @{ 'a@x.com' = 2; 'b@x.com' = 1 }).Count | Should -Be 0
     }
     It 'fails when Search-Mailbox finds more items' {
         $st = @([pscustomobject]@{ Mailbox = 'a@x.com'; Total = 5; Note = '' })
-        $bad = @(Test-McHardDeleteScope -Status $st -Expected @{ 'a@x.com' = 2 })
+        $bad = @(Test-EmtHardDeleteScope -Status $st -Expected @{ 'a@x.com' = 2 })
         $bad.Count | Should -Be 1
         $bad[0].Actual | Should -Be 5
     }
     It 'fails when the check did not run' {
         $st = @([pscustomobject]@{ Mailbox = 'a@x.com'; Total = -1; Note = 'access denied' })
-        @(Test-McHardDeleteScope -Status $st -Expected @{ 'a@x.com' = 1 }).Count | Should -Be 1
+        @(Test-EmtHardDeleteScope -Status $st -Expected @{ 'a@x.com' = 1 }).Count | Should -Be 1
     }
 }
 
-Describe 'New-McSearchQuery' {
+Describe 'New-EmtSearchQuery' {
     BeforeAll {
         $s = [datetime]'2026-11-09'
         $e = [datetime]'2026-11-10'
     }
     It 'joins senders with OR and adds subject and dates' {
-        New-McSearchQuery -Senders 'b@x.com', 'A@x.com' -Subject 'Отчёт за квартал' -Start $s -End $e -UtcOffset 0 |
+        New-EmtSearchQuery -Senders 'b@x.com', 'A@x.com' -Subject 'Отчёт за квартал' -Start $s -End $e -UtcOffset 0 |
             Should -Be '(from:a@x.com OR from:b@x.com) AND (subject:"Отчёт за квартал") AND (sent>=2026-11-09) AND (sent<2026-11-10)'
     }
     It 'removes quotes from phrases' {
-        New-McSearchQuery -Subject 'a "b" c' -Start $s -End $e -UtcOffset 0 | Should -Match 'subject:"a b c"'
+        New-EmtSearchQuery -Subject 'a "b" c' -Start $s -End $e -UtcOffset 0 | Should -Match 'subject:"a b c"'
     }
     It 'adds attachment and keywords' {
-        $q = New-McSearchQuery -Attachment 'report.xlsx' -Keywords 'salary' -Start $s -End $e -UtcOffset 0
+        $q = New-EmtSearchQuery -Attachment 'report.xlsx' -Keywords 'salary' -Start $s -End $e -UtcOffset 0
         $q | Should -Match '\(attachment:"report\.xlsx"\)'
         $q | Should -Match '\("salary"\)'
     }
     It 'refuses a query that has only dates' {
-        { New-McSearchQuery -Start $s -End $e -UtcOffset 0 } | Should -Throw
+        { New-EmtSearchQuery -Start $s -End $e -UtcOffset 0 } | Should -Throw
     }
 }
 
-Describe 'Test-McCriteria' {
+Describe 'Test-EmtCriteria' {
     It 'accepts a subject only' {
-        @(Test-McCriteria @{ Subject = 'x'; Start = [datetime]'2026-11-09'; End = [datetime]'2026-11-10' }).Count | Should -Be 0
+        @(Test-EmtCriteria @{ Subject = 'x'; Start = [datetime]'2026-11-09'; End = [datetime]'2026-11-10' }).Count | Should -Be 0
     }
     It 'refuses criteria without a key field' {
-        @(Test-McCriteria @{ Recipient = 'a@x.com'; Start = [datetime]'2026-11-09'; End = [datetime]'2026-11-10' }).Count | Should -Be 1
+        @(Test-EmtCriteria @{ Recipient = 'a@x.com'; Start = [datetime]'2026-11-09'; End = [datetime]'2026-11-10' }).Count | Should -Be 1
     }
     It 'refuses a period longer than 31 days' {
-        @(Test-McCriteria @{ Subject = 'x'; Start = [datetime]'2026-09-01'; End = [datetime]'2026-11-10' }).Count | Should -Be 1
+        @(Test-EmtCriteria @{ Subject = 'x'; Start = [datetime]'2026-09-01'; End = [datetime]'2026-11-10' }).Count | Should -Be 1
     }
 }
 
-Describe 'Complete-McCriteria' {
+Describe 'Complete-EmtCriteria' {
     It 'adds missing keys and keeps given values' {
-        $c = Complete-McCriteria @{ Subject = 'x'; Senders = @('a@x.com', '') }
+        $c = Complete-EmtCriteria @{ Subject = 'x'; Senders = @('a@x.com', '') }
         $c.Subject         | Should -Be 'x'
         $c.Senders         | Should -Be @('a@x.com')
         $c.MessageId       | Should -Be ''
@@ -153,37 +153,37 @@ Describe 'Complete-McCriteria' {
     }
 }
 
-Describe 'Get-McSearchHits' {
+Describe 'Get-EmtSearchHits' {
     It 'parses the comma format' {
-        $h = @(Get-McSearchHits '{Location: A@x.com, Item count: 2, Total size: 2048, Location: b@x.com, Item count: 0, Total size: 0}')
+        $h = @(Get-EmtSearchHits '{Location: A@x.com, Item count: 2, Total size: 2048, Location: b@x.com, Item count: 0, Total size: 0}')
         $h.Count | Should -Be 2
         $h[0].Mailbox | Should -Be 'a@x.com'
         $h[0].Items   | Should -Be 2
         $h[0].SizeKB  | Should -Be 2
     }
     It 'parses the semicolon format' {
-        $h = @(Get-McSearchHits "Location: a@x.com; Item count: 1; Total size: 1024`r`nLocation: c@x.com; Item count: 3; Total size: 3072")
+        $h = @(Get-EmtSearchHits "Location: a@x.com; Item count: 1; Total size: 1024`r`nLocation: c@x.com; Item count: 3; Total size: 3072")
         $h.Count | Should -Be 2
         $h[1].Items | Should -Be 3
     }
     It 'returns nothing for empty text' {
-        @(Get-McSearchHits '').Count | Should -Be 0
+        @(Get-EmtSearchHits '').Count | Should -Be 0
     }
 }
 
-Describe 'Test-McServerGeneratedId' {
+Describe 'Test-EmtServerGeneratedId' {
     It 'marks a .local host' {
-        Test-McServerGeneratedId '<5f3c@EXCH01.Contoso.local>' | Should -BeTrue
+        Test-EmtServerGeneratedId '<5f3c@EXCH01.Contoso.local>' | Should -BeTrue
     }
     It 'marks a transport server name' {
-        Test-McServerGeneratedId '<abc@exch1.contoso.com>' -ServerNames 'EXCH1' | Should -BeTrue
+        Test-EmtServerGeneratedId '<abc@exch1.contoso.com>' -ServerNames 'EXCH1' | Should -BeTrue
     }
     It 'does not mark a normal client MessageId' {
-        Test-McServerGeneratedId '<abc@contoso.com>' -ServerNames 'EXCH1' | Should -BeFalse
+        Test-EmtServerGeneratedId '<abc@contoso.com>' -ServerNames 'EXCH1' | Should -BeFalse
     }
 }
 
-Describe 'Get-McMessageSummary' {
+Describe 'Get-EmtMessageSummary' {
     It 'makes one row per MessageId with the first RECEIVE and all recipients' {
         $t = [datetime]'2026-11-09 16:53'
         $ev = @(
@@ -191,7 +191,7 @@ Describe 'Get-McMessageSummary' {
             New-Ev '<1@contoso.com>' 'a@x.com' 'Report' 'DELIVER' @('b@x.com') $t.AddSeconds(2)
             New-Ev '<2@EXCH1.contoso.local>' 'b@x.com' 'FW: Report' 'RECEIVE' @('d@y.com') $t.AddSeconds(20)
         )
-        $s = @(Get-McMessageSummary -Events $ev)
+        $s = @(Get-EmtMessageSummary -Events $ev)
         $s.Count | Should -Be 2
         $s[0].Sender     | Should -Be 'a@x.com'
         $s[0].Recipients | Should -Be 2
@@ -200,27 +200,27 @@ Describe 'Get-McMessageSummary' {
     }
 }
 
-Describe 'Get-McMissingMailboxes' {
+Describe 'Get-EmtMissingMailboxes' {
     It 'returns searched mailboxes without items' {
         $hits = @([pscustomobject]@{ Mailbox = 'a@x.com'; Items = 1 }, [pscustomobject]@{ Mailbox = 'b@x.com'; Items = 0 })
-        Get-McMissingMailboxes -Locations 'A@x.com', 'b@x.com', 'c@x.com' -Hits $hits | Should -Be @('b@x.com', 'c@x.com')
+        Get-EmtMissingMailboxes -Locations 'A@x.com', 'b@x.com', 'c@x.com' -Hits $hits | Should -Be @('b@x.com', 'c@x.com')
     }
     It 'returns nothing for an All search' {
-        @(Get-McMissingMailboxes -Locations 'All' -Hits @()).Count | Should -Be 0
+        @(Get-EmtMissingMailboxes -Locations 'All' -Hits @()).Count | Should -Be 0
     }
 }
 
-Describe 'New-McSearchName' {
-    It 'uses the MC_ prefix and a timestamp' {
-        New-McSearchName -Now ([datetime]'2026-11-10 11:03:45') | Should -Be 'MC_20261110_110345'
+Describe 'New-EmtSearchName' {
+    It 'uses the EMT_ prefix and a timestamp' {
+        New-EmtSearchName -Now ([datetime]'2026-11-10 11:03:45') | Should -Be 'EMT_20261110_110345'
     }
 }
 
-Describe 'Write-McAudit' {
+Describe 'Write-EmtAudit' {
     It 'appends rows with fixed columns' {
         $p = Join-Path $TestDrive 'audit\audit.csv'
-        Write-McAudit -Path $p -Record @{ Action = 'Search'; Items = 5; Unknown = 'ignored' }
-        Write-McAudit -Path $p -Record @{ Action = 'SoftDelete'; Result = 'Clean' }
+        Write-EmtAudit -Path $p -Record @{ Action = 'Search'; Items = 5; Unknown = 'ignored' }
+        Write-EmtAudit -Path $p -Record @{ Action = 'SoftDelete'; Result = 'Clean' }
         $rows = @(Import-Csv $p)
         $rows.Count | Should -Be 2
         $rows[0].Action | Should -Be 'Search'
@@ -230,7 +230,7 @@ Describe 'Write-McAudit' {
     }
 }
 
-Describe 'Resolve-McRecipients' {
+Describe 'Resolve-EmtRecipients' {
     BeforeAll {
         $script:Directory = @(
             New-Rcpt 'UserMailbox' 'U@x.com' @('SMTP:U@x.com', 'smtp:alias@x.com')
@@ -247,7 +247,7 @@ Describe 'Resolve-McRecipients' {
         }
     }
     It 'classifies mailbox, alias, contact, group and unknown addresses' {
-        $r = @(Resolve-McRecipients -Addresses 'u@x.com', 'alias@x.com', 'c@y.com', 'g@x.com', 'z@ext.org')
+        $r = @(Resolve-EmtRecipients -Addresses 'u@x.com', 'alias@x.com', 'c@y.com', 'g@x.com', 'z@ext.org')
         ($r | Where-Object Address -eq 'u@x.com').Kind        | Should -Be 'Internal'
         ($r | Where-Object Address -eq 'u@x.com').Mailbox     | Should -Be 'u@x.com'
         ($r | Where-Object Address -eq 'alias@x.com').Mailbox | Should -Be 'u@x.com'
@@ -256,52 +256,52 @@ Describe 'Resolve-McRecipients' {
         ($r | Where-Object Address -eq 'z@ext.org').Kind      | Should -Be 'External'
     }
     It 'uses one call per batch' {
-        $null = Resolve-McRecipients -Addresses 'u@x.com', 'c@y.com', 'g@x.com' -BatchSize 2
+        $null = Resolve-EmtRecipients -Addresses 'u@x.com', 'c@y.com', 'g@x.com' -BatchSize 2
         Should -Invoke Get-Recipient -Times 2 -Exactly
     }
     It 'does not look up addresses outside the accepted domains' {
-        $r = @(Resolve-McRecipients -Addresses 'u@x.com', 'z@ext.org' -AcceptedDomains 'x.com')
+        $r = @(Resolve-EmtRecipients -Addresses 'u@x.com', 'z@ext.org' -AcceptedDomains 'x.com')
         Should -Invoke Get-Recipient -Times 1 -Exactly
         ($r | Where-Object Address -eq 'z@ext.org').Kind | Should -Be 'External'
     }
 }
 
-Describe 'Test-McInternalDomain' {
-    It 'matches an exact domain' { Test-McInternalDomain 'a@Contoso.com' 'contoso.com' | Should -BeTrue }
-    It 'matches a subdomain of a wildcard domain' { Test-McInternalDomain 'a@mail.contoso.com' '*.contoso.com' | Should -BeTrue }
-    It 'does not match another domain' { Test-McInternalDomain 'a@outlook.com' 'contoso.com', '*.contoso.com' | Should -BeFalse }
+Describe 'Test-EmtInternalDomain' {
+    It 'matches an exact domain' { Test-EmtInternalDomain 'a@Contoso.com' 'contoso.com' | Should -BeTrue }
+    It 'matches a subdomain of a wildcard domain' { Test-EmtInternalDomain 'a@mail.contoso.com' '*.contoso.com' | Should -BeTrue }
+    It 'does not match another domain' { Test-EmtInternalDomain 'a@outlook.com' 'contoso.com', '*.contoso.com' | Should -BeFalse }
 }
 
-Describe 'ConvertFrom-McSizeText' {
-    It 'reads the bytes in parentheses' { ConvertFrom-McSizeText '1.25 MB (1,310,720 bytes)' | Should -Be 1280 }
-    It 'reads bytes with spaces' { ConvertFrom-McSizeText '2 KB (2 048 bytes)' | Should -Be 2 }
-    It 'returns 0 for unknown text' { ConvertFrom-McSizeText '' | Should -Be 0 }
+Describe 'ConvertFrom-EmtSizeText' {
+    It 'reads the bytes in parentheses' { ConvertFrom-EmtSizeText '1.25 MB (1,310,720 bytes)' | Should -Be 1280 }
+    It 'reads bytes with spaces' { ConvertFrom-EmtSizeText '2 KB (2 048 bytes)' | Should -Be 2 }
+    It 'returns 0 for unknown text' { ConvertFrom-EmtSizeText '' | Should -Be 0 }
 }
 
-Describe 'Select-McUniqueEvents' {
+Describe 'Select-EmtUniqueEvents' {
     It 'removes duplicate events and keeps only the given MessageIds' {
         $t = [datetime]'2026-11-09 10:00'
         $a = New-Ev '<1@x>' 'a@x.com' 'S' 'DELIVER' @('b@x.com') $t
         $b = New-Ev '<2@x>' 'a@x.com' 'S' 'DELIVER' @('b@x.com') $t
-        @(Select-McUniqueEvents -Events @($a, $a, $b) -MessageIds '<1@x>').Count | Should -Be 1
+        @(Select-EmtUniqueEvents -Events @($a, $a, $b) -MessageIds '<1@x>').Count | Should -Be 1
     }
 }
 
-Describe 'Complete-McCriteria and Test-McCriteria: only the recipient mailbox' {
+Describe 'Complete-EmtCriteria and Test-EmtCriteria: only the recipient mailbox' {
     It 'sets OnlyRecipient to false by default' {
-        (Complete-McCriteria @{}).OnlyRecipient | Should -BeFalse
+        (Complete-EmtCriteria @{}).OnlyRecipient | Should -BeFalse
     }
     It 'refuses OnlyRecipient without a recipient' {
-        @(Test-McCriteria @{ Subject = 'x'; OnlyRecipient = $true; Start = [datetime]'2026-11-09'; End = [datetime]'2026-11-10' }).Count |
+        @(Test-EmtCriteria @{ Subject = 'x'; OnlyRecipient = $true; Start = [datetime]'2026-11-09'; End = [datetime]'2026-11-10' }).Count |
             Should -Be 1
     }
     It 'refuses OnlyRecipient together with AllMailboxes' {
-        @(Test-McCriteria @{ Subject = 'x'; Recipient = 'a@x.com'; OnlyRecipient = $true; AllMailboxes = $true
+        @(Test-EmtCriteria @{ Subject = 'x'; Recipient = 'a@x.com'; OnlyRecipient = $true; AllMailboxes = $true
                              Start = [datetime]'2026-11-09'; End = [datetime]'2026-11-10' }).Count | Should -Be 1
     }
 }
 
-Describe 'Find-McTrackingEvents' {
+Describe 'Find-EmtTrackingEvents' {
     BeforeAll {
         $t = [datetime]'2026-11-09 16:53'
         Mock Get-TransportService { [pscustomobject]@{ Name = 'EXCH1' } }
@@ -318,24 +318,24 @@ Describe 'Find-McTrackingEvents' {
         }
     }
     It 'finds the original and the forward when forwards are included' {
-        $r = Find-McTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
+        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
         @($r.Events | Select-Object -ExpandProperty MessageId -Unique) | Should -Be @('<1@x.com>', '<2@x.com>')
     }
     It 'finds only the original when forwards are excluded' {
-        $r = Find-McTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1)
+        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1)
         @($r.Events | Select-Object -ExpandProperty MessageId -Unique) | Should -Be @('<1@x.com>')
     }
     It 'finds the message by subject when the sender is wrong' {
-        $r = Find-McTrackingEvents -Senders 'wrong@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
+        $r = Find-EmtTrackingEvents -Senders 'wrong@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
         @($r.Events | Select-Object -ExpandProperty MessageId -Unique).Count | Should -Be 2
     }
     It 'does not do a second pass by MessageId without a recipient filter' {
-        $null = Find-McTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards -CompleteRecipients
+        $null = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards -CompleteRecipients
         # One sender query + one subject query on one server.
         Should -Invoke Get-MessageTrackingLog -Times 2 -Exactly
     }
     It 'does a second pass by MessageId with a recipient filter' {
-        $null = Find-McTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards -CompleteRecipients
+        $null = Find-EmtTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards -CompleteRecipients
         # One subject query + one query for each of the two messages.
         Should -Invoke Get-MessageTrackingLog -Times 3 -Exactly
     }
@@ -347,16 +347,16 @@ Describe 'Find-McTrackingEvents' {
                 New-Ev '<9@x.com>' 'z@x.com' 'Итоги года для HR' 'RECEIVE' @('d@x.com') $t
             ) | Where-Object { -not $Sender -or $_.Sender -eq $Sender }
         }
-        $r = Find-McTrackingEvents -Senders 'a@x.com' -Subject 'Итоги' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
+        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Итоги' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
         @($r.Events | Select-Object -ExpandProperty MessageId -Unique | Sort-Object) | Should -Be @('<1@x.com>', '<2@x.com>')
     }
     It 'matches a subject with square brackets as text' {
         Mock Get-MessageTrackingLog {
             @(New-Ev '<1@x.com>' 'a@x.com' '[EXTERNAL] Отчёт' 'RECEIVE' @('b@x.com') $t)
         }
-        $r = Find-McTrackingEvents -Senders 'a@x.com' -Subject '[EXTERNAL] Отчёт' -Start $t.Date -End $t.Date.AddDays(1)
+        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject '[EXTERNAL] Отчёт' -Start $t.Date -End $t.Date.AddDays(1)
         @($r.Events).Count | Should -Be 1
-        { Find-McTrackingEvents -Subject '[EXTERNAL Отчёт' -Start $t.Date -End $t.Date.AddDays(1) } | Should -Not -Throw
+        { Find-EmtTrackingEvents -Subject '[EXTERNAL Отчёт' -Start $t.Date -End $t.Date.AddDays(1) } | Should -Not -Throw
     }
     It 'returns the errors of a server that fails' {
         Mock Get-TransportService { [pscustomobject]@{ Name = 'EXCH1' }; [pscustomobject]@{ Name = 'EXCH2' } }
@@ -364,26 +364,26 @@ Describe 'Find-McTrackingEvents' {
             if ($Server -eq 'EXCH2') { Write-Error 'server is not available' ; return }
             @(New-Ev '<1@x.com>' 'a@x.com' 'Отчёт' 'RECEIVE' @('b@x.com') $t)
         }
-        $r = Find-McTrackingEvents -Senders 'a@x.com' -Start $t.Date -End $t.Date.AddDays(1)
+        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Start $t.Date -End $t.Date.AddDays(1)
         @($r.Errors).Count | Should -Be 1
         $r.Errors[0] | Should -Match 'EXCH2'
         @($r.Events).Count | Should -Be 1
     }
     It 'does not do a second pass without -CompleteRecipients' {
-        $null = Find-McTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
+        $null = Find-EmtTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
         Should -Invoke Get-MessageTrackingLog -Times 1 -Exactly
     }
 }
 
-Describe 'Test-McCancel' {
-    AfterEach { Remove-Variable McSync -Scope Global -ErrorAction SilentlyContinue }
+Describe 'Test-EmtCancel' {
+    AfterEach { Remove-Variable EmtSync -Scope Global -ErrorAction SilentlyContinue }
     It 'throws when cancel is requested' {
-        $global:McSync = @{ Cancel = $true; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
-        { Test-McCancel } | Should -Throw
+        $global:EmtSync = @{ Cancel = $true; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        { Test-EmtCancel } | Should -Throw
     }
     It 'does nothing without cancel' {
-        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
-        { Test-McCancel } | Should -Not -Throw
+        $global:EmtSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        { Test-EmtCancel } | Should -Not -Throw
     }
 }
 
@@ -391,10 +391,10 @@ Describe 'Language files (Lang\*.lng)' {
     BeforeAll {
         $root = Join-Path $PSScriptRoot '..'
         $langDir = Join-Path $root 'Lang'
-        $en = Read-McLanguageFile (Join-Path $langDir 'en.lng')
-        $ru = Read-McLanguageFile (Join-Path $langDir 'ru.lng')
+        $en = Read-EmtLanguageFile (Join-Path $langDir 'en.lng')
+        $ru = Read-EmtLanguageFile (Join-Path $langDir 'ru.lng')
     }
-    AfterEach { $global:McLang = 'ru' }
+    AfterEach { $global:EmtLang = 'ru' }
 
     It 'has the bundled files ru.lng and en.lng with names' {
         $en.Code | Should -Be 'en'
@@ -403,21 +403,21 @@ Describe 'Language files (Lang\*.lng)' {
         $ru.Name | Should -Not -BeNullOrEmpty
     }
     It 'ru.lng and en.lng are complete and correct' {
-        @(Test-McLanguageFile (Join-Path $langDir 'ru.lng')) | Should -BeNullOrEmpty
-        @(Test-McLanguageFile (Join-Path $langDir 'en.lng')) | Should -BeNullOrEmpty
+        @(Test-EmtLanguageFile (Join-Path $langDir 'ru.lng')) | Should -BeNullOrEmpty
+        @(Test-EmtLanguageFile (Join-Path $langDir 'en.lng')) | Should -BeNullOrEmpty
     }
     It 'all other .lng files have no unknown keys and correct placeholders' {
         foreach ($f in Get-ChildItem $langDir -Filter '*.lng' | Where-Object Name -notin 'ru.lng', 'en.lng') {
-            @(Test-McLanguageFile $f.FullName -AllowMissing) | Should -BeNullOrEmpty -Because $f.Name
+            @(Test-EmtLanguageFile $f.FullName -AllowMissing) | Should -BeNullOrEmpty -Because $f.Name
         }
     }
     It 'every text key used in the code is in en.lng' {
-        $files = @(Join-Path $root 'MailCleaner.ps1'; Join-Path $root 'src\MailCleaner.Core.ps1')
+        $files = @(Join-Path $root 'ExchangeMessageTrail.ps1'; Join-Path $root 'src\EMT.Core.ps1')
         $used = foreach ($f in $files) {
             $src = [IO.File]::ReadAllText($f, [Text.Encoding]::UTF8)
             [regex]::Matches($src, "\bT\s+'([A-Za-z0-9_.]+)'") | ForEach-Object { $_.Groups[1].Value }
-            # Keys given to helpers that call T: New-McButton 'act.soft', Set-McLoc $x 'crit.group', ...
-            [regex]::Matches($src, "(?:New-McLabel|New-McButton|New-McCheckBox|Set-McLoc\s+\S+|Set-McTip\s+\S+)\s+'([A-Za-z0-9_.]+)'") |
+            # Keys given to helpers that call T: New-EmtButton 'act.soft', Set-EmtLoc $x 'crit.group', ...
+            [regex]::Matches($src, "(?:New-EmtLabel|New-EmtButton|New-EmtCheckBox|Set-EmtLoc\s+\S+|Set-EmtTip\s+\S+)\s+'([A-Za-z0-9_.]+)'") |
                 ForEach-Object { $_.Groups[1].Value }
         }
         # Keys made at run time: "tab.$k" and "kind.$($_.Kind)".
@@ -427,19 +427,19 @@ Describe 'Language files (Lang\*.lng)' {
         $missing | Should -BeNullOrEmpty
     }
     It 'gives the text in the current language and fills the placeholders' {
-        $global:McLang = 'en'
+        $global:EmtLang = 'en'
         T 'log.found' 3 2 1.5 | Should -Match '^Messages found: 3 in 2 mailboxes'
-        $global:McLang = 'ru'
+        $global:EmtLang = 'ru'
         T 'log.found' 3 2 1.5 | Should -Match '^Найдено писем: 3 в 2 ящиках'
     }
     It 'uses English for a key that a language does not have, and the key for an unknown key' {
-        $global:McLang = 'xx'
+        $global:EmtLang = 'xx'
         T 'conn.connect' | Should -Be 'Connect'
         T 'no.such.key' | Should -Be 'no.such.key'
     }
 }
 
-Describe 'Read-McLanguageFile and Test-McLanguageFile' {
+Describe 'Read-EmtLanguageFile and Test-EmtLanguageFile' {
     BeforeAll {
         $ref = Join-Path $TestDrive 'ref.lng'
         Set-Content -Path $ref -Encoding UTF8 -Value @(
@@ -450,24 +450,24 @@ Describe 'Read-McLanguageFile and Test-McLanguageFile' {
         Set-Content -Path $f -Encoding UTF8 -Value @(
             '# comment', '; comment', '', '@code = de', '@name = Deutsch', '@author = Test',
             'a.one = Eins {0} = gleich', '  a.two   =   Zwei  ')
-        $l = Read-McLanguageFile $f
+        $l = Read-EmtLanguageFile $f
         $l.Code | Should -Be 'de'
         $l.Name | Should -Be 'Deutsch'
         $l.Author | Should -Be 'Test'
         $l.Texts['a.one'] | Should -Be 'Eins {0} = gleich'
         $l.Texts['a.two'] | Should -Be 'Zwei'
-        @(Test-McLanguageFile $f -ReferencePath $ref) | Should -BeNullOrEmpty
+        @(Test-EmtLanguageFile $f -ReferencePath $ref) | Should -BeNullOrEmpty
     }
     It 'uses the file name when there is no @code line' {
         $f = Join-Path $TestDrive 'pl.lng'
         Set-Content -Path $f -Encoding UTF8 -Value @('a.two = Dwa')
-        (Read-McLanguageFile $f).Code | Should -Be 'pl'
+        (Read-EmtLanguageFile $f).Code | Should -Be 'pl'
     }
     It 'finds unknown keys, missing keys, wrong placeholders, duplicates and bad lines' {
         $f = Join-Path $TestDrive 'bad.lng'
         Set-Content -Path $f -Encoding UTF8 -Value @(
             '@code = bad', '@name = Bad', 'a.one = Eins', 'a.one = Eins {0}', 'a.three = Drei', 'no equals sign')
-        $p = @(Test-McLanguageFile $f -ReferencePath $ref)
+        $p = @(Test-EmtLanguageFile $f -ReferencePath $ref)
         ($p -join "`n") | Should -Match "duplicate key 'a.one'"
         ($p -join "`n") | Should -Match "unknown key 'a.three'"
         ($p -join "`n") | Should -Match "missing key 'a.two'"
@@ -476,7 +476,7 @@ Describe 'Read-McLanguageFile and Test-McLanguageFile' {
     It 'finds a wrong placeholder' {
         $f = Join-Path $TestDrive 'ph.lng'
         Set-Content -Path $f -Encoding UTF8 -Value @('@name = Ph', 'a.one = Eins {1}', 'a.two = Zwei')
-        (@(Test-McLanguageFile $f -ReferencePath $ref) -join "`n") | Should -Match "key 'a.one': placeholders"
+        (@(Test-EmtLanguageFile $f -ReferencePath $ref) -join "`n") | Should -Match "key 'a.one': placeholders"
     }
 }
 Describe 'Events without MessageId' {
@@ -486,7 +486,7 @@ Describe 'Events without MessageId' {
             New-Ev ''          'a@x.com' ''          'NOTIFYMAPI' @() $t
             New-Ev '<1@x.com>' 'a@x.com' 'RE: Topic' 'RECEIVE'    @('b@x.com') $t
         )
-        $s = @(Get-McMessageSummary -Events $ev)
+        $s = @(Get-EmtMessageSummary -Events $ev)
         $s.Count | Should -Be 1
         $s[0].MessageId | Should -Be '<1@x.com>'
     }
@@ -499,31 +499,34 @@ Describe 'Events without MessageId' {
                 New-Ev '<1@x.com>' 'a@x.com' 'RE: Topic' 'RECEIVE'    @('b@x.com') $t
             )
         }
-        $r = Find-McTrackingEvents -Senders 'a@x.com' -Start $t.Date -End $t.Date.AddDays(1)
+        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Start $t.Date -End $t.Date.AddDays(1)
         @($r.Events).Count | Should -Be 2
         @($r.Events | Where-Object { $_.MessageId } | Select-Object -ExpandProperty MessageId -Unique) | Should -Be @('<1@x.com>')
     }
 }
 
-Describe 'MailCleaner search names' {
-    It 'accepts only the names that MailCleaner makes' {
-        Test-McSearchName 'MC_20261110_124718'        | Should -BeTrue
-        Test-McSearchName 'MC_20261110_124718-shadow' | Should -BeTrue
-        Test-McSearchName 'MC_quick_20261110_124718'  | Should -BeFalse
-        Test-McSearchName 'ContentSearch_for_Delete1' | Should -BeFalse
-        Test-McSearchName 'mc_20261110_124718'        | Should -BeFalse
+Describe 'EMT search names' {
+    It 'accepts only the names that EMT makes (EMT_, and the older MC_)' {
+        Test-EmtSearchName 'EMT_20261110_124718'       | Should -BeTrue
+        Test-EmtSearchName 'EMT_20261110_124718-shadow' | Should -BeTrue
+        Test-EmtSearchName 'MC_20261110_124718'        | Should -BeTrue
+        Test-EmtSearchName 'MC_20261110_124718-shadow' | Should -BeTrue
+        Test-EmtSearchName 'MC_quick_20261110_124718'  | Should -BeFalse
+        Test-EmtSearchName 'ContentSearch_for_Delete1' | Should -BeFalse
+        Test-EmtSearchName 'mc_20261110_124718'        | Should -BeFalse
     }
     It 'reads the time from the name' {
-        Get-McSearchNameTime 'MC_20261110_124718-shadow' | Should -Be ([datetime]'2026-11-10 12:47:18')
-        Get-McSearchNameTime 'Other' | Should -BeNullOrEmpty
+        Get-EmtSearchNameTime 'MC_20261110_124718-shadow' | Should -Be ([datetime]'2026-11-10 12:47:18')
+        Get-EmtSearchNameTime 'EMT_20261110_124718' | Should -Be ([datetime]'2026-11-10 12:47:18')
+        Get-EmtSearchNameTime 'Other' | Should -BeNullOrEmpty
     }
 }
 
-Describe 'Get-McOldSearches and Remove-McSearches' {
+Describe 'Get-EmtOldSearches and Remove-EmtSearches' {
     BeforeAll {
         $old = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         $new = (Get-Date).AddMinutes(-5).ToString('yyyyMMdd_HHmmss')
-        # The full list for Get-McOldSearches. By -Identity: "not found" (the search is removed).
+        # The full list for Get-EmtOldSearches. By -Identity: "not found" (the search is removed).
         Mock Get-ComplianceSearch {
             if ($Identity) { throw "The operation couldn't be performed because '$Identity' couldn't be found." }
             @([pscustomobject]@{ Name = "MC_$old" }, [pscustomobject]@{ Name = "MC_$new" },
@@ -539,15 +542,15 @@ Describe 'Get-McOldSearches and Remove-McSearches' {
         Mock Remove-MailboxSearch { }
     }
     It 'lists old searches and old shadow searches, and not the other searches' {
-        $l = @(Get-McOldSearches -OlderThanDays 7)
+        $l = @(Get-EmtOldSearches -OlderThanDays 7)
         @($l | ForEach-Object Name | Sort-Object) | Should -Be @("MC_$old", "MC_$old-shadow")
         ($l | Where-Object Name -eq "MC_$old-shadow").Kind | Should -Be 'Shadow'
     }
     It 'lists today''s shadow search with 0 days' {
-        @(Get-McOldSearches -OlderThanDays 0 | ForEach-Object Name) | Should -Contain "MC_$new-shadow"
+        @(Get-EmtOldSearches -OlderThanDays 0 | ForEach-Object Name) | Should -Contain "MC_$new-shadow"
     }
     It 'removes the search and its shadow once, and skips other names' {
-        Remove-McSearches -Names "MC_$old", "MC_$old-shadow", 'Legal hold 2025' -RecheckSeconds 0
+        Remove-EmtSearches -Names "MC_$old", "MC_$old-shadow", 'Legal hold 2025' -RecheckSeconds 0
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_$old" }
         Should -Invoke Remove-MailboxSearch -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_$old-shadow" }
         Should -Invoke Remove-MailboxSearch -Times 0 -Exactly -ParameterFilter { $Identity -eq 'Legal hold 2025' }
@@ -555,14 +558,14 @@ Describe 'Get-McOldSearches and Remove-McSearches' {
 }
 Describe 'Partial addresses' {
     It 'keeps a name with spaces as one item, and splits full addresses at spaces' {
-        Split-McAddressList 'Ivanov Ivan; a@x.com b@x.com' | Should -Be @('a@x.com', 'b@x.com', 'ivanov ivan')
-        Split-McAddressList "jsmi`r`nc@x.com" | Should -Be @('c@x.com', 'jsmi')
+        Split-EmtAddressList 'Ivanov Ivan; a@x.com b@x.com' | Should -Be @('a@x.com', 'b@x.com', 'ivanov ivan')
+        Split-EmtAddressList "jsmi`r`nc@x.com" | Should -Be @('c@x.com', 'jsmi')
     }
     It 'knows a full address' {
-        Test-McFullAddress 'a.b@contoso.com' | Should -BeTrue
-        Test-McFullAddress 'jsmith'    | Should -BeFalse
-        Test-McFullAddress 'jsmi@contoso'  | Should -BeFalse
-        Test-McFullAddress 'Ivanov Ivan'     | Should -BeFalse
+        Test-EmtFullAddress 'a.b@contoso.com' | Should -BeTrue
+        Test-EmtFullAddress 'jsmith'    | Should -BeFalse
+        Test-EmtFullAddress 'jsmi@contoso'  | Should -BeFalse
+        Test-EmtFullAddress 'Ivanov Ivan'     | Should -BeFalse
     }
     It 'finds the candidates in the address book (ANR)' {
         Mock Get-Recipient {
@@ -571,27 +574,27 @@ Describe 'Partial addresses' {
                 [pscustomobject]@{ PrimarySmtpAddress = 'ivanova@x.com'; DisplayName = 'Ivanova Anna'; RecipientTypeDetails = 'UserMailbox' }
             }
         }
-        $c = @(Find-McAddressCandidates -Text 'ivan')
+        $c = @(Find-EmtAddressCandidates -Text 'ivan')
         $c.Count | Should -Be 2
         $c[0].Address | Should -Be 'i.ivanov@x.com'
         $c[0].Name    | Should -Be 'Ivanov Ivan'
         $c[0].Type    | Should -Be 'UserMailbox'
-        @(Find-McAddressCandidates -Text 'nobody').Count | Should -Be 0
+        @(Find-EmtAddressCandidates -Text 'nobody').Count | Should -Be 0
     }
     It 'returns no candidates when the address book search fails' {
         Mock Get-Recipient { throw 'access denied' }
-        @(Find-McAddressCandidates -Text 'ivan').Count | Should -Be 0
+        @(Find-EmtAddressCandidates -Text 'ivan').Count | Should -Be 0
     }
     It 'gives one result for each input' {
         Mock Get-Recipient { if ($Anr -eq 'jsmi') { [pscustomobject]@{ PrimarySmtpAddress = 'jsmith@x.com'; DisplayName = 'V S'; RecipientType = 'UserMailbox' } } }
-        $r = @(Resolve-McAddressInputs -Inputs 'jsmi', 'nobody')
+        $r = @(Resolve-EmtAddressInputs -Inputs 'jsmi', 'nobody')
         $r.Count | Should -Be 2
         @($r[0].Candidates).Count | Should -Be 1
         $r[0].Candidates[0].Address | Should -Be 'jsmith@x.com'
         @($r[1].Candidates).Count | Should -Be 0
     }
 }
-Describe 'Remove-McSearches when Exchange removes the shadow search itself' {
+Describe 'Remove-EmtSearches when Exchange removes the shadow search itself' {
     BeforeAll {
         $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         $stamp2 = (Get-Date).AddDays(-9).ToString('yyyyMMdd_HHmmss')
@@ -602,17 +605,17 @@ Describe 'Remove-McSearches when Exchange removes the shadow search itself' {
     }
     It 'does not fail when the shadow search is already gone (the case from the log)' {
         Mock Remove-ComplianceSearch { }
-        { Remove-McSearches -Names "MC_$stamp-shadow", "MC_$stamp" -RecheckSeconds 0 } | Should -Not -Throw
+        { Remove-EmtSearches -Names "MC_$stamp-shadow", "MC_$stamp" -RecheckSeconds 0 } | Should -Not -Throw
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly
         Should -Invoke Remove-MailboxSearch -Times 0 -Exactly
     }
     It 'continues with the next search after an error' {
         Mock Remove-ComplianceSearch { if ($Identity -eq "MC_$stamp") { throw 'busy' } }
-        { Remove-McSearches -Names "MC_$stamp", "MC_$stamp2" -RecheckSeconds 0 } | Should -Not -Throw
+        { Remove-EmtSearches -Names "MC_$stamp", "MC_$stamp2" -RecheckSeconds 0 } | Should -Not -Throw
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_$stamp2" }
     }
 }
-Describe 'Remove-McSearches when Remove-ComplianceSearch returns an error' {
+Describe 'Remove-EmtSearches when Remove-ComplianceSearch returns an error' {
     BeforeAll {
         $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         Mock Get-MailboxSearch { }
@@ -622,60 +625,60 @@ Describe 'Remove-McSearches when Remove-ComplianceSearch returns an error' {
     It 'reports a removal (green) when the search is gone after the internal error' {
         Mock Get-ComplianceSearch { }
         Mock Get-ComplianceSearchAction { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
-        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        $global:EmtSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
         try {
-            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
-            $lines = @($global:McSync.Log.ToArray())
-        } finally { Remove-Variable McSync -Scope Global -ErrorAction SilentlyContinue }
+            Remove-EmtSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:EmtSync.Log.ToArray())
+        } finally { Remove-Variable EmtSync -Scope Global -ErrorAction SilentlyContinue }
         ($lines -join "`n") | Should -Match '\[OK   \].*MC_'
         ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
     }
     It 'reports an error when the search is still there after the error' {
         Mock Get-ComplianceSearch { [pscustomobject]@{ Name = "MC_$stamp" } }
         Mock Get-ComplianceSearchAction { }
-        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        $global:EmtSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
         try {
-            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
-            $lines = @($global:McSync.Log.ToArray())
-        } finally { Remove-Variable McSync -Scope Global -ErrorAction SilentlyContinue }
+            Remove-EmtSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:EmtSync.Log.ToArray())
+        } finally { Remove-Variable EmtSync -Scope Global -ErrorAction SilentlyContinue }
         ($lines -join "`n") | Should -Match '\[ERROR\].*MC_'
     }
 }
 Describe 'T with the values 0, empty text and $false' {
-    AfterEach { $global:McLang = 'ru' }
+    AfterEach { $global:EmtLang = 'ru' }
     It 'puts 0 in the text (the case from the log: "Писем (MessageId) в журнале: {0}.")' {
-        $global:McLang = 'ru'
+        $global:EmtLang = 'ru'
         T 'log.trackCount' 0 | Should -Be 'Писем (MessageId) в журнале: 0.'
-        $global:McLang = 'en'
+        $global:EmtLang = 'en'
         T 'stage.recipients' 0 | Should -Be 'Addresses resolved: 0'
     }
     It 'puts an empty text and $false in the text' {
-        $global:McLang = 'en'
+        $global:EmtLang = 'en'
         T 'log.connected' '' | Should -Be 'Connected to .'
         T 'log.connected' $false | Should -Be 'Connected to False.'
     }
 }
-Describe 'Remove-McSearches when Exchange removes the search some seconds after the error' {
+Describe 'Remove-EmtSearches when Exchange removes the search some seconds after the error' {
     It 'reports a removal when the search goes from the list on a later check (the case from the log)' {
         $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
-        $global:McTestChecks = 0
+        $global:EmtTestChecks = 0
         Mock Get-MailboxSearch { }
         Mock Get-ComplianceSearchAction { }
         Mock Remove-ComplianceSearch { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
         # The first two checks still see the search, the third does not.
-        Mock Get-ComplianceSearch { $global:McTestChecks++; if ($global:McTestChecks -le 2) { [pscustomobject]@{ Name = "MC_$stamp" } } }
-        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        Mock Get-ComplianceSearch { $global:EmtTestChecks++; if ($global:EmtTestChecks -le 2) { [pscustomobject]@{ Name = "MC_$stamp" } } }
+        $global:EmtSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
         try {
-            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
-            $lines = @($global:McSync.Log.ToArray())
+            Remove-EmtSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:EmtSync.Log.ToArray())
         } finally {
-            Remove-Variable McSync, McTestChecks -Scope Global -ErrorAction SilentlyContinue
+            Remove-Variable EmtSync, EmtTestChecks -Scope Global -ErrorAction SilentlyContinue
         }
         ($lines -join "`n") | Should -Match '\[OK   \].*MC_'
         ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
     }
 }
-Describe 'Remove-McSearches does not list all search actions' {
+Describe 'Remove-EmtSearches does not list all search actions' {
     It 'asks only for the action SEARCHNAME_Purge (the full list fails on some servers)' {
         $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         Mock Get-MailboxSearch { }
@@ -685,57 +688,57 @@ Describe 'Remove-McSearches does not list all search actions' {
             if (-not $Identity) { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
             if ($Identity -eq "MC_${stamp}_Purge") { [pscustomobject]@{ Name = $Identity } }
         }
-        { Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0 } | Should -Not -Throw
+        { Remove-EmtSearches -Names "MC_$stamp" -RecheckSeconds 0 } | Should -Not -Throw
         Should -Invoke Get-ComplianceSearchAction -Times 0 -Exactly -ParameterFilter { -not $Identity }
         Should -Invoke Remove-ComplianceSearchAction -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_${stamp}_Purge" }
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly
     }
 }
-Describe 'Remove-McSearches: the order and the second attempt (tested on Exchange 2019)' {
+Describe 'Remove-EmtSearches: the order and the second attempt (tested on Exchange 2019)' {
     BeforeAll {
         $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         Mock Get-ComplianceSearchAction { }
     }
     It 'removes the shadow search before the Compliance Search' {
-        $global:McTestOrder = New-Object System.Collections.Generic.List[string]
+        $global:EmtTestOrder = New-Object System.Collections.Generic.List[string]
         Mock Get-MailboxSearch { if ($Identity -eq "MC_$stamp-shadow") { [pscustomobject]@{ Name = $Identity } } }
-        Mock Remove-MailboxSearch { $global:McTestOrder.Add("shadow:$Identity") }
-        Mock Remove-ComplianceSearch { $global:McTestOrder.Add("search:$Identity") }
+        Mock Remove-MailboxSearch { $global:EmtTestOrder.Add("shadow:$Identity") }
+        Mock Remove-ComplianceSearch { $global:EmtTestOrder.Add("search:$Identity") }
         try {
-            Remove-McSearches -Names "MC_$stamp", "MC_$stamp-shadow" -RecheckSeconds 0
-            @($global:McTestOrder) | Should -Be @("shadow:MC_$stamp-shadow", "search:MC_$stamp")
-        } finally { Remove-Variable McTestOrder -Scope Global -ErrorAction SilentlyContinue }
+            Remove-EmtSearches -Names "MC_$stamp", "MC_$stamp-shadow" -RecheckSeconds 0
+            @($global:EmtTestOrder) | Should -Be @("shadow:MC_$stamp-shadow", "search:MC_$stamp")
+        } finally { Remove-Variable EmtTestOrder -Scope Global -ErrorAction SilentlyContinue }
     }
     It 'removes the search with a second attempt when the first fails and the search is still there' {
-        $global:McTestRemoves = 0
+        $global:EmtTestRemoves = 0
         Mock Get-MailboxSearch { }
         Mock Remove-ComplianceSearch {
-            $global:McTestRemoves++
-            if ($global:McTestRemoves -eq 1) { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
+            $global:EmtTestRemoves++
+            if ($global:EmtTestRemoves -eq 1) { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
         }
         # Exists after the first attempt; the second attempt works.
-        Mock Get-ComplianceSearch { if ($global:McTestRemoves -lt 2) { [pscustomobject]@{ Name = "MC_$stamp" } } else { throw "The operation couldn't be performed because 'MC_$stamp' couldn't be found." } }
-        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        Mock Get-ComplianceSearch { if ($global:EmtTestRemoves -lt 2) { [pscustomobject]@{ Name = "MC_$stamp" } } else { throw "The operation couldn't be performed because 'MC_$stamp' couldn't be found." } }
+        $global:EmtSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
         try {
-            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
-            $lines = @($global:McSync.Log.ToArray())
-        } finally { Remove-Variable McSync, McTestRemoves -Scope Global -ErrorAction SilentlyContinue }
+            Remove-EmtSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:EmtSync.Log.ToArray())
+        } finally { Remove-Variable EmtSync, EmtTestRemoves -Scope Global -ErrorAction SilentlyContinue }
         Should -Invoke Remove-ComplianceSearch -Times 2 -Exactly
         ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
     }
 }
 
-Describe 'Test-McComplianceSearchExists' {
+Describe 'Test-EmtComplianceSearchExists' {
     It 'is false for "not found" and true for another error' {
         Mock Get-ComplianceSearch { throw "The operation couldn't be performed because 'X' couldn't be found." }
-        Test-McComplianceSearchExists 'X' | Should -BeFalse
+        Test-EmtComplianceSearchExists 'X' | Should -BeFalse
         Mock Get-ComplianceSearch { throw 'The server is not available.' }
-        Test-McComplianceSearchExists 'X' | Should -BeTrue
+        Test-EmtComplianceSearchExists 'X' | Should -BeTrue
         Mock Get-ComplianceSearch { [pscustomobject]@{ Name = 'X' } }
-        Test-McComplianceSearchExists 'X' | Should -BeTrue
+        Test-EmtComplianceSearchExists 'X' | Should -BeTrue
     }
 }
-Describe 'Remove-McSearches: lessons from Exchange 2019' {
+Describe 'Remove-EmtSearches: lessons from Exchange 2019' {
     BeforeAll {
         $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         Mock Get-ComplianceSearchAction { }
@@ -745,104 +748,253 @@ Describe 'Remove-McSearches: lessons from Exchange 2019' {
     It 'does not touch a search that is still running, nor its shadow search' {
         Mock Get-ComplianceSearch { [pscustomobject]@{ Name = "MC_$stamp"; Status = 'InProgress' } }
         Mock Remove-ComplianceSearch { }
-        Remove-McSearches -Names "MC_$stamp", "MC_$stamp-shadow" -RecheckSeconds 0
+        Remove-EmtSearches -Names "MC_$stamp", "MC_$stamp-shadow" -RecheckSeconds 0
         Should -Invoke Remove-ComplianceSearch -Times 0 -Exactly
         Should -Invoke Remove-MailboxSearch -Times 0 -Exactly
     }
     It 'never calls Remove-ComplianceSearch with -ErrorAction Stop (it stops the remove in the middle)' {
-        $global:McTestGone = $false
-        Mock Get-ComplianceSearch { if (-not $global:McTestGone) { [pscustomobject]@{ Name = "MC_$stamp"; Status = 'Completed' } } else { throw "'MC_$stamp' couldn't be found." } }
-        Mock Remove-ComplianceSearch { $global:McTestGone = $true }
+        $global:EmtTestGone = $false
+        Mock Get-ComplianceSearch { if (-not $global:EmtTestGone) { [pscustomobject]@{ Name = "MC_$stamp"; Status = 'Completed' } } else { throw "'MC_$stamp' couldn't be found." } }
+        Mock Remove-ComplianceSearch { $global:EmtTestGone = $true }
         try {
-            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
-        } finally { Remove-Variable McTestGone -Scope Global -ErrorAction SilentlyContinue }
+            Remove-EmtSearches -Names "MC_$stamp" -RecheckSeconds 0
+        } finally { Remove-Variable EmtTestGone -Scope Global -ErrorAction SilentlyContinue }
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly
         Should -Invoke Remove-ComplianceSearch -Times 0 -Exactly -ParameterFilter { $PSBoundParameters['ErrorAction'] -eq 'Stop' }
     }
 }
 Describe 'Recipient in the query and in the search scope' {
     It 'adds the recipient to the KQL query (To, Cc, Bcc)' {
-        $q = New-McSearchQuery -Senders 'a@x.com' -Recipients 'B@x.com' -Start ([datetime]'2026-11-10') -End ([datetime]'2026-11-11') -UtcOffset 0
+        $q = New-EmtSearchQuery -Senders 'a@x.com' -Recipients 'B@x.com' -Start ([datetime]'2026-11-10') -End ([datetime]'2026-11-11') -UtcOffset 0
         $q | Should -Match '\(to:b@x\.com OR cc:b@x\.com OR bcc:b@x\.com\)'
         $q | Should -Match '\(from:a@x\.com\)'
     }
     It 'searches only the recipient and sender mailboxes when the tracking log is empty (the case from the screenshot)' {
-        Mock Get-McCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
-        Mock Find-McTrackingEvents { [pscustomobject]@{ Events = @(); Servers = @('EXCH1'); Errors = @() } }
-        Mock Get-McAcceptedDomains { @('x.com') }
-        Mock Resolve-McRecipients {
+        Mock Get-EmtCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
+        Mock Find-EmtTrackingEvents { [pscustomobject]@{ Events = @(); Servers = @('EXCH1'); Errors = @() } }
+        Mock Get-EmtAcceptedDomains { @('x.com') }
+        Mock Resolve-EmtRecipients {
             @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } })
         }
-        Mock Invoke-McQuickSearch { [pscustomobject]@{ Mailbox = 'b@x.com'; Items = 0; SizeKB = 0; Error = '' } }
-        Mock New-McComplianceSearchRun { throw 'must not search all mailboxes' }
-        $r = Invoke-McSearch -Criteria @{
+        Mock Invoke-EmtQuickSearch { [pscustomobject]@{ Mailbox = 'b@x.com'; Items = 0; SizeKB = 0; Error = '' } }
+        Mock New-EmtComplianceSearchRun { throw 'must not search all mailboxes' }
+        $r = Invoke-EmtSearch -Criteria @{
             Senders = @('a@x.com'); Recipient = 'b@x.com'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11'; IncludeForwards = $false
         }
         @($r.Locations | Sort-Object) | Should -Be @('a@x.com', 'b@x.com')
         # Nothing found anywhere: no list of mailboxes without the message.
         @($r.Missing).Count | Should -Be 0
         $r.Query | Should -Match 'to:b@x\.com'
-        Should -Invoke New-McComplianceSearchRun -Times 0 -Exactly
+        Should -Invoke New-EmtComplianceSearchRun -Times 0 -Exactly
     }
     It 'marks a result that the tracking log does not confirm' {
-        Mock Get-McCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
-        Mock Find-McTrackingEvents { [pscustomobject]@{ Events = @(); Servers = @('EXCH1'); Errors = @() } }
-        Mock Get-McAcceptedDomains { @('x.com') }
-        Mock Resolve-McRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } }) }
-        Mock Invoke-McQuickSearch { [pscustomobject]@{ Mailbox = 'a@x.com'; Items = 5; SizeKB = 10; Error = '' } }
-        $r = Invoke-McSearch -Criteria @{
+        Mock Get-EmtCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
+        Mock Find-EmtTrackingEvents { [pscustomobject]@{ Events = @(); Servers = @('EXCH1'); Errors = @() } }
+        Mock Get-EmtAcceptedDomains { @('x.com') }
+        Mock Resolve-EmtRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } }) }
+        Mock Invoke-EmtQuickSearch { [pscustomobject]@{ Mailbox = 'a@x.com'; Items = 5; SizeKB = 10; Error = '' } }
+        $r = Invoke-EmtSearch -Criteria @{
             Senders = @('a@x.com'); Recipient = 'b@x.com'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11'
         }
         $r.Unconfirmed | Should -BeTrue
     }
 }
-Describe 'Get-McSum' {
+Describe 'Get-EmtSum' {
     It 'gives 0 for an empty list and the sum for a list' {
-        Get-McSum -Items @() -Property Items | Should -Be 0
-        Get-McSum -Items @([pscustomobject]@{ Items = 2 }, [pscustomobject]@{ Items = 3 }) -Property Items | Should -Be 5
-        Get-McSum -Items @([pscustomobject]@{ SizeKB = 1.5 }, $null) -Property SizeKB | Should -Be 1.5
+        Get-EmtSum -Items @() -Property Items | Should -Be 0
+        Get-EmtSum -Items @([pscustomobject]@{ Items = 2 }, [pscustomobject]@{ Items = 3 }) -Property Items | Should -Be 5
+        Get-EmtSum -Items @([pscustomobject]@{ SizeKB = 1.5 }, $null) -Property SizeKB | Should -Be 1.5
     }
 }
-Describe 'Test-McComplianceSearchExists with a typographic apostrophe' {
+Describe 'Test-EmtComplianceSearchExists with a typographic apostrophe' {
     It 'is false for not found with the apostrophe U+2019 (the case from the log)' {
         $msg = "The operation couldn$([char]0x2019)t be performed because 'X' couldn$([char]0x2019)t be found."
         Mock Get-ComplianceSearch { throw $msg }
-        Test-McComplianceSearchExists 'X' | Should -BeFalse
+        Test-EmtComplianceSearchExists 'X' | Should -BeFalse
     }
 }
-Describe 'Remove-McSearches when Exchange removes the search in the background' {
+Describe 'Remove-EmtSearches when Exchange removes the search in the background' {
     It 'gives a warning, not an error, when the remove returned no error but the search is still visible' {
         $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         Mock Get-MailboxSearch { }
         Mock Get-ComplianceSearchAction { }
         Mock Remove-ComplianceSearch { }
         Mock Get-ComplianceSearch { [pscustomobject]@{ Name = "MC_$stamp"; Status = 'Completed' } }
-        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        $global:EmtSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
         try {
-            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
-            $lines = @($global:McSync.Log.ToArray())
-        } finally { Remove-Variable McSync -Scope Global -ErrorAction SilentlyContinue }
+            Remove-EmtSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:EmtSync.Log.ToArray())
+        } finally { Remove-Variable EmtSync -Scope Global -ErrorAction SilentlyContinue }
         ($lines -join "`n") | Should -Match '\[WARN \].*MC_.*Completed'
         ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
     }
 }
 Describe 'No -ErrorAction Stop for the Compliance Search cmdlets (lesson from Exchange 2019)' {
     It 'the core has no *-ComplianceSearch* call with -ErrorAction Stop' {
-        $src = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\src\MailCleaner.Core.ps1'), [Text.Encoding]::UTF8)
+        $src = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\src\EMT.Core.ps1'), [Text.Encoding]::UTF8)
         $bad = @($src -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' -and $_ -match '\b\w+-ComplianceSearch\w*\b[^#]*-ErrorAction\s+Stop' })
         $bad | Should -BeNullOrEmpty
     }
-    It 'Get-McComplianceSearchInfo: object = exists, "not found" = gone, another error = unknown' {
+    It 'Get-EmtComplianceSearchInfo: object = exists, "not found" = gone, another error = unknown' {
         Mock Get-ComplianceSearch { [pscustomobject]@{ Name = 'X'; Status = 'Completed' } }
-        $i = Get-McComplianceSearchInfo 'X'
+        $i = Get-EmtComplianceSearchInfo 'X'
         $i.Exists | Should -BeTrue
         $i.Status | Should -Be 'Completed'
         Mock Get-ComplianceSearch { Write-Error "The operation couldn$([char]0x2019)t be performed because 'X' couldn$([char]0x2019)t be found." }
-        (Get-McComplianceSearchInfo 'X').Exists | Should -BeFalse
+        (Get-EmtComplianceSearchInfo 'X').Exists | Should -BeFalse
         Mock Get-ComplianceSearch { Write-Error 'Object reference not set to an instance of an object.' }
-        $i = Get-McComplianceSearchInfo 'X'
+        $i = Get-EmtComplianceSearchInfo 'X'
         $i.Exists | Should -BeNullOrEmpty
         $i.Error  | Should -Match 'Object reference'
         Should -Invoke Get-ComplianceSearch -Times 0 -ParameterFilter { $PSBoundParameters['ErrorAction'] -eq 'Stop' }
+    }
+}
+Describe 'Trace: delivery report' {
+    BeforeAll {
+        $t = [datetime]'2026-11-10 10:00'
+        function New-TEv($Id, $Kind, [string[]]$To, [string[]]$Status, $Time, $Server = 'EXCH1') {
+            [pscustomobject]@{ MessageId = $Id; EventId = $Kind; Recipients = $To; RecipientStatus = $Status
+                               Timestamp = $Time; ServerHostname = $Server; Source = 'X'; Sender = 'a@x.com'; MessageSubject = 'S' }
+        }
+    }
+    AfterEach { $global:EmtLang = 'ru' }
+    It 'gives Delivered after DEFER, and the later decisive event' {
+        $ev = @(
+            New-TEv '<1>' 'RECEIVE' @('b@x.com') @('') $t
+            New-TEv '<1>' 'DEFER'   @('b@x.com') @('451 4.4.0 Primary target IP address responded') $t.AddMinutes(1)
+            New-TEv '<1>' 'DELIVER' @('b@x.com') @('') $t.AddMinutes(5) 'EXCH2'
+        )
+        $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'b@x.com' = 'Internal' })
+        $r.Count | Should -Be 1
+        $r[0].Status | Should -Be 'Delivered'
+        $r[0].Server | Should -Be 'EXCH2'
+    }
+    It 'gives Failed with the server answer and a hint for 5.1.1' {
+        $global:EmtLang = 'en'
+        $ev = @(New-TEv '<1>' 'FAIL' @('nobody@x.com') @('550 5.1.1 RESOLVER.ADR.RecipNotFound; not found') $t)
+        $r = @(Get-EmtDeliveryReport -Events $ev)
+        $r[0].Status | Should -Be 'Failed'
+        $r[0].Detail | Should -Match '5\.1\.1'
+        $r[0].Hint   | Should -Match 'does not exist'
+    }
+    It 'gives External for SEND to an external address, InTransit for SEND to an internal one' {
+        $ev = @(New-TEv '<1>' 'SEND' @('ext@outlook.com', 'b@x.com') @('250 2.6.0 Queued', '250 2.6.0 Queued') $t)
+        $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'ext@outlook.com' = 'External'; 'b@x.com' = 'Internal' })
+        ($r | Where-Object Recipient -eq 'ext@outlook.com').Status | Should -Be 'External'
+        ($r | Where-Object Recipient -eq 'b@x.com').Status | Should -Be 'InTransit'
+    }
+    It 'gives Group for a group address, and Unknown for RECEIVE only' {
+        $ev = @(New-TEv '<1>' 'RECEIVE' @('team@x.com', 'c@x.com') @('', '') $t)
+        $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'team@x.com' = 'Group'; 'c@x.com' = 'Internal' })
+        ($r | Where-Object Recipient -eq 'team@x.com').Status | Should -Be 'Group'
+        ($r | Where-Object Recipient -eq 'c@x.com').Status | Should -Be 'Unknown'
+    }
+    It 'keeps each message separate and ignores events without MessageId' {
+        $ev = @(
+            New-TEv '<1>' 'DELIVER' @('b@x.com') @('') $t
+            New-TEv '<2>' 'FAIL'    @('b@x.com') @('550 5.2.2 mailbox full') $t
+            New-TEv ''    'NOTIFYMAPI' @('b@x.com') @('') $t
+        )
+        $r = @(Get-EmtDeliveryReport -Events $ev)
+        $r.Count | Should -Be 2
+        ($r | Where-Object MessageId -eq '<2>').Status | Should -Be 'Failed'
+    }
+}
+
+Describe 'Trace: hints and status lines' {
+    AfterEach { $global:EmtLang = 'ru' }
+    It 'explains the common SMTP codes' {
+        $global:EmtLang = 'en'
+        Get-EmtStatusHint '550 5.2.2 STOREDRV.Deliver; mailbox full' | Should -Match 'full'
+        Get-EmtStatusHint '500 4.4.7 Message delayed' | Should -Match 'expired'
+        Get-EmtStatusHint '550 5.7.1 RESOLVER.RST.NotAuthorized' | Should -Match 'rejected'
+        Get-EmtStatusHint '451 4.4.0 DNS query failed' | Should -Match 'connection'
+        Get-EmtStatusHint '554 5.9.9 something new' | Should -Match 'permanent'
+    }
+    It 'gives no hint for a success code or for no code' {
+        Get-EmtStatusHint '250 2.6.0 Queued mail for delivery' | Should -Be ''
+        Get-EmtStatusHint '' | Should -Be ''
+        Get-EmtStatusHint 'no code here' | Should -Be ''
+    }
+    It 'makes the status line of a message' {
+        $global:EmtLang = 'en'
+        $rows = @(
+            [pscustomobject]@{ Status = 'Delivered' }, [pscustomobject]@{ Status = 'Delivered' },
+            [pscustomobject]@{ Status = 'Failed' }, [pscustomobject]@{ Status = 'External' }
+        )
+        Get-EmtMessageStatusLine $rows | Should -Be 'delivered: 2, external: 1, failed: 1'
+        Get-EmtMessageStatusLine @() | Should -Be 'no recipients in the tracking log'
+    }
+    It 'gives hints for an empty trace result' {
+        $global:EmtLang = 'en'
+        $now = [datetime]'2026-11-10'
+        $h = @(Get-EmtNoResultHints -Criteria @{ Senders = @('a@x.com'); Recipient = 'b@x.com'; Start = $now.AddDays(-40); End = $now } -Now $now)
+        ($h -join "`n") | Should -Match '30 days'
+        ($h -join "`n") | Should -Match 'Sender'
+        ($h -join "`n") | Should -Match 'Recipient'
+        ($h -join "`n") | Should -Match 'Sent Items'
+    }
+    It 'accepts a recipient alone for a trace, not for a delete' {
+        $c = @{ Recipient = 'b@x.com'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11' }
+        @(Test-EmtCriteria $c -ForTrace).Count | Should -Be 0
+        @(Test-EmtCriteria $c).Count | Should -Be 1
+    }
+}
+
+Describe 'Mailbox check: findings' {
+    BeforeAll {
+        function New-Data {
+            param($Rules = @(), $Junk = $null, $Box = $null, $Stats = $null)
+            [pscustomobject]@{ Rules = $Rules; RulesError = ''; Junk = $Junk; JunkError = ''; Box = $Box; BoxError = ''; Stats = $Stats; StatsError = '' }
+        }
+    }
+    AfterEach { $global:EmtLang = 'ru' }
+    It 'finds a rule that moves messages from this sender (Alert)' {
+        $global:EmtLang = 'en'
+        $rule = [pscustomobject]@{ Name = 'Archive'; Enabled = $true; From = @('Ivanov Ivan [SMTP:a@x.com]'); MoveToFolder = 'jsmith:\Archive'; DeleteMessage = $false }
+        $f = @(Get-EmtMailboxFindings -Data (New-Data -Rules @($rule)) -Sender 'a@x.com' -Subject 'Report')
+        $a = @($f | Where-Object Severity -eq 'Alert')
+        $a.Count | Should -Be 1
+        $a[0].Text | Should -Match 'Archive'
+        $a[0].Text | Should -Match 'applies to this message'
+    }
+    It 'gives Info for a rule that does not apply, and ignores a disabled rule' {
+        $r1 = [pscustomobject]@{ Name = 'Other'; Enabled = $true; SubjectContainsWords = @('invoice'); DeleteMessage = $true }
+        $r2 = [pscustomobject]@{ Name = 'Off'; Enabled = $false; DeleteMessage = $true }
+        $f = @(Get-EmtMailboxFindings -Data (New-Data -Rules @($r1, $r2)) -Sender 'a@x.com' -Subject 'Report')
+        @($f | Where-Object Area -eq 'Rules').Count | Should -Be 1
+        @($f | Where-Object Area -eq 'Rules')[0].Severity | Should -Be 'Info'
+    }
+    It 'gives Alert for a blocked sender or domain' {
+        $junk = [pscustomobject]@{ Enabled = $true; BlockedSendersAndDomains = @('x.com'); TrustedSendersAndDomains = @() }
+        $f = @(Get-EmtMailboxFindings -Data (New-Data -Junk $junk) -Sender 'a@x.com')
+        @($f | Where-Object { $_.Area -eq 'Junk' -and $_.Severity -eq 'Alert' }).Count | Should -Be 1
+    }
+    It 'gives Alert for forwarding without a copy, Warn with a copy' {
+        $box1 = [pscustomobject]@{ ForwardingSmtpAddress = 'smtp:ext@gmail.com'; DeliverToMailboxAndForward = $false }
+        $box2 = [pscustomobject]@{ ForwardingSmtpAddress = 'smtp:ext@gmail.com'; DeliverToMailboxAndForward = $true }
+        @(Get-EmtMailboxFindings -Data (New-Data -Box $box1) | Where-Object { $_.Area -eq 'Forwarding' })[0].Severity | Should -Be 'Alert'
+        @(Get-EmtMailboxFindings -Data (New-Data -Box $box2) | Where-Object { $_.Area -eq 'Forwarding' })[0].Severity | Should -Be 'Warn'
+    }
+    It 'gives Warn for a mailbox that is 95% full' {
+        $box = [pscustomobject]@{ UseDatabaseQuotaDefaults = $false; ProhibitSendReceiveQuota = '10 GB (10,737,418,240 bytes)' }
+        $stats = [pscustomobject]@{ TotalItemSize = '9.5 GB (10,200,547,328 bytes)' }
+        $q = @(Get-EmtMailboxFindings -Data (New-Data -Box $box -Stats $stats) | Where-Object Area -eq 'Quota')
+        $q[0].Severity | Should -Be 'Warn'
+    }
+    It 'reports a check that did not run, and says that nothing explains the problem' {
+        $global:EmtLang = 'en'
+        $d = New-Data
+        $d.RulesError = 'no cmdlet Get-InboxRule (no permission)'
+        $f = @(Get-EmtMailboxFindings -Data $d)
+        ($f | Where-Object Area -eq 'Rules')[0].Text | Should -Match 'Not examined'
+        $clean = @(Get-EmtMailboxFindings -Data (New-Data))
+        ($clean.Text -join "`n") | Should -Match 'No rule, block'
+    }
+    It 'knows the rule match types' {
+        Get-EmtRuleMatch -Rule ([pscustomobject]@{}) -Sender 'a@x.com' -Subject 'S' | Should -Be 'All'
+        Get-EmtRuleMatch -Rule ([pscustomobject]@{ BodyContainsWords = @('x') }) -Sender 'a@x.com' -Subject 'S' | Should -Be 'Unknown'
+        Get-EmtRuleMatch -Rule ([pscustomobject]@{ SubjectContainsWords = @('rep') }) -Sender 'a@x.com' -Subject 'Report' | Should -Be 'Yes'
+        Get-EmtRuleMatch -Rule ([pscustomobject]@{ FromAddressContainsWords = @('zzz') }) -Sender 'a@x.com' -Subject 'S' | Should -Be 'No'
     }
 }

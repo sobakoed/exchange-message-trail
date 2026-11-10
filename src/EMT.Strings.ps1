@@ -1,5 +1,5 @@
 ﻿<#
-    MailCleaner.Strings.ps1 — user interface languages.
+    EMT.Strings.ps1 — user interface languages.
 
     The texts are in the folder "Lang" next to "src": one file <code>.lng for each language
     (Lang\ru.lng, Lang\en.lng, ...). To add a language, put a new .lng file in this folder.
@@ -8,17 +8,17 @@
     Use:  T 'key'            -> text in the current language
           T 'key' $a $b      -> text with {0}, {1} replaced (the -f operator)
 
-    The current language is $global:McSync.Lang (the window and the background runspace
-    share it), or $global:McLang, or 'en'.
+    The current language is $global:EmtSync.Lang (the window and the background runspace
+    share it), or $global:EmtLang, or 'en'.
     A key that is not in the current language comes from English, then from Russian.
     A key that is not in any file returns the key itself.
 #>
 
 # The folder is found from the location of this file. A global variable: the core and the
 # runspace load this file in different scopes.
-$global:McLangDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'Lang'
+$global:EmtLangDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'Lang'
 
-function Read-McLanguageFile {
+function Read-EmtLanguageFile {
     <#
         Reads one .lng file. Returns Code, Name, Author, File, Texts (key -> text) and Problems.
         Line types:  # comment  |  ; comment  |  empty  |  @meta = value  |  key = text
@@ -53,43 +53,43 @@ function Read-McLanguageFile {
     }
 }
 
-function Get-McStringTable {
+function Get-EmtStringTable {
     <# All languages from the Lang folder: code -> language object. Read once, then cached. #>
     param([switch] $Reload)
-    if (-not $Reload -and (Get-Variable -Name McStringTable -Scope Global -ErrorAction SilentlyContinue) -and $global:McStringTable) {
-        return $global:McStringTable
+    if (-not $Reload -and (Get-Variable -Name EmtStringTable -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtStringTable) {
+        return $global:EmtStringTable
     }
     $table = @{}
-    if (Test-Path $global:McLangDir) {
-        foreach ($f in Get-ChildItem -Path $global:McLangDir -Filter '*.lng' -File | Sort-Object Name) {
+    if (Test-Path $global:EmtLangDir) {
+        foreach ($f in Get-ChildItem -Path $global:EmtLangDir -Filter '*.lng' -File | Sort-Object Name) {
             try {
-                $l = Read-McLanguageFile -Path $f.FullName
+                $l = Read-EmtLanguageFile -Path $f.FullName
                 $table[$l.Code] = $l
             } catch {
                 Write-Verbose "Language file $($f.Name) is not readable: $($_.Exception.Message)"
             }
         }
     }
-    $global:McStringTable = $table
+    $global:EmtStringTable = $table
     $table
 }
 
-function Get-McLanguages {
+function Get-EmtLanguages {
     <# The available languages for the language list: Code, Name, Author. #>
-    $table = Get-McStringTable
+    $table = Get-EmtStringTable
     @($table.Values | Sort-Object Name | Select-Object Code, Name, Author)
 }
 
-function Get-McLanguage {
-    if ((Get-Variable -Name McSync -Scope Global -ErrorAction SilentlyContinue) -and $global:McSync -and
-        $global:McSync.ContainsKey('Lang') -and $global:McSync.Lang) { return [string]$global:McSync.Lang }
-    if ((Get-Variable -Name McLang -Scope Global -ErrorAction SilentlyContinue) -and $global:McLang) { return [string]$global:McLang }
+function Get-EmtLanguage {
+    if ((Get-Variable -Name EmtSync -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtSync -and
+        $global:EmtSync.ContainsKey('Lang') -and $global:EmtSync.Lang) { return [string]$global:EmtSync.Lang }
+    if ((Get-Variable -Name EmtLang -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtLang) { return [string]$global:EmtLang }
     'en'
 }
 
-function Get-McDefaultLanguage {
+function Get-EmtDefaultLanguage {
     <# The Windows UI language if a file for it exists; Russian for Ukrainian and Belarusian Windows; else English. #>
-    $table = Get-McStringTable
+    $table = Get-EmtStringTable
     $win = [Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName.ToLowerInvariant()
     if ($table.ContainsKey($win)) { return $win }
     if ($win -in 'uk', 'be' -and $table.ContainsKey('ru')) { return 'ru' }
@@ -102,9 +102,9 @@ function T {
         [Parameter(Mandatory, Position = 0)] [string] $Key,
         [Parameter(Position = 1, ValueFromRemainingArguments)] [object[]] $Arguments
     )
-    $table = Get-McStringTable
+    $table = Get-EmtStringTable
     $text = $null
-    foreach ($code in @((Get-McLanguage), 'en', 'ru')) {
+    foreach ($code in @((Get-EmtLanguage), 'en', 'ru')) {
         if ($table.ContainsKey($code) -and $table[$code].Texts.ContainsKey($Key)) { $text = $table[$code].Texts[$Key]; break }
     }
     if ($null -eq $text) { return $Key }
@@ -115,21 +115,21 @@ function T {
     $text
 }
 
-function Test-McLanguageFile {
+function Test-EmtLanguageFile {
     <#
         Examines a language file against the reference file (English).
         Returns the problems as text lines. No lines = the file is correct.
         Translators can run it:
-          . .\src\MailCleaner.Strings.ps1
-          Test-McLanguageFile .\Lang\de.lng
+          . .\src\EMT.Strings.ps1
+          Test-EmtLanguageFile .\Lang\de.lng
     #>
     param(
         [Parameter(Mandatory)] [string] $Path,
-        [string] $ReferencePath = (Join-Path $global:McLangDir 'en.lng'),
+        [string] $ReferencePath = (Join-Path $global:EmtLangDir 'en.lng'),
         [switch] $AllowMissing
     )
-    $l = Read-McLanguageFile -Path $Path
-    $ref = Read-McLanguageFile -Path $ReferencePath
+    $l = Read-EmtLanguageFile -Path $Path
+    $ref = Read-EmtLanguageFile -Path $ReferencePath
     foreach ($p in $l.Problems) { $p }
     if (-not $l.Name -or $l.Name -eq $l.Code) { 'no @name line' }
     foreach ($k in $l.Texts.Keys | Sort-Object) {
