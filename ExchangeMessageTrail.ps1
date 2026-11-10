@@ -101,6 +101,7 @@ $script:Loading = $false     # true while the UI fills controls (no invalidation
 $script:ConnectedServer = ''
 $script:DelFromTrace    = ''       # MessageId when the tab "Delete" has the data of a traced message
 $script:CheckForMessage = ''       # MessageId of the running mailbox check
+$script:ReportByMsg     = @{}      # MessageId -> the report rows of the message (Show-EmtTraceViews)
 $script:ResolveNext     = $null    # the action after the address book search
 $script:PendingCleanup  = $null    # names confirmed for cleanup; the timer starts the removal
 $script:CleanupNames    = $null
@@ -251,7 +252,6 @@ function Update-EmtLanguage {
     $form.Text = T 'app.title'
     foreach ($x in $script:Localized)     { $x.Control.Text = T $x.Key }
     foreach ($x in $script:LocalizedTips) { $tips.SetToolTip($x.Control, (T $x.Key)) }
-    foreach ($d in $dtStart, $dtEnd, $dtTrStart, $dtTrEnd) { $d.CustomFormat = T 'fmt.picker' }
     Update-EmtCriteriaLabels
     Update-EmtConnIndicator
     Update-EmtDeleteSource
@@ -341,8 +341,17 @@ function New-EmtCheckBox([string] $Key) {
 }
 
 function New-EmtDatePicker {
+    <#
+        The date and time in the format of the Windows regional settings, not of the interface language.
+        Thus a user in the USA sees 11/12/2026 12:00 AM, and a user in Europe sees 12.11.2026 00:00.
+        The width comes from the longest date of the format (the AM/PM text and the separators can be longer).
+    #>
+    $f = [Globalization.CultureInfo]::CurrentCulture.DateTimeFormat
     $d = New-Object System.Windows.Forms.DateTimePicker
-    $d.Format = 'Custom'; $d.CustomFormat = T 'fmt.picker'; $d.Width = 135; $d.Margin = '3,4,6,3'
+    $d.Format = 'Custom'; $d.CustomFormat = '{0} {1}' -f $f.ShortDatePattern, $f.ShortTimePattern
+    $sample = ([datetime]'2026-12-28 23:58').ToString($d.CustomFormat)
+    $d.Width = [math]::Max(135, [System.Windows.Forms.TextRenderer]::MeasureText($sample, $form.Font).Width + 44)
+    $d.Margin = '3,4,6,3'
     $d
 }
 
@@ -1083,6 +1092,11 @@ function Get-EmtTraceCriteria {
 
 #region ---------- Trace views ----------
 
+function Get-EmtReportOf([string] $MessageId) {
+    <# The report rows (recipients) of one message. Show-EmtTraceViews makes the map. #>
+    if ($script:ReportByMsg -and $script:ReportByMsg.ContainsKey($MessageId)) { $script:ReportByMsg[$MessageId].ToArray() }
+}
+
 function Clear-EmtTraceViews {
     foreach ($g in $trPages.Values) { $g.DataSource = $null }
     $gridTrMessages.DataSource = $null
@@ -1095,10 +1109,17 @@ function Clear-EmtTraceViews {
 function Show-EmtTraceViews($t) {
     <# Fills the message grid and the summary line of the trace. No audit: it also runs after a language change. #>
     $keep = Get-EmtSelectedMessageId
+    # The recipients of each message in one pass. A search in the full report for each message is slow:
+    # 2000 messages and 6000 recipients take 30 seconds.
+    $script:ReportByMsg = @{}
+    foreach ($r in @($t.Report)) {
+        if (-not $script:ReportByMsg.ContainsKey($r.MessageId)) { $script:ReportByMsg[$r.MessageId] = New-Object System.Collections.ArrayList }
+        [void]$script:ReportByMsg[$r.MessageId].Add($r)
+    }
     $msgs = @($t.Messages | ForEach-Object {
         [pscustomobject]@{
             Time = $_.Time; Sender = $_.Sender; Subject = $_.Subject; Recipients = $_.Recipients
-            StatusLine = (Get-EmtMessageStatusLine @($t.Report | Where-Object MessageId -eq $_.MessageId))
+            StatusLine = (Get-EmtMessageStatusLine @(Get-EmtReportOf $_.MessageId))
             Note = $(if ($_.ServerGenerated) { T 'note.serverGenerated' } else { '' })
             MessageId = $_.MessageId; Problems = $_.Problems; Pending = $_.Pending
         }
@@ -1144,7 +1165,7 @@ function Show-EmtTraceDetail {
         Set-UiState
         return
     }
-    $rows = @($t.Report | Where-Object MessageId -eq $msgId | ForEach-Object {
+    $rows = @(Get-EmtReportOf $msgId | ForEach-Object {
         [pscustomobject]@{
             Recipient = $_.Recipient; Status = (T "st.$($_.Status)")
             Kind = $(if ($_.Kind) { T "kind.$($_.Kind)" } else { '' }); Time = $_.Time; Server = $_.Server

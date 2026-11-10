@@ -143,7 +143,6 @@ crit.only = Recipient mailbox only
 crit.all = Search all mailboxes
 crit.find = Find
 crit.checkTitle = Examine the criteria
-fmt.picker = yyyy-MM-dd HH:mm
 fmt.datetime = yyyy-MM-dd HH:mm:ss
 fmt.date = yyyy-MM-dd HH:mm
 

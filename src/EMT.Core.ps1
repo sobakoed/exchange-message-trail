@@ -1139,11 +1139,16 @@ function Get-EmtEventStatus {
         The delivery status that one tracking event gives to one recipient, or $null (no status).
         Kind = Internal / External / Group / Other (from Resolve-EmtRecipients).
         SEND to an internal recipient is a transfer to another Exchange server, not the end of the delivery.
+        SENDEXTERNAL is a send through a Send connector to a server outside the organization
+        (for example a hidden copy that a transport rule adds). This is the end of the delivery for Exchange.
+        DUPLICATEDELIVER is a delivery of a second copy to a mailbox that has the message.
     #>
     param([string] $EventId, [string] $Kind)
     switch ($EventId.ToUpperInvariant()) {
-        'DELIVER'       { 'Delivered' }
+        'DELIVER'          { 'Delivered' }
+        'DUPLICATEDELIVER' { 'Delivered' }
         'SEND'          { if ($Kind -eq 'Internal') { 'InTransit' } else { 'External' } }
+        'SENDEXTERNAL'  { 'External' }
         'FAIL'          { 'Failed' }
         'DROP'          { 'Dropped' }
         'POISONMESSAGE' { 'Dropped' }

@@ -883,6 +883,30 @@ Describe 'Trace: delivery report' {
         ($r | Where-Object Recipient -eq 'ext@outlook.com').Status | Should -Be 'External'
         ($r | Where-Object Recipient -eq 'b@x.com').Status | Should -Be 'InTransit'
     }
+    It 'gives External for SENDEXTERNAL after TRANSFER (a hidden copy that a transport rule adds)' {
+        $ev = @(
+            New-TEv '<1>' 'RECEIVE'      @('monitor@security.example') @('') $t
+            New-TEv '<1>' 'TRANSFER'     @('monitor@security.example') @('') $t.AddSeconds(1)
+            New-TEv '<1>' 'SENDEXTERNAL' @('monitor@security.example') @('250 2.1.5 Ok') $t.AddSeconds(2)
+        )
+        $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'monitor@security.example' = 'External' })
+        $r.Count | Should -Be 1
+        $r[0].Status | Should -Be 'External'
+        $r[0].Detail | Should -Be '250 2.1.5 Ok'
+    }
+    It 'gives External for SENDEXTERNAL also for an internal kind: the message left the organization' {
+        $ev = @(New-TEv '<1>' 'SENDEXTERNAL' @('b@x.com') @('250 OK') $t)
+        $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'b@x.com' = 'Internal' })
+        $r[0].Status | Should -Be 'External'
+    }
+    It 'gives Delivered for DUPLICATEDELIVER' {
+        $ev = @(
+            New-TEv '<1>' 'TRANSFER'         @('b@x.com') @('') $t
+            New-TEv '<1>' 'DUPLICATEDELIVER' @('b@x.com') @('') $t.AddSeconds(1)
+        )
+        $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'b@x.com' = 'Internal' })
+        $r[0].Status | Should -Be 'Delivered'
+    }
     It 'gives Group for a group address, and Unknown for RECEIVE only' {
         $ev = @(New-TEv '<1>' 'RECEIVE' @('team@x.com', 'c@x.com') @('', '') $t)
         $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'team@x.com' = 'Group'; 'c@x.com' = 'Internal' })

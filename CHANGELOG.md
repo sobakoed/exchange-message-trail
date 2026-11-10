@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.4 — 2026-11-11
+
+- Message search: a large result shows quickly. 2000 messages with 6000 recipients show in 2.5 seconds.
+  Before, the time was 35 seconds. EMT made the status line of each message from the full recipient list.
+  Now EMT sorts the recipients by message one time.
+- Message search: the event `SENDEXTERNAL` gives the status **Sent to an external system**.
+  Exchange writes this event for a send through a Send connector, for example for a hidden copy from a transport rule.
+  Before, EMT did not know the event and showed **In transit** for these recipients.
+- Message search: the event `DUPLICATEDELIVER` gives the status **Delivered**.
+- The date fields of the period use the regional settings of Windows: the date format, the time format
+  and the first day of the week. Before, the format came from the interface language.
+  The language key `fmt.picker` is removed.
+
 ## 1.0.3 — 2026-11-10
 
 Repository audit.
