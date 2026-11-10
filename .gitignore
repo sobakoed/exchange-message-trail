@@ -1,0 +1,6 @@
+# Run output: logs, audit and exports contain mailbox addresses. Do not commit them.
+*.log
+audit.csv
+*.csv
+testResults.xml
+.vscode/
