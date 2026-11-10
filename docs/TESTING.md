@@ -132,9 +132,9 @@ The procedure uses the English interface. Select **English** in the language lis
 8. In **Senders**, type a text that no user has.
 9. Click **Find**.
 10. Make sure that an error window shows the text.
-11. Make sure that the trace does not start.
+11. Make sure that the message search does not start.
 
-### Delete from the trace
+### Delete from the message search
 
 1. On the tab **Message search**, find the first message.
 2. Select the message.
@@ -224,7 +224,7 @@ The procedure uses the English interface. Select **English** in the language lis
 ### Audit
 
 1. Open `%USERPROFILE%\ExchangeMessageTrail\audit.csv`.
-2. Make sure that there is one row for each trace, mailbox check, search, delete and verification.
+2. Make sure that there is one row for each message search, mailbox check, search of copies, delete and verification.
 
 ### Upgrade from MailCleaner
 
@@ -242,10 +242,13 @@ Do this test only on a computer with the older version (MailCleaner).
 3. Make sure that **Find** on the tab **Message search** operates.
 4. Make sure that **Find copies** is disabled.
 5. Make sure that **Delete this message…** is disabled.
-6. Start EMT with an account without the Mailbox Import Export role.
-7. Connect to the server.
-8. Make sure that **Delete permanently** is disabled.
-9. Make sure that the log shows the warning about the Mailbox Import Export role.
+6. Make sure that the log shows a warning for each function that is not available:
+   the mailbox check, the search of copies, the verification, the soft delete and the hard delete.
+7. Close EMT.
+8. Start EMT with an account without the Mailbox Import Export role.
+9. Connect to the server.
+10. Make sure that **Delete permanently** is disabled.
+11. Make sure that the log shows the warning about the Mailbox Import Export role.
 
 ### Errors
 

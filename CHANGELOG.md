@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.3 — 2026-11-10
+
+Repository audit.
+
+- README: new section **Repository structure**. The terms "message search" and "find copies" are used everywhere.
+  A new troubleshooting row for a start error. The file `settings.json` also keeps the window size and position.
+- `docs/ARCHITECTURE.md`: new sections **Criteria layout** and **Start and close**.
+- `docs/TESTING.md`: the permission test examines the warnings in the log.
+- CHANGELOG 1.0.0: **Delete this message…** does not copy the recipients. The text said that it does.
+- Two language keys that the code does not use any more are removed: `conn.noHardTip`, `log.removedWithError`.
+
 ## 1.0.2 — 2026-11-10
 
 Window audit.
@@ -99,7 +110,7 @@ Trace first, delete when necessary. New name: Exchange Message Trail (EMT).
 **Delete**
 
 - New button **Delete this message…** on the tab **Trace**. It opens the tab **Delete** and fills the criteria
-  from the selected message: sender, subject, message ID, recipients, period.
+  from the selected message: sender, subject, message ID, period.
 - A source line on the tab **Delete**: "Data from the tracking log" (green) or "Data typed by the user" (orange).
   A change of a criterion clears the result and sets the orange line.
 - The search button on the tab **Delete** is now **Find copies**.

@@ -312,7 +312,7 @@ function Set-EmtAccentButton([System.Windows.Forms.Button] $Button) {
 }
 
 function New-EmtIndicator([string] $Key) {
-    <# A round color mark and a text. Set-EmtIndicator sets the color and the tooltip. #>
+    <# A round color mark and a text. Set-EmtIndicator sets the color. #>
     $dot = New-Object System.Windows.Forms.Label
     $dot.AutoSize = $false; $dot.Size = '12,12'; $dot.Margin = '6,5,2,3'; $dot.Anchor = 'Left'
     $dot.Tag = [System.Drawing.Color]::Gray
@@ -328,11 +328,9 @@ function New-EmtIndicator([string] $Key) {
     [pscustomobject]@{ Dot = $dot; Text = $text }
 }
 
-function Set-EmtIndicator($Indicator, [System.Drawing.Color] $Color, [string] $Tip) {
+function Set-EmtIndicator($Indicator, [System.Drawing.Color] $Color) {
     $Indicator.Dot.Tag = $Color
     $Indicator.Dot.Invalidate()
-    $tips.SetToolTip($Indicator.Dot, $Tip)
-    $tips.SetToolTip($Indicator.Text, $Tip)
 }
 
 function New-EmtCheckBox([string] $Key) {
@@ -1011,10 +1009,10 @@ function Update-EmtConnIndicator {
     <# The bottom line: green = connected to the server, grey = not connected. #>
     if ($script:Caps) {
         $indServer.Text.Text = T 'conn.connectedTo' $script:ConnectedServer
-        Set-EmtIndicator $indServer $dotGreen ''
+        Set-EmtIndicator $indServer $dotGreen
     } else {
         $indServer.Text.Text = T 'conn.notConnected'
-        Set-EmtIndicator $indServer $dotGrey ''
+        Set-EmtIndicator $indServer $dotGrey
     }
 }
 

@@ -23,6 +23,7 @@ The user interface is available in English and Russian. You can add a language: 
 - [Requirements](#requirements)
 - [Permissions](#permissions)
 - [Install](#install)
+- [Repository structure](#repository-structure)
 - [Start](#start)
 - [Window](#window)
 - [Message search](#message-search)
@@ -65,7 +66,7 @@ A button stays disabled if your account does not have the necessary role.
 
 | Function | Cmdlets | Role group |
 |---|---|---|
-| Search | `New-ComplianceSearch`, `Start-ComplianceSearch`, `Get-ComplianceSearch` | Discovery Management |
+| Find copies | `New-ComplianceSearch`, `Start-ComplianceSearch`, `Get-ComplianceSearch` | Discovery Management |
 | Verify | `Search-Mailbox` | Discovery Management |
 | Soft delete | `New-ComplianceSearchAction` | Discovery Management |
 | Hard delete | `Search-Mailbox -DeleteContent` | Mailbox Import Export role (assign it manually) |
@@ -88,6 +89,25 @@ Close EMT and start it again after a role change.
 ```powershell
 Get-ChildItem -Recurse | Unblock-File
 ```
+
+## Repository structure
+
+| Folder or file | Content |
+|---|---|
+| `ExchangeMessageTrail.ps1` | The program: the window and the event handlers. Start it with `EMT.cmd`. |
+| `EMT.cmd` | The launcher. It starts PowerShell in STA mode with a hidden console. |
+| `src/` | The program logic without the window. |
+| `src/EMT.Core.ps1` | The Exchange operations: message search, mailbox check, search of copies, delete, cleanup. |
+| `src/EMT.Strings.ps1` | The language loader and the check of language files. |
+| `Lang/` | The user interface texts. One file for each language: `en.lng`, `ru.lng`. See [Languages](#languages). |
+| `tests/` | The Pester unit tests. They do not need Exchange. See [docs/TESTING.md](docs/TESTING.md). |
+| `docs/` | The documents for developers, testers and translators. See [More documents](#more-documents). |
+| `CHANGELOG.md` | The list of changes for each version. |
+| `.gitattributes` | The line ends of the files in Git: CRLF for `.ps1`, `.cmd` and `.lng`, LF for `.md`. Windows PowerShell 5.1 needs CRLF. |
+| `.gitignore` | The files that Git does not keep: logs, audit files, CSV exports and test results. They contain mailbox addresses. |
+
+To use EMT, you need `ExchangeMessageTrail.ps1`, `EMT.cmd`, `src/` and `Lang/`.
+The other folders and files are for development.
 
 ## Start
 
@@ -138,7 +158,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
 
 ## Message search
 
-The trace reads only the message tracking log. It does not open the mailboxes. It does not change data.
+The message search reads only the message tracking log. It does not open the mailboxes. It does not change data.
 
 ### Procedure
 
@@ -211,7 +231,7 @@ The column **Note** marks a message that Exchange made, not a user: for example,
 
 ### Nothing found
 
-When the trace finds no message, the log shows what to examine:
+When the message search finds no message, the log shows what to examine:
 
 - the period: the message can be earlier or later;
 - the addresses: the message can come from another address or go to a group;
@@ -255,7 +275,7 @@ Use the tab **Delete** to find the copies of a message in the mailboxes and to d
 > **WARNING:** A hard delete is permanent. The user cannot recover the message.
 > Do a soft delete first if you are not sure.
 
-### Procedure from a traced message (recommended)
+### Procedure from the message search (recommended)
 
 1. On the tab **Message search**, select the message.
 2. Click **Delete this message…**.
@@ -401,9 +421,9 @@ EMT does not remove searches with other names. EMT does not touch a search that 
 
 | File | Content |
 |---|---|
-| `%USERPROFILE%\ExchangeMessageTrail\audit.csv` | One row for each trace, mailbox check, search, delete, verification and cleanup |
+| `%USERPROFILE%\ExchangeMessageTrail\audit.csv` | One row for each message search, mailbox check, search of copies, delete, verification and cleanup |
 | `%USERPROFILE%\ExchangeMessageTrail\logs\EMT_<date>.log` | The full log of one session |
-| `%APPDATA%\ExchangeMessageTrail\settings.json` | The last server, the language, the options and the timeout. Senders and subject are not kept. |
+| `%APPDATA%\ExchangeMessageTrail\settings.json` | The last server, the language, the options, the timeout and the window size and position. Senders and subject are not kept. |
 
 At the first start, EMT copies `settings.json` and `audit.csv` of the older version (MailCleaner). The log shows the copy.
 
@@ -411,9 +431,9 @@ Audit columns: `Timestamp`, `Operator`, `Computer`, `Server`, `Action`, `SearchN
 
 | `Action` | `Result` values |
 |---|---|
-| Trace | `OK`, `Errors` |
+| Trace (message search) | `OK`, `Errors` |
 | MailboxCheck | `OK`. `Items` = the number of important findings. |
-| Search | `OK`, `Errors` |
+| Search (find copies) | `OK`, `Errors` |
 | SoftDelete, HardDelete, Verify | `Clean`, `RecoverableOnly`, `Visible`, `CheckFailed` |
 | SoftDelete, HardDelete (stopped) | `Cancelled`, `Failed` |
 | CleanupSearches | `OK` |
@@ -449,9 +469,10 @@ See [docs/TRANSLATING.md](docs/TRANSLATING.md).
 | Problem | Cause | Action |
 |---|---|---|
 | `Start Exchange Message Trail in STA mode` | PowerShell runs in MTA mode | Use `EMT.cmd` or the `-STA` parameter |
+| A window says "Exchange Message Trail could not start" | An error at the start. The window shows the cause and the line. | Correct the cause. If the files came in a ZIP file, unblock them (see [Install](#install)). |
 | Kerberos error on connect | The computer is not in the domain, or the server name is not an FQDN | Use the FQDN. Use a domain computer. |
 | A button is disabled | Your account does not have the role | See [Permissions](#permissions) |
-| The trace finds nothing | Wrong period, wrong address, or the log data is too old | Read the hints in the log. Make the period larger. Make sure that the date is in the last 30 days. |
+| The message search finds nothing | Wrong period, wrong address, or the log data is too old | Read the hints in the log. Make the period larger. Make sure that the date is in the last 30 days. |
 | Delivered, but the user does not see the message | A rule, the junk e-mail filter or forwarding | Use the [mailbox check](#mailbox-check) |
 | Found 0 copies, but the message exists | The message is unindexed, or the subject is different | Use **Search all mailboxes**. Make the subject text shorter. |
 | The search of copies is slow | Many mailboxes: EMT uses Compliance Search | Examine the stage times in the log. For one mailbox, use **Recipient mailbox only**. |

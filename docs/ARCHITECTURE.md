@@ -171,7 +171,7 @@ The missing roles are not in the window: the log shows one warning for each func
 
 | Control | Enabled when |
 |---|---|
-| Find (trace) | Connected, Tracking |
+| Find (Message search) | Connected, Tracking |
 | Check the recipient mailbox | A message and an internal recipient are selected, MailboxCheck |
 | Delete this message… | A message is selected, Search or Verify |
 | Find copies | Connected, Search or Verify |
@@ -179,8 +179,27 @@ The missing roles are not in the window: the log shows one warning for each func
 | Delete permanently | A clean result, no hard delete yet, HardDelete |
 | Cancel | An operation runs |
 
-`Open-EmtDeleteForMessage` fills the tab **Delete** from the selected traced message and sets `$script:DelFromTrace`.
+`Open-EmtDeleteForMessage` fills the tab **Delete** from the selected message (sender, subject, message ID, period)
+and sets `$script:DelFromTrace`. It does not copy the recipients: the search of copies uses all found mailboxes.
 `Invoke-EmtInvalidate` clears the delete result and `$script:DelFromTrace` when the user changes a delete criterion.
+
+### Criteria layout
+
+`New-EmtCriteriaTable` makes a table with two pairs "label + field" in each row. The two field columns have 50% each.
+`New-EmtPeriodPanel` makes the line **Period**: start — end and the buttons **Today**, **Yesterday**, **7 days**.
+`New-EmtActionRow` puts the main button of the tab at the right edge of the fields.
+`New-EmtCriteriaGroup` makes the group box. Its height comes from the content.
+`Update-EmtCriteriaLabels` gives the label columns the same width on both tabs.
+Call it after the labels are on the form (they need the font of the form) and after each language change.
+
+### Start and close
+
+| Step | Code |
+|---|---|
+| Start error | A `trap` at the top of the script shows a message box. The console is hidden and cannot show the error. |
+| Console | `EMT.cmd` starts PowerShell with `-WindowStyle Hidden`. The script also hides a console that has only its own process (`GetConsoleProcessList`) and a `-File` start. |
+| Front | The `Shown` handler sets `TopMost` for one moment and activates the window. |
+| Size | `Save-EmtSettings` keeps the normal bounds (`RestoreBounds` when maximized) and the maximized state. At the start, EMT uses them only if the window is on a screen. |
 
 ### Tables
 
