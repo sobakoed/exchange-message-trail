@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 — 2026-11-10
+
+Window.
+
+- The row height and the header height of the tables are fixed. The user can change only the column width.
+- The buttons **Find** (tab **Trace**) and **Find copies** (tab **Delete**) have a light green background.
+  A disabled button has the usual grey background.
+
 ## 1.0.0 — 2026-11-10
 
 Trace first, delete when necessary. New name: Exchange Message Trail (EMT).

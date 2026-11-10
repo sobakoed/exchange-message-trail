@@ -257,6 +257,28 @@ function New-EmtButton([string] $Key, [int] $Width = 150) {
     $b
 }
 
+function Set-EmtAccentButton([System.Windows.Forms.Button] $Button) {
+    # The main action of a tab: bold text on a light green background.
+    # A disabled button gets the usual grey background: green must not show an unavailable action.
+    $Button.Font = New-Object System.Drawing.Font($Button.Font, [System.Drawing.FontStyle]::Bold)
+    $Button.FlatStyle = 'Flat'
+    $Button.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(110, 170, 110)
+    $Button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(200, 235, 200)
+    $Button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(175, 220, 175)
+    $paint = {
+        param($s, $e)
+        if ($s.Enabled) {
+            $s.BackColor = [System.Drawing.Color]::FromArgb(222, 245, 222)
+            $s.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(110, 170, 110)
+        } else {
+            $s.BackColor = [System.Drawing.SystemColors]::Control
+            $s.FlatAppearance.BorderColor = [System.Drawing.SystemColors]::ControlDark
+        }
+    }
+    $Button.Add_EnabledChanged($paint)
+    & $paint $Button $null
+}
+
 function New-EmtCheckBox([string] $Key) {
     $c = New-Object System.Windows.Forms.CheckBox
     $c.AutoSize = $true; $c.Margin = '3,7,12,3'
@@ -304,6 +326,9 @@ function New-EmtGrid([scriptblock] $RowColor) {
     $g.AutoSizeColumnsMode = 'None'
     $g.AllowUserToResizeColumns = $true
     $g.AllowUserToOrderColumns = $true
+    # The row height and the header height are fixed. Only the column width can change.
+    $g.AllowUserToResizeRows = $false
+    $g.ColumnHeadersHeightSizeMode = 'DisableResizing'
     $g.ClipboardCopyMode = 'EnableWithAutoHeaderText'    # Ctrl+C copies the selected rows with headers
     $g.BackgroundColor = [System.Drawing.SystemColors]::Window
     $g.Tag = $RowColor
@@ -568,7 +593,7 @@ $tlpTr.Controls.Add((New-EmtLabel 'crit.start'), 0, 1);     $tlpTr.Controls.Add(
 $tlpTr.Controls.Add((New-EmtLabel 'crit.end'), 2, 1);       $tlpTr.Controls.Add($trPeriod.Panel, 3, 1)
 $tlpTr.Controls.Add((New-EmtLabel 'crit.messageId'), 4, 1); $tlpTr.Controls.Add($tbTrMessageId, 5, 1)
 $btnTrFind = New-EmtButton 'crit.find' 130
-$btnTrFind.Font = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
+Set-EmtAccentButton $btnTrFind
 $pnlTrFind = New-Object System.Windows.Forms.FlowLayoutPanel
 $pnlTrFind.Dock = 'Fill'; $pnlTrFind.AutoSize = $true; $pnlTrFind.WrapContents = $false
 $pnlTrFind.Controls.Add($btnTrFind)
@@ -684,7 +709,7 @@ $chkOnly.Enabled = $false
 $chkAll = New-EmtCheckBox 'crit.all'
 $chkAll.Margin = '3,7,24,3'
 $btnSearch = New-EmtButton 'crit.findCopies' 130
-$btnSearch.Font = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
+Set-EmtAccentButton $btnSearch
 $pnlSearch.Controls.AddRange(@($chkForwards, $chkOnly, $chkAll, $btnSearch))
 $tlp.Controls.Add($pnlSearch, 0, 3)
 $tlp.SetColumnSpan($pnlSearch, 6)

@@ -185,6 +185,10 @@ The window has a common top line (connection, timeout, language, roles), two tab
 colors only. `Update-EmtGridHeaders` sets the header texts in the current language.
 `Resize-EmtGridColumns` sets the initial widths once, when the grid is visible. The column mode is `None`:
 the user can change the widths, and a sort keeps them.
+`New-EmtGrid` fixes the row height and the header height.
+
+`Set-EmtAccentButton` gives the main button of each tab a light green background.
+A disabled button gets the usual grey background.
 
 ### Languages
 
