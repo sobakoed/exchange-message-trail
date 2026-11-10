@@ -2,5 +2,6 @@
 # Windows PowerShell 5.1 needs CRLF and UTF-8 with BOM in .ps1 files. Git keeps the BOM bytes.
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
+*.lng text eol=crlf
 *.md  text eol=lf
 *.png binary

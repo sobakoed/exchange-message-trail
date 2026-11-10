@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.5.1 — 2026-11-10
+
+- Cleanup: `Remove-ComplianceSearch` also removes the shadow search. MailCleaner now examines a shadow search
+  before the remove. A shadow search that is already gone is not an error.
+- Cleanup: an error on one search does not stop the cleanup of the other searches. The log shows the error.
+- Cleanup: Exchange on-premises can return an error ("Object reference not set…") and still remove the search.
+  After an error, MailCleaner examines the list of searches. If the search is gone, the log shows a warning, not an error.
+- Cleanup: an error when MailCleaner removes the actions of a search does not stop the removal of the search.
+
+## 0.5.0 — 2026-11-10
+
+Partial addresses.
+
+- **Отправители** and **Получатель** accept a part of an address or a name.
+  MailCleaner finds the full address in the Exchange address book (`Get-Recipient -Anr`) before the search.
+- One match: the full address goes in the field. More matches: a selection window. No match: an error, no search.
+- The tracking log and the KQL query get only full addresses. No wildcards.
+- Separators of the senders: comma, semicolon, line break. A space separates only full addresses.
+
+## 0.4.1 — 2026-11-10
+
+- Tracking events without a message ID (for example `NOTIFYMAPI`) are not a row in the tab of messages.
+  They stay in the tab of the tracking log.
+- The cleanup of old searches also removes the shadow In-Place eDiscovery searches `MC_*-shadow`.
+- The cleanup removes only the names `MC_yyyyMMdd_HHmmss` and `MC_yyyyMMdd_HHmmss-shadow`. The age comes from the name.
+
+## 0.4.0 — 2026-11-10
+
+Languages.
+
+- The user interface is available in English and Russian.
+- The texts are in the files `Lang/*.lng`. To add a language, put a new file in this folder. No code change is necessary.
+- The language list in the top line. The change occurs immediately. The selection is kept in `settings.json`.
+- At the first start, the Windows language is used if a file for it exists. Else English.
+- New parameter `-Language`.
+- The log, the progress, the confirmation windows and the error messages use the selected language.
+- A missing key in a translation uses the English text.
+- New check `Test-McLanguageFile` for translators. New document `docs/TRANSLATING.md`.
+- Buttons get wider for a long translation.
+- Unit tests: complete bundled files, no unknown keys or wrong placeholders in any file, all keys of the code in `en.lng`.
+
+## 0.3.0 — 2026-11-10
+
+Code audit and window audit.
+
+**Correctness and safety**
+
+- The subject is text in the tracking filter. Square brackets, `*` and `?` have no special meaning.
+- A forwarded copy must have the same base subject. A message with a different subject is not added.
+- The KQL date range covers local time and UTC.
+- Tracking errors of a transport server go to the result. The delete is not available until all mailboxes are searched.
+- Safety check before a hard delete: `Search-Mailbox` must not find more items than the search.
+- A stopped delete writes an audit row with `Cancelled` or `Failed`. A cancelled hard delete gives the partial counts.
+- Verification after a delete examines the mailboxes again when the index lags.
+- The confirmation window shows the messages. A large delete shows a warning and needs the word `УДАЛИТЬ`.
+- Senders and subject are not kept in `settings.json`.
+
+**Window**
+
+- Table columns: the user can change the width and the order. A sort keeps the widths. Ctrl+C copies rows.
+- Initial column widths from the content, also for hidden tabs.
+- The tab name shows the row count.
+- New layout: timeout and cleanup in the top line; **Сегодня** and **Вчера** next to the end date;
+  actions bottom left; status, progress and **Отмена** bottom right.
+- The criteria can be typed before the connection. Enter starts the search.
+- **Только ящик получателя** and **Искать во всех ящиках** exclude each other.
+- Button states after a delete. The Connect button shows **Переподключиться**.
+- The summary line is red with errors. Its tooltip shows the full text.
+- The search button needs only `Search-Mailbox`. The soft delete needs the Compliance Search role.
+- Export: a file name for the quick search, and a new file `*-errors.csv`.
+- Closing the window during an operation does not freeze it.
+
+## 0.2.0 — 2026-11-10
+
+Search speed.
+
+- New check box **Только ящик получателя**: the search and the delete use only the recipient mailbox.
+- Quick search with `Search-Mailbox` for 1 to 10 mailboxes. A Compliance Search is made only for a soft delete.
+- The tracking log is read once. The second pass by message ID occurs only with a recipient filter.
+- Duplicate tracking events are removed.
+- Addresses outside the accepted domains are external without a lookup.
+- Address lookup in batches of 20 (`Get-Recipient -Filter`). Aliases match.
+- The log shows the time of each stage. The summary line shows the method and the full time.
+- The status poll interval is 3 seconds (was 5 seconds).
+
 ## 0.1.0 — 2026-11-10
 
 First version.

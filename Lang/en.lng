@@ -1,0 +1,267 @@
+﻿# MailCleaner language file. Format: see docs/TRANSLATING.md.
+# One line = one text: key = value. {0}, {1}... are values that MailCleaner puts in.
+@code = en
+@name = English
+@author = MailCleaner
+
+# ---- Core: criteria and query ----
+core.cancelled = The user cancelled the operation.
+crit.endBeforeStart = The end of the period must be after the start.
+crit.datesOnly = A query without sender, subject, attachment and words finds all messages of the period. Set one criterion or more.
+crit.noKey = Set a sender, a subject, an attachment, words or a message ID.
+crit.onlyNeedsRecipient = The mode "Recipient mailbox only" needs an address in the field "Recipient".
+crit.onlyAndAll = Select one mode: "Recipient mailbox only" or "Search all mailboxes".
+crit.periodTooLong = The period is longer than 31 days. Make it shorter: the tracking log keeps data for 30 days by default.
+large.items = more than {0} items ({1})
+large.messages = more than {0} different messages in the tracking log ({1})
+large.warning = LARGE DELETE: {0}. Make sure that the query does not find other messages.
+
+# ---- Core: connection ----
+log.connecting = Connecting to http://{0}/PowerShell/ (Kerberos)...
+log.domains = Accepted domains: {0}.
+log.domainsFailed = The list of accepted domains is not available: {0}
+log.connected = Connected to {0}.
+
+# ---- Core: tracking and recipients ----
+log.trackServers = Tracking log: {0} servers.
+progress.tracking = Tracking log: {0}
+progress.trackingId = Tracking log: {0}, message ID
+log.noOriginal = The tracking log has no messages from the senders. MailCleaner uses all messages with this subject. Examine the tab "Messages".
+log.trackCount = Messages (message IDs) in the tracking log: {0}.
+log.secondPass = Recipient filter: a second pass by message ID gets all recipients.
+log.trackError = Tracking log error: {0}
+progress.recipients = Recipients: {0} of {1}
+log.batchFailed = The batch query for recipients failed. Query for each address: {0}
+log.serverGenerated = Exchange made the message {0} from {1}. Possibly an inbox rule or mailbox forwarding.
+
+# ---- Core: search ----
+log.csStopping = Stopping the search {0}...
+progress.cs = Mailbox search: {0}, {1}%
+err.csTimeout = The search {0} did not complete in {1} min.
+err.csStatus = The search {0} completed with the status {1}.
+err.noSearchRights = No permission to search: the Mailbox Search role is necessary (Discovery Management).
+log.stage = {0} ({1:N0} s).
+err.notInternal = The address {0} is not an internal mailbox. Clear "Recipient mailbox only".
+log.onlyMode = Mode "Recipient mailbox only": {0}.
+stage.tracking = Tracking log read
+log.noTrackRights = No permission for the tracking log (Get-MessageTrackingLog). Step skipped. The search uses all mailboxes.
+log.trackEmpty = The tracking log has no results.
+log.external = External recipients: {0}. MailCleaner cannot delete the message there.
+stage.recipients = Addresses resolved: {0}
+log.searchAll = No recipient mailboxes found. The search uses ALL mailboxes (slower).
+err.allNeedsCs = A search of all mailboxes needs Compliance Search (Mailbox Search role).
+log.quick = Mailboxes: {0}. Quick search with Search-Mailbox.
+log.cs = Compliance Search {0}, mailboxes: {1}.
+common.all = all
+stage.search = Mailbox search complete
+err.trackIncomplete = The tracking log was not read from all servers ({0} errors). The mailbox list can be incomplete. Select "Search all mailboxes".
+log.found = Messages found: {0} in {1} mailboxes, {2:N1} KB.
+log.searchErrors = Search errors: {0}
+log.unindexed = Unindexed items in these mailboxes: {0}. They are not in the result and MailCleaner does not delete them.
+progress.done = Done
+progress.quick = Search: {0}
+
+# ---- Core: delete and verification ----
+log.softStart = Soft delete with the search {0}...
+progress.soft = Delete: {0}
+err.softTimeout = The delete did not complete in {0} min.
+log.softErrors = Delete errors: {0}
+log.softStatus = Delete status: {0}. The messages are in Recoverable Items.
+log.softSearch = Compliance Search {0} for the soft delete ({1} mailboxes)...
+scope.checkFailed = check failed: {0}
+scope.more = Search-Mailbox finds more items
+scope.item = {0}: expected {1}, found {2} ({3})
+log.precheck = Safety check: comparing the Search-Mailbox counts with the search result...
+err.precheck = Hard delete stopped. The safety check failed: {0}. Do the search again.
+log.precheckOk = Safety check passed.
+progress.hard = Hard delete: {0}
+log.hardDeleted = {0}: deleted {1}
+log.hardError = {0}: error — {1}
+log.hardStopped = Delete stopped: {0} of {1} mailboxes done.
+progress.check = Verify: {0}
+log.checkRetry = The user can still see the message in {0} mailboxes. The index can lag: next check in {1} s ({2} of {3}).
+log.cleanupSkip = Skipped {0}: MailCleaner did not make this search.
+log.cleanupRemoved = Search {0} removed.
+log.shadowRemoved = Shadow search {0} removed.
+log.shadowGone = Shadow search {0} is already removed with its search.
+log.cleanupError = Search {0} not removed: {1}
+log.removedWithError = Search {0} removed. Exchange returned an error, but the search is gone: {1}
+log.noShadowCmd = No Get-MailboxSearch / Remove-MailboxSearch cmdlets: shadow searches (-shadow) are not examined.
+
+# ---- Address book search (partial addresses) ----
+status.resolve = Resolving addresses...
+log.resolveStart = Partial addresses: {0}. Exchange address book search (ANR)...
+log.resolveFailed = The address search for "{0}" failed: {1}
+log.resolvedOne = Address "{0}" → {1}.
+log.resolvedPick = Address "{0}": selected {1}.
+log.resolveCancelled = Address selection cancelled. No search.
+resolve.title = Addresses not found
+resolve.notFound = Exchange has no address for: {0}. Type the full address or another part of the name.
+pick.title = Select the address
+pick.prompt = More than one address matches "{0}". Select the correct address:
+pick.promptMulti = More than one address matches "{0}". Select one or more (Ctrl+click):
+pick.tooMany = The first {0} matches are shown. If the address is not in the list, type a longer part of the name.
+pick.ok = Select
+err.unknownOp = Unknown operation: {0}
+
+# ---- Window: frame and connection ----
+app.title = MailCleaner — find and delete messages in Exchange
+conn.server = Exchange server (FQDN):
+conn.connect = Connect
+conn.reconnect = Reconnect
+conn.timeout = Operation timeout, min:
+conn.cleanup = Clean up old searches
+conn.language = Language:
+conn.notConnected = Not connected.
+conn.caps = Connected: {0}   Tracking {1}   Search {2}   Verify {3}   Soft delete {4}   Hard delete {5}
+conn.noHardTip = Hard delete is not available: the Mailbox Import Export role is necessary.
+conn.enterServer = Type the FQDN of the Exchange server.
+status.connecting = Connecting to {0}...
+log.noHardRole = Hard delete is not available: no Mailbox Import Export role.
+log.noTrackRole = The tracking log is not available: no Message Tracking role.
+
+# ---- Window: criteria ----
+crit.group = Search criteria
+crit.senders = Senders:
+crit.subject = Subject contains:
+crit.recipient = Recipient:
+crit.start = Period start:
+crit.end = Period end:
+crit.messageId = Message ID:
+crit.attachment = Attachment name:
+crit.keywords = Words in the text:
+crit.today = Today
+crit.yesterday = Yesterday
+crit.forwards = Include forwards (FW:)
+crit.only = Recipient mailbox only
+crit.all = Search all mailboxes
+crit.find = Find
+crit.checkTitle = Examine the criteria
+fmt.picker = yyyy-MM-dd HH:mm
+fmt.datetime = yyyy-MM-dd HH:mm:ss
+fmt.date = yyyy-MM-dd HH:mm
+
+# ---- Window: tooltips ----
+tip.senders = Full addresses, a part of an address or a name. Separator: comma or semicolon. MailCleaner finds a partial address in the address book.
+tip.all = Search all mailboxes of the organization. Slow. Use it when the tracking log is incomplete.
+tip.today = Period: today 00:00 to tomorrow 00:00.
+tip.yesterday = Period: yesterday 00:00 to today 00:00.
+tip.timeout = The maximum wait time for a Compliance Search and for a delete.
+tip.cleanup = Remove old MC_* searches from the Exchange server.
+tip.export = Save all tabs as CSV files.
+tip.recipient = Messages that this address received. A part of the address or a name is permitted. Without "Recipient mailbox only", the search uses all recipient mailboxes of the message.
+tip.only = Search and delete the message only in the mailbox in "Recipient". This is the fastest mode.
+tip.messageId = The internet message ID from the tracking log or from the message headers.
+tip.forwards = Add the messages with the same subject from the users who forwarded the original message.
+tip.soft = SoftDelete: the messages move to Recoverable Items. The user can recover them.
+tip.hard = Search-Mailbox -DeleteContent: the messages are also deleted from Recoverable Items. The Mailbox Import Export role is necessary.
+tip.verify = Examine each mailbox with Search-Mailbox: visible folders and total.
+tip.language = The language of the user interface. The change occurs immediately.
+
+# ---- Window: results ----
+sum.none = No result.
+sum.text = Messages found: {0} in {1} of {2} mailboxes ({3:N1} KB).   External recipients: {4}.   Unindexed: {5}.   {6}, {7} s.
+sum.errors = ERRORS — delete not available, see the log.   
+sum.na = n/a
+sum.quick = Quick search
+tab.messages = Messages
+tab.tracking = Tracking log
+tab.recipients = Recipients
+tab.found = Found in mailboxes
+tab.missing = Not found
+tab.check = Verification
+col.time = Time
+col.sender = Sender
+col.subject = Subject
+col.recipientCount = Recipients
+col.note = Note
+col.messageId = Message ID
+col.server = Server
+col.event = Event
+col.source = Source
+col.recipients = Recipients
+col.address = Address
+col.kind = Kind
+col.mailbox = Mailbox
+col.exchangeType = Exchange type
+col.items = Items
+col.sizeKB = Size, KB
+col.reason = Possible cause
+col.visible = In visible folders
+col.total = Total (with Recoverable Items)
+kind.Internal = Internal mailbox
+kind.External = External
+kind.Group = Group
+kind.Other = Other
+note.serverGenerated = made by Exchange — possibly an inbox rule or forwarding
+missing.reason = The user deleted or moved the message, or the message is not indexed.
+
+# ---- Window: actions and run area ----
+act.soft = Delete (soft)
+act.hard = Delete permanently
+act.verify = Verify
+act.export = Export to CSV
+act.cancel = Cancel
+status.running = Running...
+status.search = Searching...
+status.soft = Soft delete...
+status.hard = Hard delete...
+status.verify = Verifying...
+status.listOld = Listing old searches...
+status.removeOld = Removing old searches...
+
+# ---- Window: log lines ----
+log.started = MailCleaner started. Log: {0}
+log.auditFile = Audit file: {0}
+log.opCancelled = Operation "{0}" cancelled.
+log.opFailed = Operation "{0}" failed: {1}
+log.auditFailed = The audit row was not written: {0}
+log.handlerFailed = Result processing error: {0}
+log.invalidated = The criteria changed. The result is cleared. Do the search again.
+log.search = Search: senders [{0}], subject [{1}], period {2} to {3}.
+log.checkVisible = The user can see the message in {0} mailboxes.
+log.checkClean = No mailbox has the message in the visible folders.
+log.checkHidden = The message is only in Recoverable Items in {0} mailboxes. The user can recover it.
+log.checkFailed = The verification failed for {0} mailboxes. See the tab "Verification".
+log.hardCancelled = Hard delete cancelled. Items deleted: {0}. Click "Verify".
+log.exported = Export complete: {0}-*.csv
+log.badDays = Type a whole number of days.
+log.noOldSearches = There are no old MailCleaner searches.
+log.cancelRequested = Cancel requested. Wait for the end of the current step.
+log.language = User interface language: English.
+
+# ---- Window: dialogs ----
+dlg.error = Error
+dlg.cancel = Cancel
+dlg.typeWord = To confirm, type {0}:
+dlg.closeRunning = An operation is still running. Close the window and stop it?
+dlg.exportFolder = Folder for the CSV files
+dlg.cleanupPrompt = Remove MailCleaner searches (MC_*) older than, days:
+dlg.cleanupTitle = Clean up old searches
+dlg.cleanupList = These searches and their actions will be removed ({0}):
+dlg.cleanupOk = Remove searches
+confirm.word = DELETE
+confirm.softTitle = Soft delete
+confirm.hardTitle = Hard delete
+confirm.softHead = SOFT DELETE (SoftDelete)
+confirm.soft1 = The messages move to Recoverable Items.
+confirm.soft2 = The user does not see them in the folders.
+confirm.soft3 = The user can recover them in Outlook.
+confirm.hardHead = HARD DELETE (Search-Mailbox -DeleteContent)
+confirm.hard1 = The messages will be deleted from all folders and from Recoverable Items.
+confirm.hard2 = The user CANNOT recover these messages.
+confirm.hard3 = A mailbox on hold keeps a copy in a hidden folder. The user does not see this copy.
+confirm.hard4 = Before the delete, MailCleaner compares the Search-Mailbox counts with the search result.
+confirm.items = Items: {0}
+confirm.mailboxes = Mailboxes: {0}
+confirm.search = Search: {0}
+confirm.searchNew = MailCleaner makes a Compliance Search for these mailboxes (1–3 min)
+confirm.kql = KQL: {0}
+confirm.external = External recipients (cannot delete): {0}
+confirm.none = none
+confirm.unindexed = Unindexed items are not deleted: {0}
+confirm.unindexedNa = n/a (quick search)
+confirm.messages = Messages in the tracking log ({0}):
+confirm.more = … and {0} more
+confirm.noMessages = (the tracking log has no messages — examine the KQL)
+confirm.mailboxList = Mailboxes:

@@ -62,6 +62,39 @@ Do this procedure on a test mailbox set before you use MailCleaner in production
 8. Make sure that the tab **Письма** shows the message and the forward.
 9. Make sure that the tab **Найдено в ящиках** shows `test1`, `test2` and `test3`.
 
+**Search speed:**
+
+1. Do the search again.
+2. Make sure that the summary line shows `быстрый поиск`. There are 3 mailboxes.
+3. Make sure that the log shows the time of each stage.
+4. In **Получатель**, type the address of `test3`.
+5. Select **Только ящик получателя**.
+6. Click **Найти**.
+7. Make sure that the tab **Найдено в ящиках** shows only `test3`.
+
+**Window:**
+
+1. Drag the border of a column in a table. Make sure that the width changes.
+2. Click the column header. Make sure that the sort keeps the width.
+3. Select **Искать во всех ящиках**. Then select **Только ящик получателя**. Make sure that the first check box is clear.
+4. Make the window as small as possible. Make sure that all buttons are fully visible.
+
+**Partial address:**
+
+1. In **Отправители**, type a part of the alias of `test1`.
+2. Click **Найти**.
+3. Make sure that the field shows the full address of `test1` and the log shows the change.
+4. Type a part of a name that more than one user has. Click **Найти**.
+5. Make sure that the selection window shows the users.
+6. Type a text that no user has. Click **Найти**.
+7. Make sure that an error window shows the text and the search does not start.
+
+**Subject with brackets:**
+
+1. Send a test message with the subject `[TEST] Unique subject`.
+2. Search with this subject.
+3. Make sure that the tab **Письма** shows the message.
+
 **Cancel:**
 
 1. Click **Найти**.
@@ -71,11 +104,13 @@ Do this procedure on a test mailbox set before you use MailCleaner in production
 
 **Soft delete:**
 
-1. Do the search again.
-2. Click **Удалить (мягко)**.
-3. Confirm the delete.
-4. Make sure that the tab **Проверка** shows `0` in **В видимых папках** for each mailbox.
-5. Make sure that **Всего** is more than `0`. The messages are in Recoverable Items.
+1. Clear **Получатель**.
+2. Do the search again.
+3. Click **Удалить (мягко)**.
+4. Confirm the delete.
+5. Make sure that the log shows a new Compliance Search before the delete.
+6. Make sure that the tab **Проверка** shows `0` in **В видимых папках** for each mailbox.
+7. Make sure that **Всего** is more than `0`. The messages are in Recoverable Items.
 
 **Hard delete:**
 

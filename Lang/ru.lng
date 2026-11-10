@@ -1,0 +1,267 @@
+﻿# MailCleaner language file. Format: see docs/TRANSLATING.md.
+# One line = one text: key = value. {0}, {1}... are values that MailCleaner puts in.
+@code = ru
+@name = Русский
+@author = MailCleaner
+
+# ---- Core: criteria and query ----
+core.cancelled = Операция отменена пользователем.
+crit.endBeforeStart = Конец периода должен быть позже начала.
+crit.datesOnly = Запрос без отправителя, темы, вложения и слов совпал бы со всеми письмами за период. Задайте хотя бы один критерий.
+crit.noKey = Укажите отправителя, тему, вложение, слова или MessageId.
+crit.onlyNeedsRecipient = Режим «Только ящик получателя» требует адрес в поле «Получатель».
+crit.onlyAndAll = Выберите один режим: «Только ящик получателя» или «Искать во всех ящиках».
+crit.periodTooLong = Период больше 31 дня. Сузьте его: журнал доставки по умолчанию хранится 30 дней.
+large.items = писем больше {0} ({1})
+large.messages = разных писем в журнале больше {0} ({1})
+large.warning = БОЛЬШОЙ ОБЪЁМ: {0}. Проверьте, что запрос не захватывает чужие письма.
+
+# ---- Core: connection ----
+log.connecting = Подключение к http://{0}/PowerShell/ (Kerberos)...
+log.domains = Принятые домены: {0}.
+log.domainsFailed = Список принятых доменов не получен: {0}
+log.connected = Подключено к {0}.
+
+# ---- Core: tracking and recipients ----
+log.trackServers = Журнал доставки: серверов {0}.
+progress.tracking = Журнал доставки: {0}
+progress.trackingId = Журнал доставки: {0}, MessageId
+log.noOriginal = От указанных отправителей писем в журнале нет. Взяты все письма с этой темой. Проверьте вкладку «Письма».
+log.trackCount = Писем (MessageId) в журнале: {0}.
+log.secondPass = Фильтр по получателю: дополнительный проход по MessageId для полного списка получателей.
+log.trackError = Журнал доставки, ошибка: {0}
+progress.recipients = Получатели: {0} из {1}
+log.batchFailed = Пакетный запрос получателей не выполнен. Запрос по одному адресу: {0}
+log.serverGenerated = Письмо {0} от {1} создано сервером. Вероятно, это правило или автопересылка.
+
+# ---- Core: search ----
+log.csStopping = Остановка поиска {0}...
+progress.cs = Поиск в ящиках: {0}, {1}%
+err.csTimeout = Поиск {0} не завершился за {1} мин.
+err.csStatus = Поиск {0} завершился со статусом {1}.
+err.noSearchRights = Нет прав на поиск: нужна роль Mailbox Search (группа Discovery Management).
+log.stage = {0} ({1:N0} с).
+err.notInternal = Адрес {0} не является внутренним ящиком. Снимите отметку «Только ящик получателя».
+log.onlyMode = Режим «Только ящик получателя»: {0}.
+stage.tracking = Журнал доставки прочитан
+log.noTrackRights = Нет прав на журнал доставки (Get-MessageTrackingLog). Шаг пропущен, поиск будет по всем ящикам.
+log.trackEmpty = В журнале доставки ничего не найдено.
+log.external = Внешних получателей: {0}. У них письмо удалить нельзя.
+stage.recipients = Адресов определено: {0}
+log.searchAll = Ящики получателей не определены. Поиск по ВСЕМ ящикам (дольше).
+err.allNeedsCs = Поиск по всем ящикам требует Compliance Search (роль Mailbox Search).
+log.quick = Ящиков: {0}. Быстрый поиск через Search-Mailbox.
+log.cs = Compliance Search {0}, ящиков: {1}.
+common.all = все
+stage.search = Поиск в ящиках завершён
+err.trackIncomplete = Журнал доставки прочитан не со всех серверов ({0} ошибок). Список ящиков может быть неполным. Включите «Искать во всех ящиках».
+log.found = Найдено писем: {0} в {1} ящиках, {2:N1} КБ.
+log.searchErrors = Ошибки поиска: {0}
+log.unindexed = Неиндексированных элементов в этих ящиках: {0}. Они не входят в результат и не удаляются.
+progress.done = Готово
+progress.quick = Поиск: {0}
+
+# ---- Core: delete and verification ----
+log.softStart = Мягкое удаление по поиску {0}...
+progress.soft = Удаление: {0}
+err.softTimeout = Удаление не завершилось за {0} мин.
+log.softErrors = Ошибки удаления: {0}
+log.softStatus = Статус удаления: {0}. Письма перенесены в «Элементы для восстановления».
+log.softSearch = Compliance Search {0} для мягкого удаления (ящиков: {1})...
+scope.checkFailed = проверка не выполнена: {0}
+scope.more = Search-Mailbox находит больше писем
+scope.item = {0}: ожидалось {1}, найдено {2} ({3})
+log.precheck = Проверка перед удалением: сравнение счётчиков Search-Mailbox с результатом поиска...
+err.precheck = Безвозвратное удаление отменено. Проверка перед удалением не пройдена: {0}. Выполните поиск снова.
+log.precheckOk = Проверка перед удалением пройдена.
+progress.hard = Безвозвратное удаление: {0}
+log.hardDeleted = {0}: удалено {1}
+log.hardError = {0}: ошибка — {1}
+log.hardStopped = Удаление остановлено: обработано ящиков {0} из {1}.
+progress.check = Проверка: {0}
+log.checkRetry = Письмо ещё видно в {0} ящиках. Индекс может отставать: повторная проверка через {1} с ({2} из {3}).
+log.cleanupSkip = Пропуск {0}: этот поиск создан не MailCleaner.
+log.cleanupRemoved = Удалён поиск {0}.
+log.shadowRemoved = Удалён теневой поиск {0}.
+log.shadowGone = Теневой поиск {0} уже удалён вместе со своим поиском.
+log.cleanupError = Поиск {0} не удалён: {1}
+log.removedWithError = Поиск {0} удалён. Exchange вернул ошибку, но поиска больше нет: {1}
+log.noShadowCmd = Нет командлетов Get-MailboxSearch / Remove-MailboxSearch: теневые поиски (-shadow) не проверяются.
+
+# ---- Address book search (partial addresses) ----
+status.resolve = Поиск адресов...
+log.resolveStart = Неполные адреса: {0}. Поиск в адресной книге Exchange (ANR)...
+log.resolveFailed = Поиск адреса «{0}» не выполнен: {1}
+log.resolvedOne = Адрес «{0}» → {1}.
+log.resolvedPick = Адрес «{0}»: выбрано {1}.
+log.resolveCancelled = Выбор адреса отменён. Поиск не выполнен.
+resolve.title = Адреса не найдены
+resolve.notFound = В Exchange нет адресов для: {0}. Введите полный адрес или другую часть имени.
+pick.title = Выбор адреса
+pick.prompt = Для «{0}» найдено несколько адресов. Выберите нужный:
+pick.promptMulti = Для «{0}» найдено несколько адресов. Выберите один или несколько (Ctrl+щелчок):
+pick.tooMany = Показаны первые {0} совпадений. Если нужного адреса нет, уточните часть имени.
+pick.ok = Выбрать
+err.unknownOp = Неизвестная операция: {0}
+
+# ---- Window: frame and connection ----
+app.title = MailCleaner — поиск и удаление писем в Exchange
+conn.server = Сервер Exchange (FQDN):
+conn.connect = Подключиться
+conn.reconnect = Переподключиться
+conn.timeout = Таймаут операций, мин:
+conn.cleanup = Очистить старые поиски
+conn.language = Язык:
+conn.notConnected = Не подключено.
+conn.caps = Подключено: {0}   Журнал {1}   Поиск {2}   Проверка {3}   Мягкое удаление {4}   Безвозвратное {5}
+conn.noHardTip = Безвозвратное удаление недоступно: нужна роль Mailbox Import Export.
+conn.enterServer = Введите FQDN сервера Exchange.
+status.connecting = Подключение к {0}...
+log.noHardRole = Безвозвратное удаление недоступно: нет роли Mailbox Import Export.
+log.noTrackRole = Журнал доставки недоступен: нет роли Message Tracking.
+
+# ---- Window: criteria ----
+crit.group = Критерии поиска
+crit.senders = Отправители:
+crit.subject = Тема содержит:
+crit.recipient = Получатель:
+crit.start = Начало периода:
+crit.end = Конец периода:
+crit.messageId = MessageId:
+crit.attachment = Имя вложения:
+crit.keywords = Слова в тексте:
+crit.today = Сегодня
+crit.yesterday = Вчера
+crit.forwards = Включать пересылки (FW:)
+crit.only = Только ящик получателя
+crit.all = Искать во всех ящиках
+crit.find = Найти
+crit.checkTitle = Проверьте критерии
+fmt.picker = dd.MM.yyyy HH:mm
+fmt.datetime = dd.MM.yyyy HH:mm:ss
+fmt.date = dd.MM.yyyy HH:mm
+
+# ---- Window: tooltips ----
+tip.senders = Полные адреса, часть адреса или имя. Разделитель: запятая или точка с запятой. Неполный адрес MailCleaner найдёт в адресной книге.
+tip.all = Искать во всех ящиках организации. Медленно. Нужно, если журнал доставки неполный.
+tip.today = Период: сегодня 00:00 — завтра 00:00.
+tip.yesterday = Период: вчера 00:00 — сегодня 00:00.
+tip.timeout = Максимальное время ожидания Compliance Search и удаления.
+tip.cleanup = Удалить старые поиски MC_* на сервере Exchange.
+tip.export = Сохранить все вкладки в CSV-файлы.
+tip.recipient = Письма, которые получил этот адрес. Можно ввести часть адреса или имя. Без отметки «Только ящик получателя» поиск идёт во всех ящиках получателей письма.
+tip.only = Искать и удалять письмо только в ящике из поля «Получатель». Это самый быстрый режим.
+tip.messageId = Internet MessageId из журнала доставки или из заголовков письма.
+tip.forwards = Добавить в поиск письма с той же темой от тех, кто переслал исходное письмо.
+tip.soft = SoftDelete: письма переходят в «Элементы для восстановления». Пользователь может их восстановить.
+tip.hard = Search-Mailbox -DeleteContent: письма удаляются и из «Элементов для восстановления». Нужна роль Mailbox Import Export.
+tip.verify = Проверить каждый ящик через Search-Mailbox: в видимых папках и всего.
+tip.language = Язык интерфейса. Переключается сразу.
+
+# ---- Window: results ----
+sum.none = Результата нет.
+sum.text = Найдено писем: {0} в {1} из {2} ящиков ({3:N1} КБ).   Внешних получателей: {4}.   Неиндексированных: {5}.   {6}, {7} с.
+sum.errors = ОШИБКИ — удаление недоступно, см. лог.   
+sum.na = н/д
+sum.quick = Быстрый поиск
+tab.messages = Письма
+tab.tracking = Журнал доставки
+tab.recipients = Получатели
+tab.found = Найдено в ящиках
+tab.missing = Не найдено
+tab.check = Проверка
+col.time = Время
+col.sender = Отправитель
+col.subject = Тема
+col.recipientCount = Получателей
+col.note = Пометка
+col.messageId = MessageId
+col.server = Сервер
+col.event = Событие
+col.source = Источник
+col.recipients = Получатели
+col.address = Адрес
+col.kind = Тип
+col.mailbox = Ящик
+col.exchangeType = Тип в Exchange
+col.items = Писем
+col.sizeKB = Размер, КБ
+col.reason = Возможная причина
+col.visible = В видимых папках
+col.total = Всего (с «Элементами для восстановления»)
+kind.Internal = Внутренний ящик
+kind.External = Внешний
+kind.Group = Группа
+kind.Other = Другое
+note.serverGenerated = создано сервером — вероятно, правило или автопересылка
+missing.reason = Письмо удалено пользователем, перемещено или не проиндексировано.
+
+# ---- Window: actions and run area ----
+act.soft = Удалить (мягко)
+act.hard = Удалить безвозвратно
+act.verify = Проверить
+act.export = Экспорт в CSV
+act.cancel = Отмена
+status.running = Выполняется...
+status.search = Поиск...
+status.soft = Мягкое удаление...
+status.hard = Безвозвратное удаление...
+status.verify = Проверка...
+status.listOld = Список старых поисков...
+status.removeOld = Удаление старых поисков...
+
+# ---- Window: log lines ----
+log.started = MailCleaner запущен. Лог: {0}
+log.auditFile = Журнал действий: {0}
+log.opCancelled = Операция «{0}» отменена.
+log.opFailed = Операция «{0}» завершилась с ошибкой: {1}
+log.auditFailed = Запись в журнал действий не выполнена: {0}
+log.handlerFailed = Ошибка обработки результата: {0}
+log.invalidated = Критерии изменены. Результат сброшен. Выполните поиск снова.
+log.search = Поиск: отправители [{0}], тема [{1}], период {2} — {3}.
+log.checkVisible = Письмо видно пользователю в {0} ящиках.
+log.checkClean = В видимых папках письма нет ни в одном ящике.
+log.checkHidden = Письмо есть только в «Элементах для восстановления» в {0} ящиках. Пользователь может его восстановить.
+log.checkFailed = Проверка не выполнена для {0} ящиков. См. вкладку «Проверка».
+log.hardCancelled = Безвозвратное удаление отменено. Удалено писем: {0}. Выполните «Проверить».
+log.exported = Экспорт выполнен: {0}-*.csv
+log.badDays = Введите целое число дней.
+log.noOldSearches = Старых поисков MailCleaner нет.
+log.cancelRequested = Запрошена отмена. Дождитесь завершения текущего шага.
+log.language = Язык интерфейса: русский.
+
+# ---- Window: dialogs ----
+dlg.error = Ошибка
+dlg.cancel = Отмена
+dlg.typeWord = Для подтверждения введите {0}:
+dlg.closeRunning = Операция ещё выполняется. Закрыть окно и прервать её?
+dlg.exportFolder = Папка для CSV-файлов
+dlg.cleanupPrompt = Удалить поиски MailCleaner (MC_*) старше, дней:
+dlg.cleanupTitle = Очистка старых поисков
+dlg.cleanupList = Будут удалены поиски и их действия ({0}):
+dlg.cleanupOk = Удалить поиски
+confirm.word = УДАЛИТЬ
+confirm.softTitle = Мягкое удаление
+confirm.hardTitle = Безвозвратное удаление
+confirm.softHead = МЯГКОЕ УДАЛЕНИЕ (SoftDelete)
+confirm.soft1 = Письма перейдут в «Элементы для восстановления».
+confirm.soft2 = Пользователь не увидит их в папках.
+confirm.soft3 = Пользователь может восстановить их в Outlook.
+confirm.hardHead = БЕЗВОЗВРАТНОЕ УДАЛЕНИЕ (Search-Mailbox -DeleteContent)
+confirm.hard1 = Письма будут удалены из всех папок и из «Элементов для восстановления».
+confirm.hard2 = Пользователь НЕ может восстановить эти письма.
+confirm.hard3 = Ящик на удержании (Hold) сохраняет копию в скрытой папке. Пользователь не видит эту копию.
+confirm.hard4 = Перед удалением счётчики Search-Mailbox сравниваются с результатом поиска.
+confirm.items = Писем: {0}
+confirm.mailboxes = Ящиков: {0}
+confirm.search = Поиск: {0}
+confirm.searchNew = будет создан Compliance Search по этим ящикам (1–3 мин)
+confirm.kql = KQL: {0}
+confirm.external = Внешние получатели (удалить нельзя): {0}
+confirm.none = нет
+confirm.unindexed = Неиндексированные элементы не удаляются: {0}
+confirm.unindexedNa = н/д (быстрый поиск)
+confirm.messages = Письма в журнале доставки ({0}):
+confirm.more = … и ещё {0}
+confirm.noMessages = (журнал доставки писем не дал — проверьте KQL)
+confirm.mailboxList = Ящики:
