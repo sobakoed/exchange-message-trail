@@ -24,7 +24,3 @@ Level 2 finds the folder of the message in the recipient mailbox by the message 
 
 - Find and remove the damaged search action on the server. The full list `Get-ComplianceSearchAction` fails.
 - Examine if `Stop-ComplianceSearch` makes a search complete faster.
-
-## Repository
-
-- The first commit has a real server name in a test. Only a rewrite of the history can remove it.
