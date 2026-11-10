@@ -60,10 +60,11 @@ The procedure uses the English interface. Select **English** in the language lis
 1. Start EMT with `EMT.cmd`.
 2. Type the server name.
 3. Click **Connect**.
-4. Make sure that the status line shows the roles.
-5. Make sure that the tab **Trace** is open.
+4. Make sure that the bottom line shows a green indicator and "Connected".
+5. Make sure that the log shows no warning about a missing role.
+6. Make sure that the tab **Message search** is open.
 
-### Trace: delivered message
+### Message search: delivered message
 
 1. In **Senders**, type the address of `test1`.
 2. In **Subject contains**, type the subject of the first message.
@@ -77,7 +78,7 @@ The procedure uses the English interface. Select **English** in the language lis
 10. Open the tab **Events**.
 11. Make sure that the tab shows the events of the message in time order.
 
-### Trace: failed message
+### Message search: failed message
 
 1. In **Subject contains**, type the subject of the second message.
 2. Click **Find**.
@@ -86,18 +87,18 @@ The procedure uses the English interface. Select **English** in the language lis
 5. Make sure that **Explanation** tells that the address does not exist (code `5.1.1`).
 6. Make sure that **Server answer** shows the text of the server.
 
-### Trace: no result
+### Message search: no result
 
 1. In **Subject contains**, type a text that no message has.
 2. Click **Find**.
 3. Make sure that the summary line starts with "No messages found".
 4. Make sure that the log shows the hints: period, sender, recipient, subject.
-5. Set the period start to 35 days ago.
-6. Set the period end to 34 days ago.
+5. In **Period**, set the start to 35 days ago.
+6. In **Period**, set the end to 34 days ago.
 7. Click **Find**.
 8. Make sure that the log shows the hint about the 30 days of the tracking log.
 
-### Trace: recipient only
+### Message search: recipient only
 
 1. Clear **Senders**.
 2. Clear **Subject contains**.
@@ -135,7 +136,7 @@ The procedure uses the English interface. Select **English** in the language lis
 
 ### Delete from the trace
 
-1. On the tab **Trace**, find the first message.
+1. On the tab **Message search**, find the first message.
 2. Select the message.
 3. Click **Delete this message…**.
 4. Make sure that the tab **Delete** opens.
@@ -149,7 +150,7 @@ The procedure uses the English interface. Select **English** in the language lis
 
 ### Search speed
 
-1. On the tab **Trace**, select the first message again.
+1. On the tab **Message search**, select the first message again.
 2. Click **Delete this message…**.
 3. Click **Find copies**.
 4. Make sure that the summary line shows the quick search. There are 3 mailboxes.
@@ -197,6 +198,20 @@ The procedure uses the English interface. Select **English** in the language lis
 5. Select **Русский** in the language list. Make sure that all texts change, also in the tables.
 6. Select **English** again.
 7. Make the window as small as possible. Make sure that all buttons are fully visible.
+8. Make sure that all text fields of the criteria have the same width.
+9. Open the other tab. Make sure that the fields have the same width and position.
+10. Drag the border of a table row. Make sure that the row height does not change.
+
+### Start and close
+
+1. Open another program, for example a browser, in full screen.
+2. Start EMT with `EMT.cmd`.
+3. Make sure that the EMT window is in front of the other program.
+4. Make sure that there is no PowerShell console window and no console button on the taskbar.
+5. Change the size and the position of the EMT window.
+6. Close EMT.
+7. Start EMT again. Make sure that the window has the same size and position.
+8. Maximize the window. Close EMT. Start EMT again. Make sure that the window is maximized.
 
 ### Cancel
 
@@ -224,13 +239,13 @@ Do this test only on a computer with the older version (MailCleaner).
 
 1. Start EMT with an account that has only the Message Tracking role.
 2. Connect to the server.
-3. Make sure that **Find** on the tab **Trace** operates.
+3. Make sure that **Find** on the tab **Message search** operates.
 4. Make sure that **Find copies** is disabled.
 5. Make sure that **Delete this message…** is disabled.
 6. Start EMT with an account without the Mailbox Import Export role.
 7. Connect to the server.
 8. Make sure that **Delete permanently** is disabled.
-9. Make sure that the status line shows `Hard delete ✗`.
+9. Make sure that the log shows the warning about the Mailbox Import Export role.
 
 ### Errors
 

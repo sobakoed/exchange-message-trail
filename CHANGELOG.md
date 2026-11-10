@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.0.2 — 2026-11-10
+
+Window audit.
+
+**Criteria**
+
+- The criteria have two columns "label + field" on both tabs. All text fields have the same width.
+  The fields have the same width and position on the tabs **Message search** and **Delete**, also after a language change.
+- The same order on both tabs: senders and recipient, subject and message ID, then the period.
+- One line **Period**: start — end, **Today**, **Yesterday**, **7 days**. The tab **Delete** also has **7 days** now.
+  The labels "Period start" and "Period end" are removed.
+- At the minimum window size, all buttons are fully visible. Before, **7 days** was cut.
+- **Find** and **Find copies** are at the right edge of the fields, in the last line of the criteria.
+- The criteria area gets its height from the content.
+
+**Connection**
+
+- The connection state moved from the top line to the bottom line: a green indicator and the server name,
+  or a grey indicator and "Not connected".
+- The window does not show the roles. The log shows one warning for each function that is not available.
+  New warnings: search, verification, soft delete.
+- A long status text of an operation is cut. The tooltip shows the full text.
+
+**Start and close**
+
+- The window opens in front of the other windows.
+- `EMT.cmd` starts PowerShell with a hidden console. EMT also hides a console that it does not share
+  with other programs. A console from which the user started EMT stays visible.
+- An error at the start shows a window with the cause. The console is hidden and cannot show it.
+- The window size, the position and the maximized state are kept in `settings.json`.
+  EMT uses them only if the window is on a screen.
+
+**Russian texts**
+
+- The tab "Трассировка" is now "Поиск писем". The window title, the status and the log use the same name.
+
+**English texts**
+
+- The tab **Trace** is now **Message search**. The window title, the status and the log use the same name.
+  The audit value `Trace` does not change.
+
 ## 1.0.1 — 2026-11-10
 
 Window.

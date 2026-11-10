@@ -10,7 +10,7 @@ This document gives the structure of the Exchange Message Trail (EMT) code.
 | `src/EMT.Core.ps1` | The logic without the user interface |
 | `src/EMT.Strings.ps1` | The language loader, the function `T` and the language file check |
 | `Lang/*.lng` | The user interface texts, one file for each language |
-| `EMT.cmd` | The launcher (STA mode, minimized console) |
+| `EMT.cmd` | The launcher (STA mode, hidden console) |
 | `tests/EMT.Core.Tests.ps1` | The Pester 5 unit tests for the core |
 
 All `.ps1` files use UTF-8 with BOM and CRLF.
@@ -59,8 +59,8 @@ The runspace uses the execution policy `Bypass`: `Import-PSSession` makes a temp
 |---|---|---|---|
 | `Connect` | — | `Connect-EmtExchange` | Capabilities |
 | `Resolve` | both | `Resolve-EmtAddressInputs` (`Get-Recipient -Anr`) | Candidates for each partial address |
-| `Trace` | Trace | `Invoke-EmtTrace` | Messages, delivery report, events, hints |
-| `CheckMailbox` | Trace | `Invoke-EmtMailboxCheck` | Findings and the data of the checks |
+| `Trace` | Message search | `Invoke-EmtTrace` | Messages, delivery report, events, hints |
+| `CheckMailbox` | Message search | `Invoke-EmtMailboxCheck` | Findings and the data of the checks |
 | `Search` | Delete | `Invoke-EmtSearch` | Search result |
 | `SoftDelete` | Delete | `Invoke-EmtSoftDelete`, then `Get-EmtSettledCopyStatus` | Delete status and verification |
 | `HardDelete` | Delete | `Test-EmtHardDeleteScope`, `Invoke-EmtHardDelete`, `Get-EmtSettledCopyStatus` | Delete counts and verification |
@@ -68,7 +68,7 @@ The runspace uses the execution policy `Bypass`: `Import-PSSession` makes a temp
 | `ListOld` | Delete | `Get-EmtOldSearches` | Old `EMT_*` and `MC_*` searches |
 | `RemoveOld` | Delete | `Remove-EmtSearches` | None |
 
-## Trace
+## Trace (tab Message search)
 
 `Invoke-EmtTrace` reads only the tracking log. It needs only the Message Tracking role.
 
@@ -156,12 +156,15 @@ Another error is unknown: EMT does not report a removal.
 
 ## Window
 
-The window has a common top line (connection, timeout, language, roles), two tabs and a common bottom part
-(log, status, progress, **Cancel**).
+The window has a common top line (connection, timeout, language), two tabs and a common bottom part
+(log, connection, status, progress, **Cancel**).
+
+`Update-EmtConnIndicator` sets the indicator of the bottom line: green = connected, grey = not connected.
+The missing roles are not in the window: the log shows one warning for each function that is not available.
 
 | Tab | Main controls |
 |---|---|
-| Trace | `$grpTr` criteria, `$gridTrMessages`, detail tabs `$trDetail` (recipients, events, mailbox), actions |
+| Message search | `$grpTr` criteria, `$gridTrMessages`, detail tabs `$trDetail` (recipients, events, mailbox), actions |
 | Delete | `$grpCrit` criteria, `$lblDelSource`, `$lblSummary`, result tabs `$tabs`, actions |
 
 `Set-UiState` sets the state of each control from the current data:

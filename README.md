@@ -13,7 +13,7 @@ The window has two tabs:
 
 | Tab | Function | Speed | Changes data |
 |---|---|---|---|
-| **Trace** | Finds a message in the message tracking log. Shows the delivery status of each recipient. Examines the mailbox of a recipient. | Seconds | No |
+| **Message search** | Finds a message in the message tracking log. Shows the delivery status of each recipient. Examines the mailbox of a recipient. | Seconds | No |
 | **Delete** | Finds the copies of a message in the mailboxes. Deletes them. Verifies the result. | Seconds to minutes | Yes |
 
 The user interface is available in English and Russian. You can add a language: see [Languages](#languages).
@@ -25,7 +25,7 @@ The user interface is available in English and Russian. You can add a language: 
 - [Install](#install)
 - [Start](#start)
 - [Window](#window)
-- [Trace](#trace)
+- [Message search](#message-search)
 - [Mailbox check](#mailbox-check)
 - [Delete](#delete)
 - [Files](#files)
@@ -50,14 +50,14 @@ EMT connects to Exchange through remote PowerShell.
 
 ## Permissions
 
-EMT examines the permissions of your account when it connects. The status line shows them (`✓` or `✗`).
+EMT examines the permissions of your account when it connects. The log shows a warning for each function that is not available.
 A button stays disabled if your account does not have the necessary role.
 
-**Trace only (for example, the help desk):**
+**Message search only (for example, the help desk):**
 
 | Function | Cmdlets | Role group |
 |---|---|---|
-| Trace | `Get-MessageTrackingLog`, `Get-TransportService`, `Get-Recipient` | Organization Management, Records Management or Compliance Management |
+| Message search | `Get-MessageTrackingLog`, `Get-TransportService`, `Get-Recipient` | Organization Management, Records Management or Compliance Management |
 | Mailbox check | `Get-InboxRule`, `Get-MailboxJunkEmailConfiguration`, `Get-Mailbox`, `Get-MailboxStatistics` | Organization Management or Recipient Management |
 | Accepted domains | `Get-AcceptedDomain` (optional, for speed) | Organization Management or View-Only Organization Management |
 
@@ -116,16 +116,18 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
 
 1. In the field **Exchange server (FQDN)**, type the full server name.
 2. Click **Connect**.
-3. Make sure that the status line shows the roles (`✓`).
+3. Make sure that the bottom line shows a green indicator and "Connected".
+4. Make sure that the log shows no warning about a missing role.
 
 ## Window
 
 | Area | Controls |
 |---|---|
-| Top line | Server, **Connect**, operation timeout, language, roles |
-| Tab **Trace** | Criteria, **Find**, summary line, messages, details of the selected message, actions |
+| Top line | Server, **Connect**, operation timeout, language |
+| Tab **Message search** | Criteria, **Find**, summary line, messages, details of the selected message, actions |
 | Tab **Delete** | Criteria, **Find copies**, source line, summary line, result tabs, delete actions |
 | Log | The messages of the session (common for both tabs) |
+| Bottom left | The connection: a green indicator and the server name, or a grey indicator and "Not connected" |
 | Bottom right | The running operation: status, progress, **Cancel** |
 
 - Push Enter to start the search of the open tab.
@@ -134,13 +136,13 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
   Drag a column header to move the column. Push Ctrl+C to copy the selected rows with headers.
 - The tab name shows the row count, for example **Recipients (4)**.
 
-## Trace
+## Message search
 
 The trace reads only the message tracking log. It does not open the mailboxes. It does not change data.
 
 ### Procedure
 
-1. Open the tab **Trace**.
+1. Open the tab **Message search**.
 2. Type one or more criteria (see the table below).
 3. Set the period. Use **Today**, **Yesterday** or **7 days**.
 4. Click **Find**.
@@ -156,7 +158,7 @@ The trace reads only the message tracking log. It does not open the mailboxes. I
 | Senders | One or more addresses, parts of addresses or names. Separator: comma or semicolon. |
 | Recipient | One address, a part of an address or a name. A recipient alone is permitted: EMT shows all messages to this address. |
 | Subject contains | A part of the subject |
-| Period start / Period end | Date and time. The tracking log uses the exact time. |
+| Period | Start and end: date and time. The tracking log uses the exact time. |
 | Message ID | The internet message ID |
 
 Set one criterion or more. A period alone is not permitted.
@@ -226,7 +228,7 @@ The mailbox check finds these causes. It does not change data.
 
 **Procedure:**
 
-1. On the tab **Trace**, select a message.
+1. On the tab **Message search**, select a message.
 2. On the tab **Recipients**, select an internal recipient.
 3. Click **Check the recipient mailbox**.
 4. Examine the tab **Recipient mailbox**.
@@ -255,7 +257,7 @@ Use the tab **Delete** to find the copies of a message in the mailboxes and to d
 
 ### Procedure from a traced message (recommended)
 
-1. On the tab **Trace**, select the message.
+1. On the tab **Message search**, select the message.
 2. Click **Delete this message…**.
 3. EMT opens the tab **Delete** with the data of the message: sender, subject, message ID, period.
    The green line says **Data from the tracking log**.
@@ -284,7 +286,7 @@ Use this procedure, for example, for a message that is older than the tracking l
 | Senders | Addresses, parts of addresses or names | `-Sender` | `from:` (OR) |
 | Subject contains | A part of the subject | `-MessageSubject` | `subject:"…"` |
 | Recipient | One address | `-Recipients` | `to:` / `cc:` / `bcc:` |
-| Period start / Period end | Date and time | exact time | full days only |
+| Period | Date and time | exact time | full days only |
 | Message ID | The internet message ID | `-MessageId` | subject and sender of the message |
 | Attachment name | A file name | not used | `attachment:"…"` |
 | Words in the text | A phrase | not used | `"…"` |

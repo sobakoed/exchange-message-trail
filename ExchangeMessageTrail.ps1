@@ -33,6 +33,30 @@ if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing, Microsoft.VisualBasic
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
+# The console is hidden: show a start error in a window. The language files are not loaded yet: English text.
+trap {
+    [void][System.Windows.Forms.MessageBox]::Show(
+        "Exchange Message Trail could not start.`r`n`r`n$($_.Exception.Message)`r`n`r`n$($_.InvocationInfo.PositionMessage)",
+        'Exchange Message Trail', 'OK', 'Error')
+    break
+}
+
+# Hide the PowerShell console window, but only if it belongs to EMT alone.
+# One process in the console: the console was made for EMT (EMT.cmd, a shortcut, "Run").
+# More processes: the user started EMT from an open console. That console stays visible.
+if (-not ('EmtConsole' -as [type])) {
+    Add-Type -Namespace '' -Name 'EmtConsole' -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();
+[DllImport("kernel32.dll")] public static extern uint GetConsoleProcessList(uint[] list, uint count);
+[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int cmd);
+'@
+}
+$consoleWindow = [EmtConsole]::GetConsoleWindow()
+if ($consoleWindow -ne [IntPtr]::Zero -and [EmtConsole]::GetConsoleProcessList((New-Object 'System.UInt32[]' 4), 4) -eq 1 -and
+    [Environment]::CommandLine -match '\s-File\s') {
+    [void][EmtConsole]::ShowWindow($consoleWindow, 0)    # 0 = SW_HIDE
+}
+
 $CorePath = Join-Path $PSScriptRoot 'src\EMT.Core.ps1'
 . $CorePath
 
@@ -108,6 +132,12 @@ function Save-EmtSettings {
         AllMailboxes    = $chkAll.Checked
         TimeoutMinutes  = [int]$nudTimeout.Value
     }
+    # The window: the normal size and position, also when the window is maximized or minimized.
+    $b = if ($form.WindowState -eq 'Normal') { $form.Bounds } else { $form.RestoreBounds }
+    if ($b.Width -gt 0 -and $b.Height -gt 0) {
+        $s.Window = [ordered]@{ X = $b.X; Y = $b.Y; Width = $b.Width; Height = $b.Height
+                                Maximized = ($form.WindowState -eq 'Maximized') }
+    }
     try { $s | ConvertTo-Json | Set-Content -Path $SettingsPath -Encoding UTF8 } catch { }
 }
 
@@ -170,6 +200,7 @@ function Complete-EmtOperation {
     $job.PS.Dispose()
     $progress.Value = 0
     $lblStatus.Text = ''
+    $tips.SetToolTip($lblStatus, '')
 
     if ($err) {
         if ($Sync.Cancel) {
@@ -221,7 +252,8 @@ function Update-EmtLanguage {
     foreach ($x in $script:Localized)     { $x.Control.Text = T $x.Key }
     foreach ($x in $script:LocalizedTips) { $tips.SetToolTip($x.Control, (T $x.Key)) }
     foreach ($d in $dtStart, $dtEnd, $dtTrStart, $dtTrEnd) { $d.CustomFormat = T 'fmt.picker' }
-    Update-EmtCapsLabel
+    Update-EmtCriteriaLabels
+    Update-EmtConnIndicator
     Update-EmtDeleteSource
     if ($script:Trace) { Show-EmtTraceViews $script:Trace } else { Clear-EmtTraceViews }
     if ($script:Result) { Show-EmtResultViews $script:Result } else { Clear-EmtResultViews }
@@ -279,6 +311,30 @@ function Set-EmtAccentButton([System.Windows.Forms.Button] $Button) {
     & $paint $Button $null
 }
 
+function New-EmtIndicator([string] $Key) {
+    <# A round color mark and a text. Set-EmtIndicator sets the color and the tooltip. #>
+    $dot = New-Object System.Windows.Forms.Label
+    $dot.AutoSize = $false; $dot.Size = '12,12'; $dot.Margin = '6,5,2,3'; $dot.Anchor = 'Left'
+    $dot.Tag = [System.Drawing.Color]::Gray
+    $dot.Add_Paint({
+        param($s, $e)
+        $e.Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]$s.Tag)
+        $e.Graphics.FillEllipse($brush, 1, 1, $s.Width - 3, $s.Height - 3)
+        $brush.Dispose()
+    })
+    $text = New-EmtLabel $Key
+    $text.Margin = '0,3,4,3'
+    [pscustomobject]@{ Dot = $dot; Text = $text }
+}
+
+function Set-EmtIndicator($Indicator, [System.Drawing.Color] $Color, [string] $Tip) {
+    $Indicator.Dot.Tag = $Color
+    $Indicator.Dot.Invalidate()
+    $tips.SetToolTip($Indicator.Dot, $Tip)
+    $tips.SetToolTip($Indicator.Text, $Tip)
+}
+
 function New-EmtCheckBox([string] $Key) {
     $c = New-Object System.Windows.Forms.CheckBox
     $c.AutoSize = $true; $c.Margin = '3,7,12,3'
@@ -299,18 +355,57 @@ function New-EmtSummaryLabel {
     $l
 }
 
-function New-EmtPeriodPanel($EndPicker, [switch] $Week) {
-    <# The end date and the quick period buttons in one cell. Returns the panel and the buttons. #>
-    $today = New-EmtButton 'crit.today' 72
+function New-EmtPeriodPanel($StartPicker, $EndPicker) {
+    <# The period in one line: start - end and the quick period buttons. Returns the panel and the buttons. #>
+    $today     = New-EmtButton 'crit.today' 72
     $yesterday = New-EmtButton 'crit.yesterday' 64
-    $buttons = @($today, $yesterday)
-    if ($Week) { $buttons += (New-EmtButton 'crit.week' 64) }
-    foreach ($b in $buttons) { $b.MinimumSize = New-Object System.Drawing.Size($b.MinimumSize.Width, 24); $b.Height = 24; $b.Margin = '0,3,4,3' }
+    $week      = New-EmtButton 'crit.week' 64
+    foreach ($b in $today, $yesterday, $week) {
+        $b.MinimumSize = New-Object System.Drawing.Size($b.MinimumSize.Width, 24); $b.Height = 24; $b.Margin = '0,3,4,3'
+    }
+    $today.Margin = '8,3,4,3'
+    $dash = New-EmtLabel ''
+    $dash.Text = [string][char]0x2014; $dash.Margin = '0,7,3,3'
     $p = New-Object System.Windows.Forms.FlowLayoutPanel
     $p.AutoSize = $true; $p.WrapContents = $false; $p.Margin = '0,0,0,0'
-    $p.Controls.Add($EndPicker)
-    foreach ($b in $buttons) { $p.Controls.Add($b) }
-    [pscustomobject]@{ Panel = $p; Today = $today; Yesterday = $yesterday; Week = $(if ($Week) { $buttons[2] } else { $null }) }
+    $p.Controls.AddRange(@($StartPicker, $dash, $EndPicker, $today, $yesterday, $week))
+    [pscustomobject]@{ Panel = $p; Today = $today; Yesterday = $yesterday; Week = $week }
+}
+
+function New-EmtCriteriaTable([int] $Rows) {
+    <#
+        The criteria: two pairs "label + field" in each row.
+        The two field columns have the same width. Thus all fields have the same size.
+    #>
+    $t = New-Object System.Windows.Forms.TableLayoutPanel
+    $t.Dock = 'Top'; $t.AutoSize = $true; $t.ColumnCount = 4; $t.RowCount = $Rows
+    foreach ($i in 1, 2) {
+        [void]$t.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
+        [void]$t.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent', 50)))
+    }
+    $t
+}
+
+function New-EmtActionRow($Left, $Button) {
+    <# The last row of the criteria: controls on the left, the main button on the right edge of the fields. #>
+    $r = New-Object System.Windows.Forms.TableLayoutPanel
+    $r.Dock = 'Fill'; $r.AutoSize = $true; $r.ColumnCount = 3; $r.RowCount = 1; $r.Margin = '0,0,0,0'
+    [void]$r.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
+    [void]$r.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent', 100)))
+    [void]$r.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
+    $Left.Anchor = 'Left'
+    $Button.Anchor = 'Right'; $Button.Margin = '12,3,12,3'    # the right margin of a text field
+    $r.Controls.Add($Left, 0, 0)
+    $r.Controls.Add($Button, 2, 0)
+    $r
+}
+
+function New-EmtCriteriaGroup([string] $Key, $Table) {
+    $g = New-Object System.Windows.Forms.GroupBox
+    [void](Set-EmtLoc $g $Key)
+    $g.Dock = 'Top'; $g.AutoSize = $true; $g.AutoSizeMode = 'GrowAndShrink'; $g.Padding = '8,4,8,6'
+    $g.Controls.Add($Table)
+    $g
 }
 
 function New-EmtGrid([scriptblock] $RowColor) {
@@ -534,6 +629,9 @@ $colorYellow = [System.Drawing.Color]::LightYellow
 $colorGreen  = [System.Drawing.Color]::Honeydew
 $colorBlue   = [System.Drawing.Color]::AliceBlue
 $colorGrey   = [System.Drawing.Color]::WhiteSmoke
+# Colors of the indicators in the bottom line.
+$dotGreen = [System.Drawing.Color]::FromArgb(46, 160, 67)
+$dotGrey  = [System.Drawing.Color]::FromArgb(160, 160, 160)
 
 # --- Connection bar (common for both tabs) ---
 $pnlConn = New-Object System.Windows.Forms.FlowLayoutPanel
@@ -546,11 +644,10 @@ $nudTimeout.Minimum = 5; $nudTimeout.Maximum = 240; $nudTimeout.Value = 60; $nud
 $cmbLanguage = New-Object System.Windows.Forms.ComboBox
 $cmbLanguage.DropDownStyle = 'DropDownList'; $cmbLanguage.Width = 120; $cmbLanguage.Margin = '3,4,12,3'
 foreach ($l in $available) { [void]$cmbLanguage.Items.Add($l.Name) }
-$lblCaps = New-EmtLabel ''
 $pnlConn.Controls.AddRange(@(
     (New-EmtLabel 'conn.server'), $tbServer, $btnConnect,
     (New-EmtLabel 'conn.timeout'), $nudTimeout,
-    (New-EmtLabel 'conn.language'), $cmbLanguage, $lblCaps))
+    (New-EmtLabel 'conn.language'), $cmbLanguage))
 
 # --- Main tabs ---
 $mainTabs = New-Object System.Windows.Forms.TabControl
@@ -566,40 +663,27 @@ $mainTabs.TabPages.AddRange(@($pgTrace, $pgDelete))
 
 #region ---------- Form layout: tab "Trace" ----------
 
-$grpTr = New-Object System.Windows.Forms.GroupBox
-[void](Set-EmtLoc $grpTr 'trcrit.group')
-$grpTr.Dock = 'Top'; $grpTr.Height = 140; $grpTr.Padding = '8,4,8,4'
-
-$tlpTr = New-Object System.Windows.Forms.TableLayoutPanel
-$tlpTr.Dock = 'Fill'; $tlpTr.ColumnCount = 6; $tlpTr.RowCount = 3
-# The middle column holds the end date and three quick period buttons: it gets the most space.
-foreach ($pct in 26, 48, 26) {
-    [void]$tlpTr.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
-    [void]$tlpTr.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent', $pct)))
-}
 $tbTrSenders   = New-EmtTextBox
 $tbTrRecipient = New-EmtTextBox
 $tbTrSubject   = New-EmtTextBox
 $tbTrMessageId = New-EmtTextBox
 $dtTrStart     = New-EmtDatePicker
 $dtTrEnd       = New-EmtDatePicker
-$trPeriod      = New-EmtPeriodPanel $dtTrEnd -Week
+$trPeriod      = New-EmtPeriodPanel $dtTrStart $dtTrEnd
+$btnTrFind     = New-EmtButton 'crit.find' 130
+Set-EmtAccentButton $btnTrFind
 
-# Row 0: who.  Row 1: when, what and message ID.  Row 2: Find.
+# Row 0: who.  Row 1: what.  Row 2: when and Find.  The tab "Delete" uses the same order.
+$tlpTr = New-EmtCriteriaTable 3
 $tlpTr.Controls.Add((New-EmtLabel 'crit.senders'), 0, 0);   $tlpTr.Controls.Add($tbTrSenders, 1, 0)
 $tlpTr.Controls.Add((New-EmtLabel 'crit.recipient'), 2, 0); $tlpTr.Controls.Add($tbTrRecipient, 3, 0)
-$tlpTr.Controls.Add((New-EmtLabel 'crit.subject'), 4, 0);   $tlpTr.Controls.Add($tbTrSubject, 5, 0)
-$tlpTr.Controls.Add((New-EmtLabel 'crit.start'), 0, 1);     $tlpTr.Controls.Add($dtTrStart, 1, 1)
-$tlpTr.Controls.Add((New-EmtLabel 'crit.end'), 2, 1);       $tlpTr.Controls.Add($trPeriod.Panel, 3, 1)
-$tlpTr.Controls.Add((New-EmtLabel 'crit.messageId'), 4, 1); $tlpTr.Controls.Add($tbTrMessageId, 5, 1)
-$btnTrFind = New-EmtButton 'crit.find' 130
-Set-EmtAccentButton $btnTrFind
-$pnlTrFind = New-Object System.Windows.Forms.FlowLayoutPanel
-$pnlTrFind.Dock = 'Fill'; $pnlTrFind.AutoSize = $true; $pnlTrFind.WrapContents = $false
-$pnlTrFind.Controls.Add($btnTrFind)
-$tlpTr.Controls.Add($pnlTrFind, 0, 2)
-$tlpTr.SetColumnSpan($pnlTrFind, 6)
-$grpTr.Controls.Add($tlpTr)
+$tlpTr.Controls.Add((New-EmtLabel 'crit.subject'), 0, 1);   $tlpTr.Controls.Add($tbTrSubject, 1, 1)
+$tlpTr.Controls.Add((New-EmtLabel 'crit.messageId'), 2, 1); $tlpTr.Controls.Add($tbTrMessageId, 3, 1)
+$tlpTr.Controls.Add((New-EmtLabel 'crit.period'), 0, 2)
+$trRowFind = New-EmtActionRow $trPeriod.Panel $btnTrFind
+$tlpTr.Controls.Add($trRowFind, 1, 2)
+$tlpTr.SetColumnSpan($trRowFind, 3)
+$grpTr = New-EmtCriteriaGroup 'trcrit.group' $tlpTr
 
 $lblTrSummary = New-EmtSummaryLabel
 $lblTrSummary.Text = T 'trsum.none'
@@ -668,52 +752,59 @@ $pgTrace.Controls.Add($grpTr)
 
 #region ---------- Form layout: tab "Delete" ----------
 
-$grpCrit = New-Object System.Windows.Forms.GroupBox
-[void](Set-EmtLoc $grpCrit 'crit.group')
-$grpCrit.Dock = 'Top'; $grpCrit.Height = 178; $grpCrit.Padding = '8,4,8,4'
-
-$tlp = New-Object System.Windows.Forms.TableLayoutPanel
-$tlp.Dock = 'Fill'; $tlp.ColumnCount = 6; $tlp.RowCount = 4
-# The middle column holds the end date and the quick period buttons: it gets more space.
-foreach ($pct in 29, 42, 29) {
-    [void]$tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
-    [void]$tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent', $pct)))
-}
-
 $tbSenders    = New-EmtTextBox
-$tbSubject    = New-EmtTextBox
 $tbRecipient  = New-EmtTextBox
-$dtStart      = New-EmtDatePicker
-$dtEnd        = New-EmtDatePicker
+$tbSubject    = New-EmtTextBox
 $tbMessageId  = New-EmtTextBox
 $tbAttachment = New-EmtTextBox
 $tbKeywords   = New-EmtTextBox
-$delPeriod    = New-EmtPeriodPanel $dtEnd
+$dtStart      = New-EmtDatePicker
+$dtEnd        = New-EmtDatePicker
+$delPeriod    = New-EmtPeriodPanel $dtStart $dtEnd
 
-# Row 0: who and what.  Row 1: when and message ID.  Row 2: content.  Row 3: options and Find.
-$tlp.Controls.Add((New-EmtLabel 'crit.senders'), 0, 0);    $tlp.Controls.Add($tbSenders, 1, 0)
-$tlp.Controls.Add((New-EmtLabel 'crit.subject'), 2, 0);    $tlp.Controls.Add($tbSubject, 3, 0)
-$tlp.Controls.Add((New-EmtLabel 'crit.recipient'), 4, 0);  $tlp.Controls.Add($tbRecipient, 5, 0)
-$tlp.Controls.Add((New-EmtLabel 'crit.start'), 0, 1);      $tlp.Controls.Add($dtStart, 1, 1)
-$tlp.Controls.Add((New-EmtLabel 'crit.end'), 2, 1);        $tlp.Controls.Add($delPeriod.Panel, 3, 1)
-$tlp.Controls.Add((New-EmtLabel 'crit.messageId'), 4, 1);  $tlp.Controls.Add($tbMessageId, 5, 1)
-$tlp.Controls.Add((New-EmtLabel 'crit.attachment'), 0, 2); $tlp.Controls.Add($tbAttachment, 1, 2)
-$tlp.Controls.Add((New-EmtLabel 'crit.keywords'), 2, 2);   $tlp.Controls.Add($tbKeywords, 3, 2)
-
-$pnlSearch = New-Object System.Windows.Forms.FlowLayoutPanel
-$pnlSearch.Dock = 'Fill'; $pnlSearch.AutoSize = $true; $pnlSearch.WrapContents = $false
 $chkForwards = New-EmtCheckBox 'crit.forwards'
 $chkForwards.Checked = $true
 $chkOnly = New-EmtCheckBox 'crit.only'
 $chkOnly.Enabled = $false
 $chkAll = New-EmtCheckBox 'crit.all'
-$chkAll.Margin = '3,7,24,3'
+$pnlOptions = New-Object System.Windows.Forms.FlowLayoutPanel
+$pnlOptions.AutoSize = $true; $pnlOptions.WrapContents = $false; $pnlOptions.Margin = '0,0,0,0'
+$pnlOptions.Controls.AddRange(@($chkForwards, $chkOnly, $chkAll))
 $btnSearch = New-EmtButton 'crit.findCopies' 130
 Set-EmtAccentButton $btnSearch
-$pnlSearch.Controls.AddRange(@($chkForwards, $chkOnly, $chkAll, $btnSearch))
-$tlp.Controls.Add($pnlSearch, 0, 3)
-$tlp.SetColumnSpan($pnlSearch, 6)
-$grpCrit.Controls.Add($tlp)
+
+# The same order as on the tab "Trace": who, what, content, when. The last row: options and Find copies.
+$tlp = New-EmtCriteriaTable 5
+$tlp.Controls.Add((New-EmtLabel 'crit.senders'), 0, 0);    $tlp.Controls.Add($tbSenders, 1, 0)
+$tlp.Controls.Add((New-EmtLabel 'crit.recipient'), 2, 0);  $tlp.Controls.Add($tbRecipient, 3, 0)
+$tlp.Controls.Add((New-EmtLabel 'crit.subject'), 0, 1);    $tlp.Controls.Add($tbSubject, 1, 1)
+$tlp.Controls.Add((New-EmtLabel 'crit.messageId'), 2, 1);  $tlp.Controls.Add($tbMessageId, 3, 1)
+$tlp.Controls.Add((New-EmtLabel 'crit.attachment'), 0, 2); $tlp.Controls.Add($tbAttachment, 1, 2)
+$tlp.Controls.Add((New-EmtLabel 'crit.keywords'), 2, 2);   $tlp.Controls.Add($tbKeywords, 3, 2)
+$tlp.Controls.Add((New-EmtLabel 'crit.period'), 0, 3);     $tlp.Controls.Add($delPeriod.Panel, 1, 3)
+$tlp.SetColumnSpan($delPeriod.Panel, 3)
+$delRowFind = New-EmtActionRow $pnlOptions $btnSearch
+$tlp.Controls.Add($delRowFind, 1, 4)
+$tlp.SetColumnSpan($delRowFind, 3)
+$grpCrit = New-EmtCriteriaGroup 'crit.group' $tlp
+
+function Update-EmtCriteriaLabels {
+    <#
+        The label columns get the same width on both tabs. Thus the fields have the same size and position
+        on "Trace" and on "Delete". Call it again after a language change: the texts have a new length.
+    #>
+    foreach ($col in 0, 2) {
+        $labels = foreach ($t in $tlpTr, $tlp) {
+            foreach ($row in 0..($t.RowCount - 1)) {
+                $c = $t.GetControlFromPosition($col, $row)
+                if ($c -is [System.Windows.Forms.Label]) { $c }
+            }
+        }
+        $w = 0
+        foreach ($l in $labels) { $l.MinimumSize = [System.Drawing.Size]::Empty; $w = [math]::Max($w, $l.PreferredWidth) }
+        foreach ($l in $labels) { $l.MinimumSize = New-Object System.Drawing.Size($w, 0) }
+    }
+}
 
 # Where the criteria come from: a traced message (confirmed by the tracking log) or the user.
 $lblDelSource = New-Object System.Windows.Forms.Label
@@ -785,17 +876,34 @@ $split.Dock = 'Fill'; $split.Orientation = 'Horizontal'
 $split.Panel1.Controls.Add($mainTabs)
 $split.Panel2.Controls.Add($log)
 
-# The running operation: status, progress, cancel (common for both tabs).
-$pnlRun = New-Object System.Windows.Forms.FlowLayoutPanel
-$pnlRun.Dock = 'Bottom'; $pnlRun.AutoSize = $true; $pnlRun.WrapContents = $false
-$pnlRun.FlowDirection = 'RightToLeft'; $pnlRun.Padding = '6,4,6,4'
+# The bottom line (common for both tabs):
+# left - the connection; right - the running operation: status, progress, cancel.
+# The missing roles are in the log (after the connection). Disabled buttons show them too.
+$pnlConnState = New-Object System.Windows.Forms.FlowLayoutPanel
+$pnlConnState.AutoSize = $true; $pnlConnState.WrapContents = $false; $pnlConnState.Margin = '0,0,0,0'; $pnlConnState.Anchor = 'Left'
+$indServer = New-EmtIndicator ''
+$pnlConnState.Controls.AddRange(@($indServer.Dot, $indServer.Text))
+
 $btnCancel = New-EmtButton 'act.cancel' 90
+$btnCancel.Anchor = 'Right'
 $progress = New-Object System.Windows.Forms.ProgressBar
-$progress.Width = 160; $progress.Height = 20; $progress.Margin = '6,7,6,3'
+$progress.Width = 160; $progress.Height = 20; $progress.Margin = '6,3,6,3'; $progress.Anchor = 'Right'
 $lblStatus = New-EmtLabel ''
-$lblStatus.AutoSize = $false; $lblStatus.Width = 420; $lblStatus.Height = 20; $lblStatus.AutoEllipsis = $true
-$lblStatus.TextAlign = 'MiddleRight'
-$pnlRun.Controls.AddRange(@($btnCancel, $progress, $lblStatus))
+$lblStatus.AutoSize = $false; $lblStatus.Dock = 'Fill'; $lblStatus.AutoEllipsis = $true
+$lblStatus.TextAlign = 'MiddleRight'; $lblStatus.Margin = '8,3,3,3'
+
+$pnlRun = New-Object System.Windows.Forms.TableLayoutPanel
+$pnlRun.Dock = 'Bottom'; $pnlRun.AutoSize = $true; $pnlRun.Padding = '6,4,6,4'
+$pnlRun.ColumnCount = 4; $pnlRun.RowCount = 1
+[void]$pnlRun.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize)))
+[void]$pnlRun.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 100)))
+[void]$pnlRun.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize)))
+[void]$pnlRun.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize)))
+[void]$pnlRun.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+$pnlRun.Controls.Add($pnlConnState, 0, 0)
+$pnlRun.Controls.Add($lblStatus, 1, 0)
+$pnlRun.Controls.Add($progress, 2, 0)
+$pnlRun.Controls.Add($btnCancel, 3, 0)
 
 Set-EmtTip $tbTrSenders     'tip.senders'
 Set-EmtTip $tbTrRecipient   'tip.trRecipient'
@@ -810,6 +918,7 @@ Set-EmtTip $tbSenders       'tip.senders'
 Set-EmtTip $chkAll          'tip.all'
 Set-EmtTip $delPeriod.Today     'tip.today'
 Set-EmtTip $delPeriod.Yesterday 'tip.yesterday'
+Set-EmtTip $delPeriod.Week      'tip.week'
 Set-EmtTip $nudTimeout      'tip.timeout'
 Set-EmtTip $btnCleanup      'tip.cleanup'
 Set-EmtTip $btnExport       'tip.export'
@@ -898,13 +1007,15 @@ function Update-EmtTabTitles {
     }
 }
 
-function Update-EmtCapsLabel {
-    $c = $script:Caps
-    if (-not $c) { $lblCaps.Text = T 'conn.notConnected'; $tips.SetToolTip($lblCaps, ''); return }
-    $mark = { param($v) if ($v) { '✓' } else { '✗' } }
-    $lblCaps.Text = T 'conn.caps' $script:ConnectedServer (& $mark $c.Tracking) (& $mark $c.MailboxCheck) (& $mark $c.Search) `
-                                  (& $mark $c.Verify) (& $mark $c.SoftDelete) (& $mark $c.HardDelete)
-    $tips.SetToolTip($lblCaps, $(if (-not $c.HardDelete) { T 'conn.noHardTip' } else { '' }))
+function Update-EmtConnIndicator {
+    <# The bottom line: green = connected to the server, grey = not connected. #>
+    if ($script:Caps) {
+        $indServer.Text.Text = T 'conn.connectedTo' $script:ConnectedServer
+        Set-EmtIndicator $indServer $dotGreen ''
+    } else {
+        $indServer.Text.Text = T 'conn.notConnected'
+        Set-EmtIndicator $indServer $dotGrey ''
+    }
 }
 
 function Update-EmtDeleteSource {
@@ -1386,15 +1497,19 @@ $btnConnect.Add_Click({
     if (-not $srv) { [void][System.Windows.Forms.MessageBox]::Show($form, (T 'conn.enterServer'), (T 'app.short')); return }
     $script:Caps = $null
     Clear-EmtResults
-    Update-EmtCapsLabel
+    Update-EmtConnIndicator
     Start-EmtOperation -Name 'Connect' -Params @{ Server = $srv } -StatusText (T 'status.connecting' $srv) -OnSuccess {
         param($caps)
         $script:Caps = $caps
         $script:ConnectedServer = $tbServer.Text.Trim()
-        Update-EmtCapsLabel
+        Update-EmtConnIndicator
         Save-EmtSettings
+        # The missing roles: one warning for each function that is not available.
         if (-not $caps.Tracking)     { Write-EmtLog (T 'log.noTrackRole') 'Warn' }
         if (-not $caps.MailboxCheck) { Write-EmtLog (T 'log.noMailboxRole') 'Warn' }
+        if (-not $caps.Search)       { Write-EmtLog (T 'log.noSearchRole') 'Warn' }
+        if (-not $caps.Verify)       { Write-EmtLog (T 'log.noVerifyRole') 'Warn' }
+        if (-not $caps.SoftDelete)   { Write-EmtLog (T 'log.noSoftRole') 'Warn' }
         if (-not $caps.HardDelete)   { Write-EmtLog (T 'log.noHardRole') 'Warn' }
     }
 })
@@ -1481,6 +1596,7 @@ $btnTrExport.Add_Click({
 
 $delPeriod.Today.Add_Click({     $dtStart.Value = (Get-Date).Date;            $dtEnd.Value = (Get-Date).Date.AddDays(1) })
 $delPeriod.Yesterday.Add_Click({ $dtStart.Value = (Get-Date).Date.AddDays(-1); $dtEnd.Value = (Get-Date).Date })
+$delPeriod.Week.Add_Click({      $dtStart.Value = (Get-Date).Date.AddDays(-6); $dtEnd.Value = (Get-Date).Date.AddDays(1) })
 
 $btnSearch.Add_Click({
     $crit = Get-EmtCriteria
@@ -1594,7 +1710,9 @@ $timer.Add_Tick({
     while ($Sync.Log.TryDequeue([ref]$line)) { Add-EmtLogLine $line }
     if ($script:Job) {
         $progress.Value = [int]$Sync.Progress
-        $lblStatus.Text = [string]$Sync.Status
+        $st = [string]$Sync.Status
+        # A long status text can be cut: the tooltip shows the full text.
+        if ($lblStatus.Text -ne $st) { $lblStatus.Text = $st; $tips.SetToolTip($lblStatus, $st) }
         if ($script:Job.Handle.IsCompleted) {
             # Stop the timer: a result handler can open a modal dialog (no re-entry).
             $timer.Stop()
@@ -1628,6 +1746,10 @@ $chkOnly.Add_CheckedChanged({ if ($chkOnly.Checked) { $chkAll.Checked = $false }
 $tbRecipient.Add_TextChanged({ $chkOnly.Enabled = [bool]$tbRecipient.Text.Trim() })
 
 $form.Add_Shown({
+    # Show the window in front of the other windows once. TopMost stays off: dialogs of other programs are not hidden.
+    $form.TopMost = $true
+    $form.Activate()
+    $form.TopMost = $false
     $split.SplitterDistance = [math]::Max(200, $split.Height - 140)
     $trSplit.SplitterDistance = [int]($trSplit.Height * 0.45)
     Write-EmtLog (T 'log.started' $LogPath)
@@ -1664,12 +1786,31 @@ if ($settings.ContainsKey('IncludeForwards')) { $chkForwards.Checked = [bool]$se
 if ($settings.ContainsKey('AllMailboxes'))    { $chkAll.Checked = [bool]$settings.AllMailboxes }
 if ($settings.ContainsKey('TimeoutMinutes'))  { $nudTimeout.Value = [math]::Max(5, [math]::Min(240, [int]$settings.TimeoutMinutes)) }
 $cmbLanguage.SelectedIndex = [array]::IndexOf($script:LanguageCodes, [string]$Sync.Lang)
+# The last window size and position. Only if the window is on a screen now (a monitor can be removed).
+if ($settings.ContainsKey('Window') -and $settings.Window) {
+    try {
+        $wb = $settings.Window
+        $rect = New-Object System.Drawing.Rectangle([int]$wb.X, [int]$wb.Y,
+            [math]::Max([int]$wb.Width, $form.MinimumSize.Width), [math]::Max([int]$wb.Height, $form.MinimumSize.Height))
+        $onScreen = $false
+        foreach ($scr in [System.Windows.Forms.Screen]::AllScreens) {
+            $part = [System.Drawing.Rectangle]::Intersect($scr.WorkingArea, $rect)
+            if ($part.Width -ge 200 -and $part.Height -ge 100) { $onScreen = $true }
+        }
+        if ($onScreen) {
+            $form.StartPosition = 'Manual'
+            $form.Bounds = $rect
+            if ([bool]$wb.Maximized) { $form.WindowState = 'Maximized' }
+        }
+    } catch { }
+}
 foreach ($pair in @(@($dtTrStart, $dtTrEnd), @($dtStart, $dtEnd))) {
     $pair[0].Value = (Get-Date).Date
     $pair[1].Value = (Get-Date).Date.AddDays(1)
 }
 $form.AcceptButton = $btnTrFind
-Update-EmtCapsLabel
+Update-EmtCriteriaLabels    # after the labels are on the form: they have the font of the form now
+Update-EmtConnIndicator
 Update-EmtDeleteSource
 $script:Loading = $false
 
