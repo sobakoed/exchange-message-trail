@@ -108,7 +108,8 @@ function T {
         if ($table.ContainsKey($code) -and $table[$code].Texts.ContainsKey($Key)) { $text = $table[$code].Texts[$Key]; break }
     }
     if ($null -eq $text) { return $Key }
-    if ($Arguments -and $Arguments.Count) {
+    # Not "if ($Arguments)": PowerShell reads @(0) and @('') as false, and the value 0 must replace {0}.
+    if ($null -ne $Arguments -and $Arguments.Count -gt 0) {
         try { return ($text -f $Arguments) } catch { return $text }   # a bad {n} in a translation must not stop the tool
     }
     $text

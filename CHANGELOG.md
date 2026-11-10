@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.6.0 — 2026-11-10
+
+Recipient and safety.
+
+- The recipient is now in the KQL query: `(to:x OR cc:x OR bcc:x)`. Before, `from:sender` with a recipient
+  found all messages of the sender to all people.
+- Tracking log without messages and a recipient in the criteria: the search uses only the mailboxes
+  of the recipient and the senders, not all mailboxes.
+- A result that the tracking log does not confirm (items found, no message in the tracking log):
+  red summary line, a warning in the confirmation window, and the typed word for each delete.
+- Quick search with no found items no longer stops with an error (`Measure-Object` with an empty list).
+- The prefixes of the summary line ("ERRORS", "NOT CONFIRMED") have a space before the text.
+- No message in any mailbox: the tab "Not found" stays empty, and the summary line starts with "No messages found".
+- Cleanup: the remove worked, but the check said "still there". The Exchange message "couldn’t be found" can
+  have a typographic apostrophe (U+2019). The check now accepts any character at this place.
+- Cleanup: Exchange 2019 removes a Compliance Search in the background. It can stay in the list for more than
+  10 seconds. MailCleaner now waits up to 60 seconds (a check each 5 seconds) and shows the wait in the progress line.
+  If `Remove-ComplianceSearch` returned no error, a search that is still visible is a warning with its status, not an error.
+- Cleanup, second root cause: `Get-ComplianceSearch -Identity ... -ErrorAction Stop` also fails with a wrong error
+  instead of "not found". Thus the check said "still there" for a removed search.
+  No `*-ComplianceSearch*` cmdlet uses `-ErrorAction Stop` now. The errors come in `-ErrorVariable`.
+  A unit test examines the source code for this rule.
+
+## 0.5.2 — 2026-11-10
+
+- Texts: the value 0 now replaces `{0}` (for example "Messages in the tracking log: 0"). Before, the text showed `{0}`.
+- Cleanup: after an error of `Remove-ComplianceSearch`, Exchange can remove the search some seconds later.
+  MailCleaner examines the list of searches up to 5 times with 2 seconds between the checks.
+  Only a search that is still there after 10 seconds is an error.
+- Cleanup: MailCleaner does not list all search actions any more (`Get-ComplianceSearchAction` without `-Identity`).
+  On some servers, one damaged action makes the full list fail with "Object reference not set", and the cleanup failed.
+  MailCleaner now asks only for its own action `<search name>_Purge`.
+- Cleanup: tested on Exchange 2019. If the shadow search exists, `Remove-ComplianceSearch` removes the shadow search,
+  fails with "Object reference not set" and keeps the Compliance Search. A second remove works.
+  MailCleaner now removes the shadow search first, then the Compliance Search. After an error it tries once more.
+- Cleanup: the check "does the search exist" uses `Get-ComplianceSearch -Identity`, not the full list.
+- Cleanup, the root cause (tested on Exchange 2019): `Remove-ComplianceSearch -ErrorAction Stop` fails with
+  "Object reference not set" and the search stays. Without `-ErrorAction Stop`, the same command removes the search.
+  MailCleaner no longer uses `-ErrorAction Stop` for `Remove-ComplianceSearch` and `Remove-ComplianceSearchAction`.
+  The result comes from the check by `-Identity`.
+- Cleanup: a search that is still running is not touched (also not its shadow search). The log tells to remove it later.
+- Cancel: `Stop-ComplianceSearch` does not always stop a search on Exchange on-premises. The log tells this.
+
 ## 0.5.1 — 2026-11-10
 
 - Cleanup: `Remove-ComplianceSearch` also removes the shadow search. MailCleaner now examines a shadow search

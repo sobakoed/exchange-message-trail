@@ -396,6 +396,23 @@ See [docs/TRANSLATING.md](docs/TRANSLATING.md).
 | Found 0, but the message exists | The message is unindexed, or the subject is different | Use **Искать во всех ящиках**. Make the subject text shorter. |
 | The search is slow | Many mailboxes: MailCleaner uses Compliance Search | Examine the stage times in the log. For one mailbox, use **Только ящик получателя**. |
 | The same count after a soft delete | Compliance Search reads Recoverable Items | Use the tab **Проверка**, not a new search |
+| A search stays after **Очистить старые поиски** | The search still runs | Wait for the end of the search. Do the cleanup again. |
+
+### Exchange 2019 behavior
+
+These facts come from tests on Exchange Server 2019. MailCleaner obeys them.
+Obey them also in your own scripts.
+
+| Behavior | Effect | Rule |
+|---|---|---|
+| A `*-ComplianceSearch*` cmdlet with `-ErrorAction Stop` | The cmdlet fails with "Object reference not set to an instance of an object". `Remove-ComplianceSearch` stops in the middle, and the search stays. | Do not use `-ErrorAction Stop` with these cmdlets. Use `-ErrorVariable`. |
+| `Get-ComplianceSearchAction` without `-Identity` | The full list fails with "Object reference not set to an instance of an object" when one action is damaged | Ask for one action: `-Identity <search name>_Purge` |
+| `Remove-ComplianceSearch` | Exchange removes the search in the background. The search can stay in the list for some seconds. | After the remove, examine the search again for up to 60 seconds |
+| `Remove-ComplianceSearch` and the shadow search | The cmdlet also removes the shadow search `<search name>-shadow` | Remove the shadow search first. Then remove the search. |
+| `Stop-ComplianceSearch` | The search does not stop. It continues until it is complete (1–3 minutes). | Do not remove a running search. Wait for the status `Completed`. |
+| A running search | `Remove-ComplianceSearch` cannot remove it | Examine the status before the remove |
+| The text "couldn’t be found" | The message has a typographic apostrophe (U+2019), not `'` | Accept any character at this position: `couldn.t be found` |
+| The Exchange admin center | **In-place eDiscovery & hold** shows only the shadow searches. It does not show the Compliance Searches. | Use `Get-ComplianceSearch` to see the Compliance Searches |
 
 ## More documents
 

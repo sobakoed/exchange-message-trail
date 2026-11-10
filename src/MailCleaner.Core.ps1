@@ -147,7 +147,8 @@ function New-McSearchQuery {
         [string]   $Keywords,
         [Parameter(Mandatory)] [datetime] $Start,
         [Parameter(Mandatory)] [datetime] $End,
-        [Nullable[timespan]] $UtcOffset = $null
+        [Nullable[timespan]] $UtcOffset = $null,
+        [string[]] $Recipients = @()
     )
     $parts = New-Object System.Collections.Generic.List[string]
     $senders = @($Senders | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
@@ -157,6 +158,12 @@ function New-McSearchQuery {
     if ($Keywords)   { $parts.Add('(' + (ConvertTo-McKqlPhrase $Keywords) + ')') }
     if ($parts.Count -eq 0) {
         throw (T 'crit.datesOnly')
+    }
+    # The recipient limits the query: only messages that this address received (To, Cc or Bcc).
+    # Without it, "from:x" finds all messages of the sender to all people.
+    $rcpts = @($Recipients | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
+    if ($rcpts.Count) {
+        $parts.Add('(' + (($rcpts | ForEach-Object { "to:$_ OR cc:$_ OR bcc:$_" }) -join ' OR ') + ')')
     }
     $range = Get-McKqlDateRange -Start $Start -End $End -UtcOffset $UtcOffset
     $parts.Add("(sent>=$($range.From))")
@@ -203,6 +210,17 @@ function Get-McSearchHits {
             SizeKB  = [math]::Round([int64]$m.Groups['size'].Value / 1KB, 1)
         }
     }
+}
+
+function Get-McSum {
+    <#
+        Sum of a numeric property. 0 for an empty list.
+        Not "Measure-Object -Sum": with an empty list it has no Sum property, and StrictMode stops.
+    #>
+    param([object[]] $Items = @(), [Parameter(Mandatory)] [string] $Property)
+    $sum = 0
+    foreach ($i in $Items) { if ($null -ne $i -and $null -ne $i.$Property) { $sum += $i.$Property } }
+    $sum
 }
 
 function Test-McInternalDomain {
@@ -591,7 +609,11 @@ function Wait-McComplianceSearch {
         Start-Sleep -Seconds 3
         if ((Get-Variable -Name McSync -Scope Global -ErrorAction SilentlyContinue) -and $global:McSync -and $global:McSync.Cancel) {
             Write-McLog (T 'log.csStopping' $Name) 'Warn'
-            Stop-ComplianceSearch -Identity $Name -Confirm:$false -ErrorAction SilentlyContinue
+            $stopErr = $null
+            Stop-ComplianceSearch -Identity $Name -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable stopErr
+            if ($stopErr) { Write-McLog (T 'log.stopError' $Name (@($stopErr)[0].Exception.Message)) 'Warn' }
+            # Exchange on-premises can continue the search after Stop-ComplianceSearch until it completes.
+            Write-McLog (T 'log.stopNote' $Name) 'Warn'
             Test-McCancel
         }
         $s = Get-ComplianceSearch -Identity $Name
@@ -664,15 +686,28 @@ function Invoke-McSearch {
     if (($Criteria.IncludeForwards -or -not $kqlSenders.Count) -and $trackSenders.Count) { $kqlSenders += $trackSenders }
     $kqlSubject = $Criteria.Subject
     if (-not $kqlSubject -and $Criteria.MessageId -and $summary.Count) { $kqlSubject = $summary[0].Subject }
+    $kqlRecipients = @()
+    if ($Criteria.Recipient) { $kqlRecipients = @($Criteria.Recipient) }
     $query = New-McSearchQuery -Senders $kqlSenders -Subject $kqlSubject -Attachment $Criteria.Attachment `
-                 -Keywords $Criteria.Keywords -Start $Criteria.Start -End $Criteria.End
+                 -Keywords $Criteria.Keywords -Start $Criteria.Start -End $Criteria.End -Recipients $kqlRecipients
 
     $locations = @($internal)
     if ($onlyMailbox) {
         $locations = @($onlyMailbox)
-    } elseif ($Criteria.AllMailboxes -or -not $locations.Count) {
-        if (-not $Criteria.AllMailboxes) { Write-McLog (T 'log.searchAll') 'Warn' }
+    } elseif ($Criteria.AllMailboxes) {
         $locations = @('All')
+    } elseif (-not $locations.Count) {
+        # No recipient mailboxes from the tracking log. With a recipient or senders in the criteria,
+        # search only their mailboxes: a search of all mailboxes is slow and not necessary.
+        $own = @(Resolve-McRecipients -Addresses (@($kqlRecipients) + @($senders)) -AcceptedDomains (Get-McAcceptedDomains) |
+                 Where-Object Kind -eq 'Internal' | ForEach-Object Mailbox | Sort-Object -Unique)
+        if ($kqlRecipients.Count -and $own.Count) {
+            $locations = $own
+            Write-McLog (T 'log.recipientScope' ($own -join ', ')) 'Warn'
+        } else {
+            Write-McLog (T 'log.searchAll') 'Warn'
+            $locations = @('All')
+        }
     }
     Write-McLog "KQL: $query"
 
@@ -686,8 +721,8 @@ function Invoke-McSearch {
         Write-McLog (T 'log.quick' $locations.Count)
         $hits = @(Invoke-McQuickSearch -Mailboxes $locations -Query $query)
         $name      = ''
-        $items     = [int](@($hits | Where-Object { $_.Items -gt 0 }) | Measure-Object Items -Sum).Sum
-        $sizeKB    = [double](@($hits | Where-Object { $_.Items -gt 0 }) | Measure-Object SizeKB -Sum).Sum
+        $items     = [int](Get-McSum -Items @($hits | Where-Object { $_.Items -gt 0 }) -Property Items)
+        $sizeKB    = [double](Get-McSum -Items @($hits | Where-Object { $_.Items -gt 0 }) -Property SizeKB)
         $unindexed = -1
         $errors    = (@($hits | Where-Object { $_.Error } | ForEach-Object { "$($_.Mailbox): $($_.Error)" }) -join '; ')
     } else {
@@ -709,10 +744,16 @@ function Invoke-McSearch {
     }
 
     $found   = @($hits | Where-Object { $_.Items -gt 0 } | Sort-Object Mailbox)
-    $missing = @(Get-McMissingMailboxes -Locations $locations -Hits $hits)
+    # "Not found in a mailbox" is useful only when the message is in other mailboxes.
+    # When no mailbox has it, the message probably does not exist: no list.
+    $missing = if ($found.Count) { @(Get-McMissingMailboxes -Locations $locations -Hits $hits) } else { @() }
     Write-McLog (T 'log.found' $items $found.Count $sizeKB) 'Ok'
     if ($errors) { Write-McLog (T 'log.searchErrors' $errors) 'Error' }
     if ($unindexed -gt 0) { Write-McLog (T 'log.unindexed' $unindexed) 'Warn' }
+    # The search found items, but the tracking log has no message: nothing confirms that these are the
+    # messages the user wants. The window shows this and asks for the typed word before a delete.
+    $unconfirmed = ($found.Count -gt 0) -and ($summary.Count -eq 0)
+    if ($unconfirmed) { Write-McLog (T 'log.unconfirmed' $items) 'Warn' }
     Set-McProgress 100 (T 'progress.done')
 
     [pscustomobject]@{
@@ -731,6 +772,7 @@ function Invoke-McSearch {
         Unindexed  = $unindexed
         Errors     = $errors
         TrackingErrors = $trackErrors
+        Unconfirmed = [bool]$unconfirmed
         Seconds    = [int]$timer.Elapsed.TotalSeconds
     }
 }
@@ -905,13 +947,63 @@ function Get-McOldSearches {
     @($list | Sort-Object When, Name)
 }
 
+function Test-McNotFoundText {
+    <# True for an Exchange "not found" message. "couldn.t": Exchange can write a typographic apostrophe (’). #>
+    param([string] $Text)
+    [bool]($Text -match 'couldn.t be found|could not be found|not found|не найден')
+}
+
+function Get-McComplianceSearchInfo {
+    <#
+        Reads one Compliance Search by -Identity. Returns Exists ($true, $false or $null = unknown),
+        Status and Error.
+
+        IMPORTANT: no "-ErrorAction Stop" for the *-ComplianceSearch* cmdlets. Tested on Exchange 2019:
+        with Stop, these cmdlets fail with "Object reference not set" instead of the real answer.
+        The errors come in -ErrorVariable.
+    #>
+    param([Parameter(Mandatory)] [string] $Name)
+    $ge = $null
+    $s = $null
+    try {
+        $s = Get-ComplianceSearch -Identity $Name -ErrorAction SilentlyContinue -ErrorVariable ge
+    } catch {
+        $ge = @($_)
+    }
+    $err = (@($ge) | Where-Object { $_ } | ForEach-Object { [string]$_.Exception.Message }) -join ' '
+    $exists = if ($s) { $true } elseif ($err -and -not (Test-McNotFoundText $err)) { $null } else { $false }
+    [pscustomobject]@{
+        Exists = $exists
+        Status = $(if ($s -and @($s)[0].PSObject.Properties['Status']) { [string]@($s)[0].Status } else { '' })
+        Error  = $err
+    }
+}
+
+function Get-McComplianceSearchStatus {
+    <# The status of a Compliance Search (Completed, InProgress, ...), or '' if it is not found or not readable. #>
+    param([Parameter(Mandatory)] [string] $Name)
+    (Get-McComplianceSearchInfo $Name).Status
+}
+
+function Test-McComplianceSearchExists {
+    <#
+        True if the Compliance Search exists. Uses -Identity: the full list of searches is not reliable
+        on all servers. "Not found" = false. Another error = true (unknown: do not report a removal).
+    #>
+    param([Parameter(Mandatory)] [string] $Name)
+    $i = Get-McComplianceSearchInfo $Name
+    $i.Exists -ne $false
+}
+
 function Remove-McSearches {
     <#
         Removes MailCleaner searches. A name with "-shadow" is a shadow In-Place eDiscovery search.
         For a Compliance Search, it also removes its actions and its shadow search, if Exchange kept it.
         Names that MailCleaner does not make are skipped.
     #>
-    param([Parameter(Mandatory)] [string[]] $Names)
+    # Exchange 2019 removes a Compliance Search in the background: it can stay in the list for more
+    # than 10 seconds after a remove without errors. Thus up to 60 seconds of checks.
+    param([Parameter(Mandatory)] [string[]] $Names, [int] $RecheckTimes = 12, [int] $RecheckSeconds = 5)
     $done = @{}
     $hasShadowCmd = [bool](Get-Command Remove-MailboxSearch -ErrorAction SilentlyContinue)
     # Remove-ComplianceSearch usually removes the shadow search too. Thus the shadow search
@@ -934,34 +1026,79 @@ function Remove-McSearches {
                 Write-McLog (T 'log.shadowRemoved' $n) 'Ok'
                 continue
             }
-            # The actions first. -ErrorAction SilentlyContinue does not stop a terminating error
-            # (for example "Object reference not set"), thus a separate try.
-            try {
-                Get-ComplianceSearchAction -ErrorAction SilentlyContinue | Where-Object { $_.SearchName -eq $n } |
-                    ForEach-Object {
-                        try { Remove-ComplianceSearchAction -Identity $_.Identity -Confirm:$false -ErrorAction Stop } catch { }
-                    }
-            } catch { }
-            try {
-                Remove-ComplianceSearch -Identity $n -Confirm:$false -ErrorAction Stop
-                Write-McLog (T 'log.cleanupRemoved' $n) 'Ok'
-            } catch {
-                # Exchange on-premises can return an error, but remove the search. Examine the list of searches.
-                $err = $_
-                $still = @(Get-ComplianceSearch -ErrorAction Stop | Where-Object { $_.Name -eq $n }).Count
-                if ($still) { throw $err }
-                Write-McLog (T 'log.removedWithError' $n $err.Exception.Message) 'Warn'
+            # The action first. Do NOT list all actions (Get-ComplianceSearchAction without -Identity):
+            # on some servers one damaged action makes the full list fail with "Object reference not set".
+            # MailCleaner gives its purge action a known name: <search name>_Purge.
+            # A search that still runs cannot be removed (Stop-ComplianceSearch does not always stop it).
+            # Do not touch it or its shadow search: the cleanup can remove it later.
+            $status = Get-McComplianceSearchStatus $n
+            if ($status -in 'Starting', 'InProgress', 'Stopping', 'NotStarted') {
+                Write-McLog (T 'log.stillRunning' $n $status) 'Warn'
+                $done["$n-shadow"] = $true
+                continue
             }
+
+            # IMPORTANT: no "-ErrorAction Stop" for the Remove-Compliance* cmdlets. Tested on Exchange 2019:
+            # the cmdlet writes an internal error ("Object reference not set"). With Stop, this error
+            # stops the remove in the middle and the search stays. Without Stop, the remove completes.
+            $action = "${n}_Purge"
+            try {
+                if (Get-ComplianceSearchAction -Identity $action -ErrorAction SilentlyContinue) {
+                    Remove-ComplianceSearchAction -Identity $action -Confirm:$false 2>$null
+                }
+            } catch { }
+            # The shadow search first. With the shadow search, Remove-ComplianceSearch removes the
+            # shadow search, fails with "Object reference not set" and keeps the Compliance Search.
+            # Without the shadow search, Remove-ComplianceSearch works (tested on Exchange 2019).
             $shadow = "$n-shadow"
             if ($hasShadowCmd -and -not $done.ContainsKey($shadow)) {
                 $done[$shadow] = $true
                 if (& $shadowExists $shadow) {
-                    Remove-MailboxSearch -Identity $shadow -Confirm:$false -ErrorAction Stop
-                    Write-McLog (T 'log.shadowRemoved' $shadow) 'Ok'
+                    try {
+                        Remove-MailboxSearch -Identity $shadow -Confirm:$false -ErrorAction Stop
+                        Write-McLog (T 'log.shadowRemoved' $shadow) 'Ok'
+                    } catch {
+                        Write-McLog (T 'log.cleanupError' $shadow $_.Exception.Message) 'Warn'
+                    }
                 } elseif ($shadow -in $Names) {
                     Write-McLog (T 'log.shadowGone' $shadow)
                 }
             }
+
+            # The Compliance Search. Without "-ErrorAction Stop" (see above). The result is the check
+            # by -Identity, not the error stream: the internal error also occurs when the remove works.
+            $removed = $false
+            $lastErr = $null
+            for ($attempt = 1; $attempt -le 2 -and -not $removed; $attempt++) {
+                $rmErr = $null
+                try {
+                    Remove-ComplianceSearch -Identity $n -Confirm:$false -ErrorVariable rmErr 2>$null
+                } catch {
+                    $rmErr = @($_)
+                }
+                if (-not (Test-McComplianceSearchExists $n)) { $removed = $true }
+                elseif ($rmErr) { $lastErr = @($rmErr)[0] }
+            }
+            if (-not $removed) {
+                # Exchange removes the search in the background. Wait for it.
+                for ($k = 1; $k -le [math]::Max(1, $RecheckTimes) -and -not $removed; $k++) {
+                    Set-McProgress ([int](100 * $k / [math]::Max(1, $RecheckTimes))) (T 'progress.removeWait' $n)
+                    if (-not (Test-McComplianceSearchExists $n)) { $removed = $true; break }
+                    if ($k -lt $RecheckTimes) { Wait-McSeconds $RecheckSeconds }
+                }
+            }
+            if (-not $removed) {
+                $info = Get-McComplianceSearchInfo $n
+                $seen = if ($info.Status) { $info.Status } elseif ($info.Error) { $info.Error } else { '?' }
+                if ($lastErr) {
+                    # Exchange returned an error and the search is still there: a real error.
+                    throw (T 'err.stillThere' $lastErr.Exception.Message ($RecheckTimes * $RecheckSeconds))
+                }
+                # No error from Exchange: the remove is probably still running in the background.
+                Write-McLog (T 'log.removePending' $n ($RecheckTimes * $RecheckSeconds) $seen) 'Warn'
+                continue
+            }
+            Write-McLog (T 'log.cleanupRemoved' $n) 'Ok'
         } catch {
             Write-McLog (T 'log.cleanupError' $n $_.Exception.Message) 'Error'
         }

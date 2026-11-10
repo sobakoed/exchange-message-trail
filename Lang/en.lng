@@ -86,6 +86,12 @@ log.shadowRemoved = Shadow search {0} removed.
 log.shadowGone = Shadow search {0} is already removed with its search.
 log.cleanupError = Search {0} not removed: {1}
 log.removedWithError = Search {0} removed. Exchange returned an error, but the search is gone: {1}
+err.stillThere = {0} The search is still in the list after {1} s. Exchange can remove it later: examine it with Get-ComplianceSearch.
+log.removePending = Search {0} is still visible {1} s after the remove (status: {2}). Exchange returned success and probably removes the search in the background. Examine it later with Get-ComplianceSearch.
+progress.removeWait = Waiting for the remove: {0}
+log.stillRunning = Search {0} is still running (status {1}). It is not removed. Remove it later with "Clean up old searches".
+log.stopNote = Exchange can continue the search {0} for some minutes, until it completes. Then remove it with "Clean up old searches".
+log.stopError = Stop of the search {0}: {1}
 log.noShadowCmd = No Get-MailboxSearch / Remove-MailboxSearch cmdlets: shadow searches (-shadow) are not examined.
 
 # ---- Address book search (partial addresses) ----
@@ -160,8 +166,9 @@ tip.language = The language of the user interface. The change occurs immediately
 
 # ---- Window: results ----
 sum.none = No result.
+sum.nothing = No messages found. Examine the criteria and the period.
 sum.text = Messages found: {0} in {1} of {2} mailboxes ({3:N1} KB).   External recipients: {4}.   Unindexed: {5}.   {6}, {7} s.
-sum.errors = ERRORS — delete not available, see the log.   
+sum.errors = ERRORS — delete not available, see the log.
 sum.na = n/a
 sum.quick = Quick search
 tab.messages = Messages
@@ -265,3 +272,9 @@ confirm.messages = Messages in the tracking log ({0}):
 confirm.more = … and {0} more
 confirm.noMessages = (the tracking log has no messages — examine the KQL)
 confirm.mailboxList = Mailboxes:
+
+# ---- Recipient scope and confirmation ----
+log.recipientScope = The tracking log has no messages. The search uses only the mailboxes of the recipient and the senders: {0}.
+log.unconfirmed = The tracking log does not confirm the found messages ({0}). Examine them before a delete.
+sum.unconfirmed = NOT CONFIRMED BY THE TRACKING LOG — examine the messages before a delete.
+confirm.unconfirmed = WARNING: the tracking log did not find these messages. The search found them only with the KQL query. Make sure that these are the correct messages.

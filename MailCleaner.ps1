@@ -731,8 +731,14 @@ function Show-McResultViews($r) {
     $lblSummary.Text = T 'sum.text' $r.Items @($r.Found).Count $scopeText $r.SizeKB @($r.External).Count `
                                     $unindexedText $methodText $r.Seconds
     $lblSummary.ForeColor = [System.Drawing.SystemColors]::ControlText
+    if (-not @($r.Found).Count -and -not $r.Errors) { $lblSummary.Text = (T 'sum.nothing') + '   ' + $lblSummary.Text }
+    $unconfirmed = [bool]($r.PSObject.Properties['Unconfirmed'] -and $r.Unconfirmed)
+    if ($unconfirmed) {
+        $lblSummary.Text = (T 'sum.unconfirmed') + '   ' + $lblSummary.Text
+        $lblSummary.ForeColor = [System.Drawing.Color]::Firebrick
+    }
     if ($r.Errors) {
-        $lblSummary.Text = (T 'sum.errors') + $lblSummary.Text
+        $lblSummary.Text = (T 'sum.errors') + '   ' + $lblSummary.Text
         $lblSummary.ForeColor = [System.Drawing.Color]::Firebrick
     }
     $tips.SetToolTip($lblSummary, $(if ($r.Errors) { "$($lblSummary.Text)`r`n`r`n$($r.Errors)" } else { $lblSummary.Text }))
@@ -778,6 +784,15 @@ function Show-McCheckResult([object[]] $Check, [string] $Action, $DeleteInfo) {
         Query = $script:Result.Query; Mailboxes = $script:Check.Count; Items = $script:Result.Items
         Result = $resultText; Details = [string]$DeleteInfo
     }
+}
+
+function Get-McDeleteWarning($r) {
+    <# All warnings for the delete confirmation: not confirmed by the tracking log, large delete. #>
+    $w = @()
+    if ($r.PSObject.Properties['Unconfirmed'] -and $r.Unconfirmed) { $w += (T 'confirm.unconfirmed') }
+    $large = Get-McLargeDeleteWarning -Items $r.Items -Messages @($r.Messages).Count
+    if ($large) { $w += $large }
+    $w -join "`r`n`r`n"
 }
 
 function Get-McDeleteText {
@@ -968,9 +983,9 @@ $btnSearch.Add_Click({
 $btnSoft.Add_Click({
     $r = $script:Result
     $mbx = @($r.Found | ForEach-Object Mailbox)
-    $warning = Get-McLargeDeleteWarning -Items $r.Items -Messages @($r.Messages).Count
+    $warning = Get-McDeleteWarning $r
     $text = Get-McDeleteText -r $r -Kind 'Soft' -Warning $warning
-    # A large delete needs the typed word also for a soft delete.
+    # A large or not confirmed delete needs the typed word also for a soft delete.
     $word = if ($warning) { T 'confirm.word' } else { '' }
     if (-not (Show-McConfirm -Title (T 'confirm.softTitle') -Text $text -OkText (T 'act.soft') -RequireWord $word)) { return }
     Start-McOperation -Name 'SoftDelete' -StatusText (T 'status.soft') -Params @{
@@ -989,7 +1004,7 @@ $btnHard.Add_Click({
     $mbx = @($r.Found | ForEach-Object Mailbox)
     $expected = @{}
     foreach ($f in @($r.Found)) { $expected[$f.Mailbox] = [int]$f.Items }
-    $warning = Get-McLargeDeleteWarning -Items $r.Items -Messages @($r.Messages).Count
+    $warning = Get-McDeleteWarning $r
     $text = Get-McDeleteText -r $r -Kind 'Hard' -Warning $warning
     if (-not (Show-McConfirm -Title (T 'confirm.hardTitle') -Text $text -OkText (T 'act.hard') -RequireWord (T 'confirm.word'))) { return }
     Start-McOperation -Name 'HardDelete' -StatusText (T 'status.hard') -Params @{
@@ -997,7 +1012,7 @@ $btnHard.Add_Click({
     } -OnSuccess {
         param($x)
         $script:Deleted = 'Hard'
-        $deleted = [int](@($x.Delete) | Measure-Object Deleted -Sum).Sum
+        $deleted = [int](Get-McSum -Items @($x.Delete) -Property Deleted)
         $errors  = @($x.Delete | Where-Object Error).Count
         $info    = "Deleted=$deleted; MailboxErrors=$errors; Processed=$(@($x.Delete).Count)"
         if ($x.Cancelled) {

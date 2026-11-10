@@ -523,8 +523,12 @@ Describe 'Get-McOldSearches and Remove-McSearches' {
     BeforeAll {
         $old = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
         $new = (Get-Date).AddMinutes(-5).ToString('yyyyMMdd_HHmmss')
-        Mock Get-ComplianceSearch { @([pscustomobject]@{ Name = "MC_$old" }, [pscustomobject]@{ Name = "MC_$new" },
-                                      [pscustomobject]@{ Name = 'ContentSearch_for_Delete1' }) }
+        # The full list for Get-McOldSearches. By -Identity: "not found" (the search is removed).
+        Mock Get-ComplianceSearch {
+            if ($Identity) { throw "The operation couldn't be performed because '$Identity' couldn't be found." }
+            @([pscustomobject]@{ Name = "MC_$old" }, [pscustomobject]@{ Name = "MC_$new" },
+              [pscustomobject]@{ Name = 'ContentSearch_for_Delete1' })
+        }
         Mock Get-MailboxSearch {
             $all = @([pscustomobject]@{ Name = "MC_$old-shadow" }, [pscustomobject]@{ Name = "MC_$new-shadow" },
                      [pscustomobject]@{ Name = 'Legal hold 2025' })
@@ -543,7 +547,7 @@ Describe 'Get-McOldSearches and Remove-McSearches' {
         @(Get-McOldSearches -OlderThanDays 0 | ForEach-Object Name) | Should -Contain "MC_$new-shadow"
     }
     It 'removes the search and its shadow once, and skips other names' {
-        Remove-McSearches -Names "MC_$old", "MC_$old-shadow", 'Legal hold 2025'
+        Remove-McSearches -Names "MC_$old", "MC_$old-shadow", 'Legal hold 2025' -RecheckSeconds 0
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_$old" }
         Should -Invoke Remove-MailboxSearch -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_$old-shadow" }
         Should -Invoke Remove-MailboxSearch -Times 0 -Exactly -ParameterFilter { $Identity -eq 'Legal hold 2025' }
@@ -598,13 +602,13 @@ Describe 'Remove-McSearches when Exchange removes the shadow search itself' {
     }
     It 'does not fail when the shadow search is already gone (the case from the log)' {
         Mock Remove-ComplianceSearch { }
-        { Remove-McSearches -Names "MC_$stamp-shadow", "MC_$stamp" } | Should -Not -Throw
+        { Remove-McSearches -Names "MC_$stamp-shadow", "MC_$stamp" -RecheckSeconds 0 } | Should -Not -Throw
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly
         Should -Invoke Remove-MailboxSearch -Times 0 -Exactly
     }
     It 'continues with the next search after an error' {
         Mock Remove-ComplianceSearch { if ($Identity -eq "MC_$stamp") { throw 'busy' } }
-        { Remove-McSearches -Names "MC_$stamp", "MC_$stamp2" } | Should -Not -Throw
+        { Remove-McSearches -Names "MC_$stamp", "MC_$stamp2" -RecheckSeconds 0 } | Should -Not -Throw
         Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_$stamp2" }
     }
 }
@@ -615,15 +619,15 @@ Describe 'Remove-McSearches when Remove-ComplianceSearch returns an error' {
         Mock Remove-MailboxSearch { }
         Mock Remove-ComplianceSearch { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
     }
-    It 'reports a removal when the search is gone after the error (the case from the log)' {
+    It 'reports a removal (green) when the search is gone after the internal error' {
         Mock Get-ComplianceSearch { }
         Mock Get-ComplianceSearchAction { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
         $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
         try {
-            Remove-McSearches -Names "MC_$stamp"
+            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
             $lines = @($global:McSync.Log.ToArray())
         } finally { Remove-Variable McSync -Scope Global -ErrorAction SilentlyContinue }
-        ($lines -join "`n") | Should -Match '\[WARN \].*MC_'
+        ($lines -join "`n") | Should -Match '\[OK   \].*MC_'
         ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
     }
     It 'reports an error when the search is still there after the error' {
@@ -631,9 +635,214 @@ Describe 'Remove-McSearches when Remove-ComplianceSearch returns an error' {
         Mock Get-ComplianceSearchAction { }
         $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
         try {
-            Remove-McSearches -Names "MC_$stamp"
+            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
             $lines = @($global:McSync.Log.ToArray())
         } finally { Remove-Variable McSync -Scope Global -ErrorAction SilentlyContinue }
         ($lines -join "`n") | Should -Match '\[ERROR\].*MC_'
+    }
+}
+Describe 'T with the values 0, empty text and $false' {
+    AfterEach { $global:McLang = 'ru' }
+    It 'puts 0 in the text (the case from the log: "Писем (MessageId) в журнале: {0}.")' {
+        $global:McLang = 'ru'
+        T 'log.trackCount' 0 | Should -Be 'Писем (MessageId) в журнале: 0.'
+        $global:McLang = 'en'
+        T 'stage.recipients' 0 | Should -Be 'Addresses resolved: 0'
+    }
+    It 'puts an empty text and $false in the text' {
+        $global:McLang = 'en'
+        T 'log.connected' '' | Should -Be 'Connected to .'
+        T 'log.connected' $false | Should -Be 'Connected to False.'
+    }
+}
+Describe 'Remove-McSearches when Exchange removes the search some seconds after the error' {
+    It 'reports a removal when the search goes from the list on a later check (the case from the log)' {
+        $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
+        $global:McTestChecks = 0
+        Mock Get-MailboxSearch { }
+        Mock Get-ComplianceSearchAction { }
+        Mock Remove-ComplianceSearch { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
+        # The first two checks still see the search, the third does not.
+        Mock Get-ComplianceSearch { $global:McTestChecks++; if ($global:McTestChecks -le 2) { [pscustomobject]@{ Name = "MC_$stamp" } } }
+        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        try {
+            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:McSync.Log.ToArray())
+        } finally {
+            Remove-Variable McSync, McTestChecks -Scope Global -ErrorAction SilentlyContinue
+        }
+        ($lines -join "`n") | Should -Match '\[OK   \].*MC_'
+        ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
+    }
+}
+Describe 'Remove-McSearches does not list all search actions' {
+    It 'asks only for the action SEARCHNAME_Purge (the full list fails on some servers)' {
+        $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
+        Mock Get-MailboxSearch { }
+        Mock Remove-ComplianceSearch { }
+        Mock Remove-ComplianceSearchAction { }
+        Mock Get-ComplianceSearchAction {
+            if (-not $Identity) { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
+            if ($Identity -eq "MC_${stamp}_Purge") { [pscustomobject]@{ Name = $Identity } }
+        }
+        { Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0 } | Should -Not -Throw
+        Should -Invoke Get-ComplianceSearchAction -Times 0 -Exactly -ParameterFilter { -not $Identity }
+        Should -Invoke Remove-ComplianceSearchAction -Times 1 -Exactly -ParameterFilter { $Identity -eq "MC_${stamp}_Purge" }
+        Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly
+    }
+}
+Describe 'Remove-McSearches: the order and the second attempt (tested on Exchange 2019)' {
+    BeforeAll {
+        $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
+        Mock Get-ComplianceSearchAction { }
+    }
+    It 'removes the shadow search before the Compliance Search' {
+        $global:McTestOrder = New-Object System.Collections.Generic.List[string]
+        Mock Get-MailboxSearch { if ($Identity -eq "MC_$stamp-shadow") { [pscustomobject]@{ Name = $Identity } } }
+        Mock Remove-MailboxSearch { $global:McTestOrder.Add("shadow:$Identity") }
+        Mock Remove-ComplianceSearch { $global:McTestOrder.Add("search:$Identity") }
+        try {
+            Remove-McSearches -Names "MC_$stamp", "MC_$stamp-shadow" -RecheckSeconds 0
+            @($global:McTestOrder) | Should -Be @("shadow:MC_$stamp-shadow", "search:MC_$stamp")
+        } finally { Remove-Variable McTestOrder -Scope Global -ErrorAction SilentlyContinue }
+    }
+    It 'removes the search with a second attempt when the first fails and the search is still there' {
+        $global:McTestRemoves = 0
+        Mock Get-MailboxSearch { }
+        Mock Remove-ComplianceSearch {
+            $global:McTestRemoves++
+            if ($global:McTestRemoves -eq 1) { throw [System.NullReferenceException]::new('Object reference not set to an instance of an object.') }
+        }
+        # Exists after the first attempt; the second attempt works.
+        Mock Get-ComplianceSearch { if ($global:McTestRemoves -lt 2) { [pscustomobject]@{ Name = "MC_$stamp" } } else { throw "The operation couldn't be performed because 'MC_$stamp' couldn't be found." } }
+        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        try {
+            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:McSync.Log.ToArray())
+        } finally { Remove-Variable McSync, McTestRemoves -Scope Global -ErrorAction SilentlyContinue }
+        Should -Invoke Remove-ComplianceSearch -Times 2 -Exactly
+        ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
+    }
+}
+
+Describe 'Test-McComplianceSearchExists' {
+    It 'is false for "not found" and true for another error' {
+        Mock Get-ComplianceSearch { throw "The operation couldn't be performed because 'X' couldn't be found." }
+        Test-McComplianceSearchExists 'X' | Should -BeFalse
+        Mock Get-ComplianceSearch { throw 'The server is not available.' }
+        Test-McComplianceSearchExists 'X' | Should -BeTrue
+        Mock Get-ComplianceSearch { [pscustomobject]@{ Name = 'X' } }
+        Test-McComplianceSearchExists 'X' | Should -BeTrue
+    }
+}
+Describe 'Remove-McSearches: lessons from Exchange 2019' {
+    BeforeAll {
+        $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
+        Mock Get-ComplianceSearchAction { }
+        Mock Remove-MailboxSearch { }
+        Mock Get-MailboxSearch { if ($Identity) { [pscustomobject]@{ Name = $Identity } } }
+    }
+    It 'does not touch a search that is still running, nor its shadow search' {
+        Mock Get-ComplianceSearch { [pscustomobject]@{ Name = "MC_$stamp"; Status = 'InProgress' } }
+        Mock Remove-ComplianceSearch { }
+        Remove-McSearches -Names "MC_$stamp", "MC_$stamp-shadow" -RecheckSeconds 0
+        Should -Invoke Remove-ComplianceSearch -Times 0 -Exactly
+        Should -Invoke Remove-MailboxSearch -Times 0 -Exactly
+    }
+    It 'never calls Remove-ComplianceSearch with -ErrorAction Stop (it stops the remove in the middle)' {
+        $global:McTestGone = $false
+        Mock Get-ComplianceSearch { if (-not $global:McTestGone) { [pscustomobject]@{ Name = "MC_$stamp"; Status = 'Completed' } } else { throw "'MC_$stamp' couldn't be found." } }
+        Mock Remove-ComplianceSearch { $global:McTestGone = $true }
+        try {
+            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
+        } finally { Remove-Variable McTestGone -Scope Global -ErrorAction SilentlyContinue }
+        Should -Invoke Remove-ComplianceSearch -Times 1 -Exactly
+        Should -Invoke Remove-ComplianceSearch -Times 0 -Exactly -ParameterFilter { $PSBoundParameters['ErrorAction'] -eq 'Stop' }
+    }
+}
+Describe 'Recipient in the query and in the search scope' {
+    It 'adds the recipient to the KQL query (To, Cc, Bcc)' {
+        $q = New-McSearchQuery -Senders 'a@x.com' -Recipients 'B@x.com' -Start ([datetime]'2026-11-10') -End ([datetime]'2026-11-11') -UtcOffset 0
+        $q | Should -Match '\(to:b@x\.com OR cc:b@x\.com OR bcc:b@x\.com\)'
+        $q | Should -Match '\(from:a@x\.com\)'
+    }
+    It 'searches only the recipient and sender mailboxes when the tracking log is empty (the case from the screenshot)' {
+        Mock Get-McCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
+        Mock Find-McTrackingEvents { [pscustomobject]@{ Events = @(); Servers = @('EXCH1'); Errors = @() } }
+        Mock Get-McAcceptedDomains { @('x.com') }
+        Mock Resolve-McRecipients {
+            @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } })
+        }
+        Mock Invoke-McQuickSearch { [pscustomobject]@{ Mailbox = 'b@x.com'; Items = 0; SizeKB = 0; Error = '' } }
+        Mock New-McComplianceSearchRun { throw 'must not search all mailboxes' }
+        $r = Invoke-McSearch -Criteria @{
+            Senders = @('a@x.com'); Recipient = 'b@x.com'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11'; IncludeForwards = $false
+        }
+        @($r.Locations | Sort-Object) | Should -Be @('a@x.com', 'b@x.com')
+        # Nothing found anywhere: no list of mailboxes without the message.
+        @($r.Missing).Count | Should -Be 0
+        $r.Query | Should -Match 'to:b@x\.com'
+        Should -Invoke New-McComplianceSearchRun -Times 0 -Exactly
+    }
+    It 'marks a result that the tracking log does not confirm' {
+        Mock Get-McCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
+        Mock Find-McTrackingEvents { [pscustomobject]@{ Events = @(); Servers = @('EXCH1'); Errors = @() } }
+        Mock Get-McAcceptedDomains { @('x.com') }
+        Mock Resolve-McRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } }) }
+        Mock Invoke-McQuickSearch { [pscustomobject]@{ Mailbox = 'a@x.com'; Items = 5; SizeKB = 10; Error = '' } }
+        $r = Invoke-McSearch -Criteria @{
+            Senders = @('a@x.com'); Recipient = 'b@x.com'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11'
+        }
+        $r.Unconfirmed | Should -BeTrue
+    }
+}
+Describe 'Get-McSum' {
+    It 'gives 0 for an empty list and the sum for a list' {
+        Get-McSum -Items @() -Property Items | Should -Be 0
+        Get-McSum -Items @([pscustomobject]@{ Items = 2 }, [pscustomobject]@{ Items = 3 }) -Property Items | Should -Be 5
+        Get-McSum -Items @([pscustomobject]@{ SizeKB = 1.5 }, $null) -Property SizeKB | Should -Be 1.5
+    }
+}
+Describe 'Test-McComplianceSearchExists with a typographic apostrophe' {
+    It 'is false for not found with the apostrophe U+2019 (the case from the log)' {
+        $msg = "The operation couldn$([char]0x2019)t be performed because 'X' couldn$([char]0x2019)t be found."
+        Mock Get-ComplianceSearch { throw $msg }
+        Test-McComplianceSearchExists 'X' | Should -BeFalse
+    }
+}
+Describe 'Remove-McSearches when Exchange removes the search in the background' {
+    It 'gives a warning, not an error, when the remove returned no error but the search is still visible' {
+        $stamp = (Get-Date).AddDays(-10).ToString('yyyyMMdd_HHmmss')
+        Mock Get-MailboxSearch { }
+        Mock Get-ComplianceSearchAction { }
+        Mock Remove-ComplianceSearch { }
+        Mock Get-ComplianceSearch { [pscustomobject]@{ Name = "MC_$stamp"; Status = 'Completed' } }
+        $global:McSync = @{ Cancel = $false; Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]' }
+        try {
+            Remove-McSearches -Names "MC_$stamp" -RecheckSeconds 0
+            $lines = @($global:McSync.Log.ToArray())
+        } finally { Remove-Variable McSync -Scope Global -ErrorAction SilentlyContinue }
+        ($lines -join "`n") | Should -Match '\[WARN \].*MC_.*Completed'
+        ($lines -join "`n") | Should -Not -Match '\[ERROR\]'
+    }
+}
+Describe 'No -ErrorAction Stop for the Compliance Search cmdlets (lesson from Exchange 2019)' {
+    It 'the core has no *-ComplianceSearch* call with -ErrorAction Stop' {
+        $src = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\src\MailCleaner.Core.ps1'), [Text.Encoding]::UTF8)
+        $bad = @($src -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' -and $_ -match '\b\w+-ComplianceSearch\w*\b[^#]*-ErrorAction\s+Stop' })
+        $bad | Should -BeNullOrEmpty
+    }
+    It 'Get-McComplianceSearchInfo: object = exists, "not found" = gone, another error = unknown' {
+        Mock Get-ComplianceSearch { [pscustomobject]@{ Name = 'X'; Status = 'Completed' } }
+        $i = Get-McComplianceSearchInfo 'X'
+        $i.Exists | Should -BeTrue
+        $i.Status | Should -Be 'Completed'
+        Mock Get-ComplianceSearch { Write-Error "The operation couldn$([char]0x2019)t be performed because 'X' couldn$([char]0x2019)t be found." }
+        (Get-McComplianceSearchInfo 'X').Exists | Should -BeFalse
+        Mock Get-ComplianceSearch { Write-Error 'Object reference not set to an instance of an object.' }
+        $i = Get-McComplianceSearchInfo 'X'
+        $i.Exists | Should -BeNullOrEmpty
+        $i.Error  | Should -Match 'Object reference'
+        Should -Invoke Get-ComplianceSearch -Times 0 -ParameterFilter { $PSBoundParameters['ErrorAction'] -eq 'Stop' }
     }
 }
