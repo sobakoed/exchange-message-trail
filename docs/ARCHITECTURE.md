@@ -6,14 +6,18 @@ This document gives the structure of the Exchange Message Trail (EMT) code.
 
 | File | Content |
 |---|---|
-| `ExchangeMessageTrail.ps1` | The window, the background runspace and the event handlers |
+| `ExchangeMessageTrail.ps1` | The window (WPF), the background runspace and the event handlers |
+| `gui/MainWindow.xaml` | The layout of the window |
+| `gui/Styles.xaml` | The styles of all controls |
+| `gui/Theme.Dark.xaml`, `gui/Theme.Light.xaml` | The colors of the dark and the light theme |
 | `src/EMT.Core.ps1` | The logic without the user interface |
 | `src/EMT.Strings.ps1` | The language loader, the function `T` and the language file check |
 | `Lang/*.lng` | The user interface texts, one file for each language |
 | `EMT.cmd` | The launcher (STA mode, hidden console) |
-| `tests/EMT.Core.Tests.ps1` | The Pester 5 unit tests for the core |
+| `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms): a fallback for one version |
+| `tests/EMT.Core.Tests.ps1` | The Pester 5 unit tests for the core, the language files and the window files |
 
-All `.ps1` files use UTF-8 with BOM and CRLF.
+All `.ps1` files use UTF-8 with BOM and CRLF. The `.xaml` files use UTF-8 and CRLF.
 Windows PowerShell 5.1 reads a file without BOM in the ANSI code page. This changes the Cyrillic text.
 
 ## Threads
@@ -21,7 +25,7 @@ Windows PowerShell 5.1 reads a file without BOM in the ANSI code page. This chan
 ```
 UI thread (STA)                                 Background runspace
 ──────────────────────────────                  ────────────────────────────────────
-Form, controls, event handlers                  Remote session to Exchange
+Window, controls, event handlers                Remote session to Exchange
         │ Start-EmtOperation ── BeginInvoke ──▶ . EMT.Core.ps1
         │                                       Invoke-EmtOperation -Name <operation>
 Timer (400 ms) ◀── $Sync.Log (queue) ────────── Write-EmtLog
@@ -87,16 +91,24 @@ For each message and recipient, the status with the highest rank wins. With the 
 
 | Rank | Status | Events |
 |---|---|---|
-| 7 | Delivered | `DELIVER` |
-| 6 | External | `SEND` to an external address |
-| 5 | Failed | `FAIL` |
-| 4 | Dropped | `DROP`, `POISONMESSAGE` |
+| 10 | Delivered | `DELIVER`, `DUPLICATEDELIVER` |
+| 9 | External | `SEND` to an external address, `SENDEXTERNAL` |
+| 8 | Forwarded | `DROP` with `RESOLVER.FWD.Forwarded` |
+| 7 | Failed | `FAIL` |
+| 6 | GroupBlocked | `DROP` with `RESOLVER.GRP.BlockedMessage` |
+| 5 | Dropped | `DROP` with a `4.x.x` / `5.x.x` code or without a cause, `POISONMESSAGE` |
+| 4 | Suppressed | `DROP` with another `2.x.x` code or an agent text (`RESOLVER.MSGTYPE.AF`, `RESOLVER.OOF.*`, `RESOLVER.MSGTYPE.NDR`) |
 | 3 | Deferred | `DEFER` |
 | 2 | InTransit | `SEND` to an internal address, `EXPAND`, `REDIRECT`, `HAREDIRECT`, `TRANSFER`, `RESOLVE` |
-| 1 | Group | A group address without its own delivery |
+| 1 | Group | A group address without its own delivery; `DROP` with `RESOLVER.GRP.Expanded` or `RESOLVER.GRP.NotRedirected` |
 | 0 | Unknown | `RECEIVE`, `SUBMIT` |
 
 `SEND` to an internal recipient is a transfer to another Exchange server, not the end of the delivery.
+`SENDEXTERNAL` is a send through a Send connector, for example a hidden copy that a transport rule adds.
+`Get-EmtDropStatus` reads the server answer of a `DROP` event. On Exchange 2019, most `DROP` events have
+the success code `250 2.1.5`: they are usual steps, not errors. A `DROP` with `CAT.DuplicateRecipient` gives no status.
+`Get-EmtErrorStatuses` gives the statuses that are errors: Failed, GroupBlocked, Dropped.
+`Get-EmtStatusOrder` gives the order of the statuses in the status line of a message.
 `Get-EmtStatusHint` reads the enhanced status code (`x.y.z`) in the server answer and gives the explanation.
 
 ## Mailbox check
@@ -156,16 +168,29 @@ Another error is unknown: EMT does not report a removal.
 
 ## Window
 
-The window has a common top line (connection, timeout, language), two tabs and a common bottom part
+The window is WPF. The layout is in `gui/MainWindow.xaml`, the styles of all controls are in `gui/Styles.xaml`,
+the colors are in `gui/Theme.Dark.xaml` and `gui/Theme.Light.xaml`.
+The window has a common top line (server, **Connect**, timeout, language, theme), two tabs and a common bottom part
 (log, connection, status, progress, **Cancel**).
+
+| Item | How it operates |
+|---|---|
+| Elements | The script makes a variable for each element with `x:Name`: `x:Name="btnSoft"` gives `$btnSoft`. |
+| Texts | `Tag="key"` of an element is a text key. `Update-EmtTexts` sets the texts (TextBlock, button, check box, tab). |
+| Tooltips | `Set-EmtTip` registers a control and a key. |
+| Theme | `Add-EmtTheme` adds the theme dictionary (first) and the styles. `Set-EmtTheme` replaces the theme dictionary. All styles use `DynamicResource`: the window changes at once. |
+| System colors | `Get-EmtThemeDictionary` adds the system color keys (`SystemColors.*BrushKey`) with the theme colors. One XAML file cannot have more than one system key. |
+| Title bar | `Set-EmtTitleBar` calls `DwmSetWindowAttribute` (dark title bar for the dark theme). Older Windows versions ignore it. |
+| Dialogs | `New-EmtDialog` makes a window with the theme. `Show-EmtMessage`, `Show-EmtPick`, `Show-EmtConfirm` (`New-EmtConfirmWindow`), `Show-EmtInput`. The folder selection of the export is the standard Windows dialog. |
+| Errors | `Dispatcher.UnhandledException` catches an error of an event handler. The window stays open, the log and a message show the error. |
 
 `Update-EmtConnIndicator` sets the indicator of the bottom line: green = connected, grey = not connected.
 The missing roles are not in the window: the log shows one warning for each function that is not available.
 
 | Tab | Main controls |
 |---|---|
-| Message search | `$grpTr` criteria, `$gridTrMessages`, detail tabs `$trDetail` (recipients, events, mailbox), actions |
-| Delete | `$grpCrit` criteria, `$lblDelSource`, `$lblSummary`, result tabs `$tabs`, actions |
+| Message search | `$cardTr` criteria, `$gridTrMessages`, detail tabs `$trDetail` (recipients, events, mailbox), actions |
+| Delete | `$cardDel` criteria, `$lblDelSource`, `$lblSummary`, result tabs `$tabs`, actions |
 
 `Set-UiState` sets the state of each control from the current data:
 
@@ -177,20 +202,37 @@ The missing roles are not in the window: the log shows one warning for each func
 | Find copies | Connected, Search or Verify |
 | Delete (soft) | A clean result, no delete yet, SoftDelete + Search + Verify |
 | Delete permanently | A clean result, no hard delete yet, HardDelete |
+| Verify | Copies found, Verify |
+| Clean up old searches | Connected, Search |
 | Cancel | An operation runs |
 
 `Open-EmtDeleteForMessage` fills the tab **Delete** from the selected message (sender, subject, message ID, period)
 and sets `$script:DelFromTrace`. It does not copy the recipients: the search of copies uses all found mailboxes.
 `Invoke-EmtInvalidate` clears the delete result and `$script:DelFromTrace` when the user changes a delete criterion.
+`$script:Loading` stops the invalidation while the program fills the fields itself.
 
 ### Criteria layout
 
-`New-EmtCriteriaTable` makes a table with two pairs "label + field" in each row. The two field columns have 50% each.
-`New-EmtPeriodPanel` makes the line **Period**: start — end and the buttons **Today**, **Yesterday**, **7 days**.
-`New-EmtActionRow` puts the main button of the tab at the right edge of the fields.
-`New-EmtCriteriaGroup` makes the group box. Its height comes from the content.
-`Update-EmtCriteriaLabels` gives the label columns the same width on both tabs.
-Call it after the labels are on the form (they need the font of the form) and after each language change.
+The criteria of each tab are a grid with two pairs "label + field" in each row. The two field columns have the same width.
+The label columns have `SharedSizeGroup` (`Lbl1`, `Lbl2`). Thus the fields have the same size and position on both tabs,
+also after a language change. The main button of the tab is at the right edge of the fields.
+Enter starts the main button of the open tab (`IsDefault`).
+
+### Dates
+
+`Set-EmtDateCulture` gives the window thread a copy of the Windows regional settings:
+the date format and the first day of the week are the same as in the other programs.
+The names of the months and the week days come from the interface language.
+The window does not set its property `Language`: then the date pickers use the culture of the thread.
+Each date picker has a time field. `Get-EmtPeriodValue` gives the date and the time, `Set-EmtPeriodValue` sets them.
+The time uses the short time format of Windows (`Get-EmtTimeFormat`). `ConvertTo-EmtTime` reads the format of Windows
+and the 24-hour format. A wrong time goes back to the last correct time (`$script:LastTime`).
+PowerShell gives a `DateTime` for a `DateTime?`: the property `Value` does not exist.
+`Get-EmtPeriodEnd` makes the end of the period include its minute: 23:59 is 23:59:59.999. The quick periods end at 23:59.
+`Open-EmtDeleteForMessage` sets the period from 5 minutes before the message to 23:59 of its day:
+the KQL range then has one day (`Get-EmtKqlDateRange`).
+`Get-EmtExtraItemMailboxes` gives the mailboxes with more items than the tracking log has messages: the summary line
+shows an orange warning, and the delete confirmation needs the typed word.
 
 ### Start and close
 
@@ -198,29 +240,47 @@ Call it after the labels are on the form (they need the font of the form) and af
 |---|---|
 | Start error | A `trap` at the top of the script shows a message box. The console is hidden and cannot show the error. |
 | Console | `EMT.cmd` starts PowerShell with `-WindowStyle Hidden`. The script also hides a console that has only its own process (`GetConsoleProcessList`) and a `-File` start. |
-| Front | The `Shown` handler sets `TopMost` for one moment and activates the window. |
-| Size | `Save-EmtSettings` keeps the normal bounds (`RestoreBounds` when maximized) and the maximized state. At the start, EMT uses them only if the window is on a screen. |
+| Front | The `ContentRendered` handler sets `Topmost` for one moment and activates the window. |
+| Size | `Save-EmtSettings` keeps the normal bounds (`RestoreBounds` when maximized) and the maximized state in the key `WpfWindow` (WPF units). At the start, EMT uses them only if the window is on the screen. |
+| Settings | `Save-EmtSettings` keeps the other keys of `settings.json`. The classic window keeps its size in the key `Window` (pixels). |
 
 ### Tables
 
-`Set-EmtGridData` binds a `DataTable`. The columns have the property names. `-Hidden` columns give data for the row
-colors only. `Update-EmtGridHeaders` sets the header texts in the current language.
-`Resize-EmtGridColumns` sets the initial widths once, when the grid is visible. The column mode is `None`:
-the user can change the widths, and a sort keeps them.
-`New-EmtGrid` fixes the row height and the header height.
+`Set-EmtGridData` binds a `DataTable`. The columns have the property names. A property with an empty header key
+is data only. The header texts come from the current language.
+`Resize-EmtGrids` sets the initial widths once, when the grid is visible (60–450 px, the last column gets the free space).
+Then the widths are fixed: a sort keeps them. The row height is fixed (`CanUserResizeRows = False`).
 
-`Set-EmtAccentButton` gives the main button of each tab a light green background.
-A disabled button gets the usual grey background.
+The rows have no fill color. Two parameters of `Set-EmtGridData` give the colors:
+
+| Parameter | Result | Template |
+|---|---|---|
+| `-Mark` | The color of the left edge of a row: Green, Blue, Red, Yellow, Grey or none | `EmtMarkCell` |
+| `-PartsColumn`, `-Parts` | A dot and a colored text for each part of a status | `EmtPartsCell` |
+
+| Table | Left edge |
+|---|---|
+| Messages (Message search) | `Get-EmtStatusMark`: the worst status of the recipients |
+| Recipients (Message search) | `Get-EmtStatusTone`: the status of the recipient |
+| Events, Recipient mailbox | Red for an error, yellow for a delay or a warning |
+| Delete: messages, recipients, verification | Yellow for a notification of Exchange; red for an external recipient; red / yellow / green for the verification |
+
+`Set-EmtSummaryParts` makes a summary line from the parts of the template (`{0}`, `{1:N1}`, ...).
+Only the number of errors and the warnings before the line are red.
 
 ### Languages
 
 `EMT.Core.ps1` loads `EMT.Strings.ps1`. Thus the window, the runspace and the tests have `T`.
 The runspace reads `$global:EmtSync.Lang`. Thus a language change also changes the log of the next operation.
 
-The window registers each control with a text key (`Set-EmtLoc`, `Set-EmtTip`).
 `Update-EmtLanguage` applies the texts again and shows the result views again.
 The views make all texts at show time (statuses, hints, status lines, findings). They do not keep texts of the old language.
 The audit file uses fixed English values. The language does not change them.
+
+### Classic window
+
+`ExchangeMessageTrail.Classic.ps1` is the earlier window (Windows Forms). It has the same functions and the same core.
+`EMT-Classic.cmd` starts it. It stays for one version as a fallback. A later version removes it.
 
 ## Code rules
 
@@ -232,6 +292,11 @@ The audit file uses fixed English values. The language does not change them.
 - Do not write `@($list)` for a `System.Collections.Generic.List[object]`: PowerShell 5.1 fails with
   "Argument types do not match". Use `$list.ToArray()`.
 - Do not use `Measure-Object -Sum` for a list that can be empty. Use `Get-EmtSum`.
-- Do not put user interface text in the code. Add a key to `Lang/en.lng` and `Lang/ru.lng`, and use `T 'key'`.
-  A unit test finds keys in the code that are not in `en.lng`.
-- Keep the core free of Windows Forms types.
+- Do not put user interface text in the code or in XAML. Add a key to `Lang/en.lng` and `Lang/ru.lng`,
+  and use `T 'key'` or `Tag="key"`. A unit test finds keys in the code and in `gui/*.xaml` that are not in `en.lng`.
+- Keep the core free of window types (WPF, Windows Forms).
+- Use only `DynamicResource` for the colors. A unit test finds resources that the theme or the styles do not have.
+- Give an element an `x:Name` before the script uses it. A unit test finds variables without an element.
+- A script block with `GetNewClosure()` does not see the functions of the script. Use it only for local variables
+  of a dialog (for example `$w.DialogResult = $true`).
+- Do not open a modal dialog in an automatic test. Make the window with `New-EmtConfirmWindow` and show it outside the screen.

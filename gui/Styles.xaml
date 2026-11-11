@@ -121,6 +121,51 @@
     <Setter Property="Margin" Value="0,0,6,0"/>
   </Style>
 
+  <!-- A dangerous action (a delete): the usual button with red text. -->
+  <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+    <Setter Property="Foreground" Value="{DynamicResource Text.Red}"/>
+  </Style>
+
+  <!-- ===== Check box ===== -->
+  <Style TargetType="CheckBox">
+    <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="CheckBox">
+          <StackPanel Orientation="Horizontal" Background="Transparent">
+            <Border x:Name="box" Width="16" Height="16" CornerRadius="3" BorderThickness="1"
+                    Background="{DynamicResource Bg.Input}" BorderBrush="{DynamicResource Fg.Disabled}" VerticalAlignment="Center">
+              <Path x:Name="mark" Data="M 3 8 L 6.5 11.5 L 13 4.5" Stroke="{DynamicResource Accent.Fg}" StrokeThickness="2"
+                    StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed"/>
+            </Border>
+            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+          </StackPanel>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource Fg.Dim}"/>
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource Border.Focus}"/>
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="box" Property="Background" Value="{DynamicResource Accent}"/>
+              <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+              <Setter TargetName="mark" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Fg.Disabled}"/>
+              <Setter Property="Cursor" Value="Arrow"/>
+              <Setter TargetName="box" Property="Opacity" Value="0.45"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <!-- ===== Text box ===== -->
   <Style TargetType="TextBox">
     <Setter Property="Background" Value="{DynamicResource Bg.Input}"/>

@@ -149,8 +149,8 @@ fmt.date = yyyy-MM-dd HH:mm
 # ---- Window: tooltips ----
 tip.senders = Full addresses, a part of an address or a name. Separator: comma or semicolon. EMT finds a partial address in the address book.
 tip.all = Search all mailboxes of the organization. Slow. Use it when the tracking log is incomplete.
-tip.today = Period: today 00:00 to tomorrow 00:00.
-tip.yesterday = Period: yesterday 00:00 to today 00:00.
+tip.today = Period: today 0:00 to 23:59.
+tip.yesterday = Period: yesterday 0:00 to 23:59.
 tip.timeout = The maximum wait time for a Compliance Search and for a delete.
 tip.cleanup = Remove old EMT_* and MC_* searches from the Exchange server.
 tip.export = Save all tabs as CSV files.
@@ -287,7 +287,7 @@ log.noMailboxRole = The mailbox check is not available: no Get-Mailbox and Get-I
 trcrit.group = Find messages in the tracking log
 crit.week = 7 days
 crit.findCopies = Find copies
-tip.week = Period: the last 7 days, to tomorrow 00:00.
+tip.week = Period: the last 7 days, from 0:00 six days ago to 23:59 today.
 tip.trRecipient = An address, a part of an address or a name of the recipient. Without a sender: all messages to this address.
 status.trace = Message search...
 log.traceStart = Message search: senders [{0}], recipient [{1}], subject [{2}], period {3} to {4}.
@@ -305,6 +305,7 @@ col.statusLine = Delivery status
 col.recipient = Recipient
 col.status = Status
 col.hint = Explanation
+col.folder = Folder
 col.detail = Server answer
 col.severity = Severity
 col.area = Check
@@ -385,3 +386,35 @@ find.note = If the message is not in the mailbox, the user can have deleted or m
 del.fromTrace = Data from the tracking log: message {0}.
 del.manual = Data typed by the user. The tracking log does not confirm it.
 log.delPrefilled = The tab "Delete" has the data of the message {0}. Click "Find copies".
+
+# ---- Window: theme and dialog buttons ----
+conn.theme = Theme:
+theme.Dark = Dark
+theme.Light = Light
+tip.theme = The colors of the window. The change applies at once.
+dlg.ok = OK
+dlg.yes = Yes
+dlg.no = No
+conn.timeoutBad = Type a number from 5 to 240.
+
+# ---- Delivery status: the causes of a DROP event ----
+st.Forwarded = Forwarded by the mailbox
+st.Suppressed = Not sent by an Exchange setting
+st.GroupBlocked = Rejected by the group
+line.Forwarded = forwarded: {0}
+line.Suppressed = not sent by a setting: {0}
+line.GroupBlocked = rejected by a group: {0}
+hint.grpExpanded = {0}: the group was expanded. The members get the message.
+hint.forwarded = {0}: the mailbox has forwarding. The message went to the forwarding address, not into the mailbox. Use the mailbox check.
+hint.autoForward = {0}: Exchange did not send the automatic forward. The remote domain does not permit it.
+hint.oof = {0}: Exchange did not send the automatic reply (Out of Office). The domain settings do not permit it.
+hint.ndrSuppressed = {0}: Exchange did not send the non-delivery report. The settings do not permit it.
+hint.duplicate = {0}: the recipient was in the message two times. Exchange removed the second copy.
+hint.grpBlocked = {0}: the group did not accept the message. The group has a restriction on the senders.
+hint.suppressed = {0}: Exchange did not send this copy. This is a setting, not an error.
+
+# ---- Search of copies: more items than messages; the time of the period ----
+sum.extraItems = CHECK: {0} mailboxes have more items than the tracking log has messages ({1}).
+confirm.extraItems = CHECK: some mailboxes have more items than the tracking log has messages ({0}): {1}. The query cannot use the message ID: it finds all items with this sender and this subject on these days, also other messages of the conversation and the copies in Recoverable Items. The delete removes all these items.
+tip.time = The time in the format of Windows, for example 14:30. The end of the period includes its minute: 23:59 is up to 23:59:59. The search of messages uses the exact time. The search of copies uses whole days.
+crit.timeBad = The time is not correct. Type the time in the format of Windows, for example 14:30.

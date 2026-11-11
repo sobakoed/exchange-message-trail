@@ -411,8 +411,9 @@ Describe 'Language files (Lang\*.lng)' {
             @(Test-EmtLanguageFile $f.FullName -AllowMissing) | Should -BeNullOrEmpty -Because $f.Name
         }
     }
-    It 'every text key used in the code is in en.lng' {
-        $files = @(Join-Path $root 'ExchangeMessageTrail.ps1'; Join-Path $root 'src\EMT.Core.ps1')
+    It 'every text key used in the code and in the window files is in en.lng' {
+        $files = @(Join-Path $root 'ExchangeMessageTrail.ps1'; Join-Path $root 'ExchangeMessageTrail.Classic.ps1'
+                   Join-Path $root 'src\EMT.Core.ps1')
         $used = foreach ($f in $files) {
             $src = [IO.File]::ReadAllText($f, [Text.Encoding]::UTF8)
             [regex]::Matches($src, "\bT\s+'([A-Za-z0-9_.]+)'") | ForEach-Object { $_.Groups[1].Value }
@@ -420,9 +421,16 @@ Describe 'Language files (Lang\*.lng)' {
             [regex]::Matches($src, "(?:New-EmtLabel|New-EmtButton|New-EmtCheckBox|Set-EmtLoc\s+\S+|Set-EmtTip\s+\S+)\s+'([A-Za-z0-9_.]+)'") |
                 ForEach-Object { $_.Groups[1].Value }
         }
-        # Keys made at run time: "tab.$k" and "kind.$($_.Kind)".
+        # The window files: Tag="key" of the texts.
+        foreach ($x in Get-ChildItem (Join-Path $root 'gui') -Filter '*.xaml') {
+            $xml = [IO.File]::ReadAllText($x.FullName, [Text.Encoding]::UTF8)
+            $used = @($used) + @([regex]::Matches($xml, '\bTag="([A-Za-z0-9_.]+)"') | ForEach-Object { $_.Groups[1].Value })
+        }
+        # Keys made at run time: "tab.$k", "trtab.$k", "kind.$($_.Kind)" and "theme.$t".
         $used = @($used) + @('messages', 'tracking', 'recipients', 'found', 'missing', 'check' | ForEach-Object { "tab.$_" }) +
-                @('Internal', 'External', 'Group', 'Other' | ForEach-Object { "kind.$_" })
+                @('recipients', 'events', 'mailbox' | ForEach-Object { "trtab.$_" }) +
+                @('Internal', 'External', 'Group', 'Other' | ForEach-Object { "kind.$_" }) +
+                @('Dark', 'Light' | ForEach-Object { "theme.$_" })
         $missing = @($used | Sort-Object -Unique | Where-Object { $_ -and -not $en.Texts.ContainsKey($_) })
         $missing | Should -BeNullOrEmpty
     }
@@ -1020,5 +1028,228 @@ Describe 'Mailbox check: findings' {
         Get-EmtRuleMatch -Rule ([pscustomobject]@{ BodyContainsWords = @('x') }) -Sender 'a@x.com' -Subject 'S' | Should -Be 'Unknown'
         Get-EmtRuleMatch -Rule ([pscustomobject]@{ SubjectContainsWords = @('rep') }) -Sender 'a@x.com' -Subject 'Report' | Should -Be 'Yes'
         Get-EmtRuleMatch -Rule ([pscustomobject]@{ FromAddressContainsWords = @('zzz') }) -Sender 'a@x.com' -Subject 'S' | Should -Be 'No'
+    }
+}
+
+Describe 'Window files (gui\*.xaml)' {
+    BeforeAll {
+        $root = Join-Path $PSScriptRoot '..'
+        $gui = Join-Path $root 'gui'
+        Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
+        function Read-Text([string] $Name) { [IO.File]::ReadAllText((Join-Path $gui $Name), [Text.Encoding]::UTF8) }
+        function Get-Keys([string] $Xml) { @([regex]::Matches($Xml, 'x:Key="([^"{]+)"') | ForEach-Object { $_.Groups[1].Value }) }
+    }
+    It 'reads each theme and the styles without errors' {
+        foreach ($n in 'Theme.Dark.xaml', 'Theme.Light.xaml', 'Styles.xaml') {
+            { [void][System.Windows.Markup.XamlReader]::Parse((Read-Text $n)) } | Should -Not -Throw -Because $n
+        }
+    }
+    It 'reads the main window without errors' -Skip:([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
+        { [void][System.Windows.Markup.XamlReader]::Parse((Read-Text 'MainWindow.xaml')) } | Should -Not -Throw
+    }
+    It 'has the same color keys in the dark and in the light theme' {
+        $dark = Get-Keys (Read-Text 'Theme.Dark.xaml') | Sort-Object
+        $light = Get-Keys (Read-Text 'Theme.Light.xaml') | Sort-Object
+        Compare-Object $dark $light | Should -BeNullOrEmpty
+    }
+    It 'uses only resources that the theme or the styles have' {
+        $known = @(Get-Keys (Read-Text 'Theme.Dark.xaml')) + @(Get-Keys (Read-Text 'Styles.xaml'))
+        foreach ($n in 'Styles.xaml', 'MainWindow.xaml') {
+            $used = @([regex]::Matches((Read-Text $n), '\{(?:Dynamic|Static)Resource ([A-Za-z0-9_.]+)\}') | ForEach-Object { $_.Groups[1].Value })
+            @($used | Sort-Object -Unique | Where-Object { $_ -notin $known }) | Should -BeNullOrEmpty -Because $n
+        }
+        # The script gives some resources by name (cell templates, styles of the dialog buttons).
+        $src = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8)
+        $byName = @([regex]::Matches($src, "FindResource\('([A-Za-z0-9_.]+)'\)|-OkStyle '([A-Za-z0-9_.]+)'") |
+                    ForEach-Object { if ($_.Groups[1].Value) { $_.Groups[1].Value } else { $_.Groups[2].Value } })
+        @($byName | Where-Object { $_ -notin $known }) | Should -BeNullOrEmpty
+    }
+    It 'has an element with x:Name for each control variable of the script' {
+        $names = @([regex]::Matches((Read-Text 'MainWindow.xaml'), 'x:Name="([A-Za-z0-9_]+)"') | ForEach-Object { $_.Groups[1].Value })
+        $src = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8)
+        $vars = @([regex]::Matches($src, '\$((?:tb|btn|chk|dt|grid|tab|lbl|cmb|pg|card|dot)[A-Z][A-Za-z0-9]*)') |
+                  ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        @($vars | Where-Object { $_ -notin $names }) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Trace: the causes of a DROP event (tested on Exchange 2019)' {
+    BeforeAll {
+        $t = [datetime]'2026-11-10 10:00'
+        function New-TEv($Id, $Kind, [string[]]$To, [string[]]$Status, $Time) {
+            [pscustomobject]@{ MessageId = $Id; EventId = $Kind; Recipients = $To; RecipientStatus = $Status
+                               Timestamp = $Time; ServerHostname = 'EXCH1'; Source = 'ROUTING'; Sender = 'a@x.com'; MessageSubject = 'S' }
+        }
+        # The server answer as the tracking log of Exchange 2019 writes it.
+        function New-Led([string] $Text) { "[{LED=250 2.1.5 $Text};{MSG=};{FQDN=};{IP=};{LRT=}]" }
+        function Get-OneStatus([string] $Detail, [string] $Kind = 'Internal') {
+            $r = @(Get-EmtDeliveryReport -Events @(New-TEv '<1>' 'DROP' @('r@x.com') @($Detail) $t) -Kinds @{ 'r@x.com' = $Kind })
+            if ($r.Count) { $r[0].Status } else { $null }
+        }
+    }
+    AfterEach { $global:EmtLang = 'ru' }
+
+    It 'gives Group for an expanded group, not Dropped' {
+        Get-OneStatus (New-Led 'RESOLVER.GRP.Expanded; distribution list expanded') 'Group' | Should -Be 'Group'
+        Get-OneStatus (New-Led 'RESOLVER.GRP.NotRedirected; not redirected') 'Group' | Should -Be 'Group'
+        Get-OneStatus (New-Led 'RESOLVER.GRP.Expanded; distribution list expanded') 'Other' | Should -Be 'Group'
+    }
+    It 'gives Forwarded for a mailbox with forwarding' {
+        Get-OneStatus (New-Led 'RESOLVER.FWD.Forwarded; recipient forwarded') | Should -Be 'Forwarded'
+    }
+    It 'gives Suppressed for a copy that Exchange does not send by a setting' {
+        foreach ($c in 'RESOLVER.MSGTYPE.AF; Suppressed Auto Forward', 'RESOLVER.OOF.IntToExt; suppressed',
+                       'RESOLVER.OOF.ExtToInt; suppressed', 'RESOLVER.MSGTYPE.NDR; suppressed NDR') {
+            Get-OneStatus (New-Led $c) | Should -Be 'Suppressed' -Because $c
+        }
+        Get-OneStatus '[Stage: OnPromotedEvent][Agent: Shared Mailbox Sent Item Agent]' | Should -Be 'Suppressed'
+    }
+    It 'gives GroupBlocked for a group that does not accept the message, and this is a non-delivery' {
+        Get-OneStatus (New-Led 'RESOLVER.GRP.BlockedMessage; blocked') 'Group' | Should -Be 'GroupBlocked'
+        'GroupBlocked' | Should -BeIn @(Get-EmtErrorStatuses)
+        'Suppressed' | Should -Not -BeIn @(Get-EmtErrorStatuses)
+        'Forwarded' | Should -Not -BeIn @(Get-EmtErrorStatuses)
+    }
+    It 'gives no status for a duplicate recipient: the other events give the status' {
+        Get-OneStatus (New-Led 'CAT.DuplicateRecipient; duplicate') | Should -BeNullOrEmpty
+        $ev = @(
+            New-TEv '<1>' 'DELIVER' @('r@x.com') @('') $t
+            New-TEv '<1>' 'DROP'    @('r@x.com') @((New-Led 'CAT.DuplicateRecipient; duplicate')) $t.AddSeconds(1)
+        )
+        @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'r@x.com' = 'Internal' })[0].Status | Should -Be 'Delivered'
+    }
+    It 'keeps Dropped for a DROP with an error code or without a cause' {
+        Get-OneStatus '550 5.7.1 dropped by a policy' | Should -Be 'Dropped'
+        Get-OneStatus '' | Should -Be 'Dropped'
+        @(Get-EmtDeliveryReport -Events @(New-TEv '<1>' 'POISONMESSAGE' @('r@x.com') @('') $t))[0].Status | Should -Be 'Dropped'
+    }
+    It 'shows the new statuses in the status line in the fixed order' {
+        $global:EmtLang = 'en'
+        $rows = @('Delivered', 'Suppressed', 'Forwarded', 'GroupBlocked' | ForEach-Object { [pscustomobject]@{ Status = $_ } })
+        Get-EmtMessageStatusLine $rows | Should -Be 'delivered: 1, forwarded: 1, rejected by a group: 1, not sent by a setting: 1'
+    }
+    It 'explains each cause in the column Explanation' {
+        $global:EmtLang = 'en'
+        Get-EmtStatusHint (New-Led 'RESOLVER.GRP.Expanded; x') | Should -Match '^2\.1\.5: the group was expanded'
+        Get-EmtStatusHint (New-Led 'RESOLVER.FWD.Forwarded; x') | Should -Match 'forwarding'
+        Get-EmtStatusHint (New-Led 'RESOLVER.MSGTYPE.AF; x') | Should -Match 'automatic forward'
+        Get-EmtStatusHint (New-Led 'RESOLVER.OOF.IntToExt; x') | Should -Match 'Out of Office'
+        Get-EmtStatusHint (New-Led 'RESOLVER.GRP.BlockedMessage; x') | Should -Match 'restriction'
+        Get-EmtStatusHint '[Stage: OnPromotedEvent][Agent: Shared Mailbox Sent Item Agent]' | Should -Match '^Exchange did not send'
+    }
+    It 'counts only the non-deliveries as errors of a message' {
+        $ev = @(
+            New-TEv '<1>' 'DELIVER' @('a1@x.com') @('') $t
+            New-TEv '<1>' 'DROP'    @('team@x.com') @((New-Led 'RESOLVER.GRP.Expanded; x')) $t
+            New-TEv '<1>' 'DROP'    @('fw@x.com') @((New-Led 'RESOLVER.FWD.Forwarded; x')) $t
+        )
+        $r = @(Get-EmtDeliveryReport -Events $ev -Kinds @{ 'a1@x.com' = 'Internal'; 'team@x.com' = 'Group'; 'fw@x.com' = 'Internal' })
+        @($r | Where-Object { $_.Status -in (Get-EmtErrorStatuses) }).Count | Should -Be 0
+    }
+}
+
+Describe 'Invoke-EmtTrace: messages with one recipient, more recipients and no report rows' {
+    BeforeAll {
+        $t = [datetime]'2026-11-10 10:00'
+        function New-TEv($Id, $Kind, [string[]]$To, $Time) {
+            [pscustomobject]@{ MessageId = $Id; EventId = $Kind; Recipients = $To; RecipientStatus = @($To | ForEach-Object { '' })
+                               Timestamp = $Time; ServerHostname = 'EXCH1'; Source = 'SMTP'; Sender = 'a@x.com'; MessageSubject = 'S' }
+        }
+        Mock Get-EmtCapabilities { [pscustomobject]@{ Tracking = $true } }
+        Mock Get-EmtAcceptedDomains { @('x.com') }
+        Mock Resolve-EmtRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } }) }
+        Mock Find-EmtTrackingEvents {
+            [pscustomobject]@{
+                Servers = @('EXCH1'); Errors = @()
+                Events  = @(
+                    New-TEv '<one>' 'RECEIVE' @('b@x.com') $t
+                    New-TEv '<one>' 'DELIVER' @('b@x.com') $t.AddSeconds(1)
+                    New-TEv '<two>' 'RECEIVE' @('b@x.com', 'c@x.com') $t
+                    New-TEv '<two>' 'DELIVER' @('b@x.com', 'c@x.com') $t.AddSeconds(1)
+                    # An event without recipients: the message has no report row.
+                    New-TEv '<none>' 'SUBMIT' @() $t
+                )
+            }
+        }
+    }
+    It 'keeps each message, also with one recipient (lesson from Exchange 2019: 61 IDs gave 59 messages)' {
+        $r = Invoke-EmtTrace -Criteria @{ Senders = @('a@x.com'); Start = $t.AddDays(-1); End = $t.AddDays(1) }
+        @($r.Messages).Count | Should -Be 3
+        (@($r.Messages) | Where-Object MessageId -eq '<one>').Recipients | Should -Be 1
+        (@($r.Messages) | Where-Object MessageId -eq '<two>').Recipients | Should -Be 2
+        (@($r.Messages) | Where-Object MessageId -eq '<none>').Recipients | Should -Be 0
+    }
+}
+
+Describe 'Get-EmtExtraItemMailboxes: more items than messages in the tracking log' {
+    It 'gives the mailboxes with more items than messages' {
+        $found = @(
+            [pscustomobject]@{ Mailbox = 'a@x.com'; Items = 2 }
+            [pscustomobject]@{ Mailbox = 'b@x.com'; Items = 1 }
+            [pscustomobject]@{ Mailbox = 'c@x.com'; Items = 4 }
+        )
+        @(Get-EmtExtraItemMailboxes -Found $found -Messages 1) | Should -Be @('a@x.com', 'c@x.com')
+        @(Get-EmtExtraItemMailboxes -Found $found -Messages 4) | Should -BeNullOrEmpty
+    }
+    It 'gives nothing when the tracking log has no message (the warning "not confirmed" tells it)' {
+        @(Get-EmtExtraItemMailboxes -Found @([pscustomobject]@{ Mailbox = 'a@x.com'; Items = 3 }) -Messages 0) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'The period of "Delete this message": one day of KQL' {
+    It 'gives one day from some minutes before the message to the next midnight (UTC+3)' {
+        $sent = [datetime]'2026-11-10 14:03'
+        $r = Get-EmtKqlDateRange -Start $sent.AddMinutes(-5) -End $sent.Date.AddDays(1) -UtcOffset ([timespan]'03:00')
+        $r.From | Should -Be '2026-11-10'
+        $r.To   | Should -Be '2026-11-11'
+    }
+    It 'gives two days for a message before 03:00 local time (UTC+3): the UTC day is the day before' {
+        $sent = [datetime]'2026-11-10 01:30'
+        $r = Get-EmtKqlDateRange -Start $sent.AddMinutes(-5) -End $sent.Date.AddDays(1) -UtcOffset ([timespan]'03:00')
+        $r.From | Should -Be '2026-11-09'
+        $r.To   | Should -Be '2026-11-11'
+    }
+}
+
+Describe 'Trace: the folder of a delivery (an inbox rule)' {
+    BeforeAll {
+        $t = [datetime]'2026-11-10 10:00'
+        function Get-Row($EventId, $Detail) {
+            $e = [pscustomobject]@{ MessageId = '<1>'; EventId = $EventId; Recipients = @('r@x.com'); RecipientStatus = @($Detail)
+                                    Timestamp = $t; ServerHostname = 'EXCH1'; Source = 'STOREDRIVER'; Sender = 'a@x.com'; MessageSubject = 'S' }
+            @(Get-EmtDeliveryReport -Events @($e) -Kinds @{ 'r@x.com' = 'Internal' })[0]
+        }
+    }
+    It 'gives the folder of a DELIVER event, and the server answer is empty' {
+        $r = Get-Row 'DELIVER' 'Projects'
+        $r.Folder | Should -Be 'Projects'
+        $r.Detail | Should -Be ''
+        (Get-Row 'DELIVER' 'ОМО').Folder | Should -Be 'ОМО'
+    }
+    It 'gives no folder for Inbox (empty status), for an SMTP answer and for other events' {
+        (Get-Row 'DELIVER' '').Folder | Should -Be ''
+        $r = Get-Row 'DELIVER' '250 2.0.0 OK'
+        $r.Folder | Should -Be ''
+        $r.Detail | Should -Be '250 2.0.0 OK'
+        (Get-Row 'SEND' 'Projects').Folder | Should -Be ''
+        Get-EmtDeliveryFolder -EventId 'DELIVER' -Detail '[{LED=250 2.1.5 RESOLVER.GRP.Expanded};{MSG=}]' | Should -Be ''
+    }
+}
+
+Describe 'Get-EmtPeriodEnd: the end of the period includes its minute' {
+    It 'gives the last moment of the minute' {
+        (Get-EmtPeriodEnd ([datetime]'2026-11-10 23:59')) | Should -Be ([datetime]'2026-11-10 23:59:59.9999999')
+        (Get-EmtPeriodEnd ([datetime]'2026-11-10 14:30:20')) | Should -Be ([datetime]'2026-11-10 14:30:59.9999999')
+    }
+    It 'includes a message in the last minute of the day' {
+        $end = Get-EmtPeriodEnd ([datetime]'2026-11-10 23:59')
+        ([datetime]'2026-11-10 23:59:30') -le $end | Should -BeTrue
+        ([datetime]'2026-11-11 00:00:00') -le $end | Should -BeFalse
+    }
+    It 'gives the same KQL days as the end at the next midnight' {
+        $a = Get-EmtKqlDateRange -Start ([datetime]'2026-11-10') -End (Get-EmtPeriodEnd ([datetime]'2026-11-10 23:59')) -UtcOffset 0
+        $b = Get-EmtKqlDateRange -Start ([datetime]'2026-11-10') -End ([datetime]'2026-11-11') -UtcOffset 0
+        $a.From | Should -Be $b.From
+        $a.To   | Should -Be $b.To
     }
 }

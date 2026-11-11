@@ -1,5 +1,69 @@
 # Changelog
 
+## 2.0.0 — 2026-11-11
+
+The new window: WPF with a dark and a light theme. The functions and the core are the same.
+
+**Window**
+
+- `ExchangeMessageTrail.ps1` is now a WPF window. The layout, the styles and the themes are in the new folder `gui`.
+  `EMT.cmd` starts it as before.
+- Two themes: **Dark** and **Light**. The list **Theme** is in the top line. The title bar and the calendar
+  have the colors of the theme. The new parameter `-Theme` sets the theme at the start.
+- The main buttons (**Find**, **Find copies**) are green with white text and a magnifier.
+  The delete buttons have red text.
+- The confirmation, the selection of an address, the cleanup and the messages are windows in the colors of the theme.
+  The confirmation of a hard delete has the typed word on its own line.
+
+**Tables**
+
+- The rows have no fill color. The left edge of each row shows the result: red = error, yellow = delay,
+  grey = in transit, blue = sent out, green = delivered.
+- The delivery status of a message shows each status with its color, for example
+  "● delivered: 8  ● external: 1". A message with more statuses shows all of them.
+- In the summary line, only the number of errors and the warnings are red.
+
+**Delivery status**
+
+- An event `DROP` is not always an error. EMT now reads the server answer (tested on Exchange 2019):
+  `RESOLVER.GRP.Expanded` and `RESOLVER.GRP.NotRedirected` give **Group: sent to the members**;
+  `RESOLVER.FWD.Forwarded` gives the new status **Forwarded by the mailbox** (yellow);
+  `RESOLVER.GRP.BlockedMessage` gives the new status **Rejected by the group** (an error);
+  other success codes (`RESOLVER.MSGTYPE.AF`, `RESOLVER.OOF.*`, `RESOLVER.MSGTYPE.NDR`, agent texts) give the new status
+  **Not sent by an Exchange setting** (grey); `CAT.DuplicateRecipient` gives no status.
+  Before, all these recipients were **Dropped** and counted as errors.
+- The column **Explanation** explains each of these causes.
+- The recipients table has the new column **Folder** before **Server answer**: the folder of the delivery when it is not Inbox
+  (usually an inbox rule). Before, the folder name was in the column **Server answer**. The CSV export has the column too.
+- The message search in the background runspace groups the recipients by message one time: a large result is faster.
+
+**Search of copies**
+
+- **Delete this message…** sets the period from 5 minutes before the message to 23:59 of its day.
+  Before, it used the full period of the message search: the query (KQL) found other messages of the conversation
+  with the same subject on other days.
+- A mailbox with more items than the tracking log has messages gives the orange warning **CHECK** in the summary line
+  and in the delete confirmation. The query cannot use the message ID: the delete removes all found items.
+  This warning makes the typed word necessary also for a soft delete.
+
+**Dates**
+
+- The calendar uses the names of the months and the week days of the interface language,
+  and the date format and the first day of the week of Windows.
+- The period has a time field next to each date (the format of Windows). The search of messages uses the exact time.
+- The end of the period includes its minute: 23:59 is up to 23:59:59. **Today**, **Yesterday** and **7 days** give 0:00 to 23:59
+  (before: 0:00 to 0:00 of the next day). Also in the classic window.
+
+**Other**
+
+- `settings.json` keeps the theme and the size of the WPF window (key `WpfWindow`). Other keys stay.
+- New language keys: `conn.theme`, `theme.Dark`, `theme.Light`, `tip.theme`, `dlg.ok`, `dlg.yes`, `dlg.no`, `conn.timeoutBad`.
+- New unit tests for the window files: the XAML files open, the themes have the same keys, the used resources exist,
+  each control variable has an element, each text key is in `en.lng`.
+- The classic window (Windows Forms) stays for one version as a fallback: `EMT-Classic.cmd` starts
+  `ExchangeMessageTrail.Classic.ps1`.
+- `docs/ARCHITECTURE.md` describes the WPF window and the new code rules.
+
 ## 1.0.4 — 2026-11-11
 
 - Message search: a large result shows quickly. 2000 messages with 6000 recipients show in 2.5 seconds.

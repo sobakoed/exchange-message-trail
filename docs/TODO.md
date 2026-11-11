@@ -24,3 +24,8 @@ Level 2 finds the folder of the message in the recipient mailbox by the message 
 
 - Find and remove the damaged search action on the server. The full list `Get-ComplianceSearchAction` fails.
 - Examine if `Stop-ComplianceSearch` makes a search complete faster.
+
+## Classic window
+
+- Remove `ExchangeMessageTrail.Classic.ps1` and `EMT-Classic.cmd` when the WPF window operates on the servers without problems.
+  Remove also the key `Window` (classic window size) from `settings.json` and the classic file from the language key test.

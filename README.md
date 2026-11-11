@@ -17,6 +17,7 @@ The window has two tabs:
 | **Delete** | Finds the copies of a message in the mailboxes. Deletes them. Verifies the result. | Seconds to minutes | Yes |
 
 The user interface is available in English and Russian. You can add a language: see [Languages](#languages).
+The window has a dark and a light theme.
 
 ## Contents
 
@@ -83,7 +84,7 @@ Close EMT and start it again after a role change.
 ## Install
 
 1. Copy the repository folder to the computer.
-2. Keep the folder structure. `ExchangeMessageTrail.ps1` needs the folders `src` and `Lang`.
+2. Keep the folder structure. `ExchangeMessageTrail.ps1` needs the folders `src`, `Lang` and `gui`.
 3. If you downloaded a ZIP file, unblock the files:
 
 ```powershell
@@ -96,6 +97,8 @@ Get-ChildItem -Recurse | Unblock-File
 |---|---|
 | `ExchangeMessageTrail.ps1` | The program: the window and the event handlers. Start it with `EMT.cmd`. |
 | `EMT.cmd` | The launcher. It starts PowerShell in STA mode with a hidden console. |
+| `gui/` | The window: the layout (`MainWindow.xaml`), the styles (`Styles.xaml`) and the themes (`Theme.Dark.xaml`, `Theme.Light.xaml`). |
+| `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms) with the same functions. A fallback for one version. See [Troubleshooting](#troubleshooting). |
 | `src/` | The program logic without the window. |
 | `src/EMT.Core.ps1` | The Exchange operations: message search, mailbox check, search of copies, delete, cleanup. |
 | `src/EMT.Strings.ps1` | The language loader and the check of language files. |
@@ -103,10 +106,10 @@ Get-ChildItem -Recurse | Unblock-File
 | `tests/` | The Pester unit tests. They do not need Exchange. See [docs/TESTING.md](docs/TESTING.md). |
 | `docs/` | The documents for developers, testers and translators. See [More documents](#more-documents). |
 | `CHANGELOG.md` | The list of changes for each version. |
-| `.gitattributes` | The line ends of the files in Git: CRLF for `.ps1`, `.cmd` and `.lng`, LF for `.md`. Windows PowerShell 5.1 needs CRLF. |
+| `.gitattributes` | The line ends of the files in Git: CRLF for `.ps1`, `.cmd`, `.lng` and `.xaml`, LF for `.md`. Windows PowerShell 5.1 needs CRLF. |
 | `.gitignore` | The files that Git does not keep: logs, audit files, CSV exports and test results. They contain mailbox addresses. |
 
-To use EMT, you need `ExchangeMessageTrail.ps1`, `EMT.cmd`, `src/` and `Lang/`.
+To use EMT, you need `ExchangeMessageTrail.ps1`, `EMT.cmd`, `src/`, `Lang/` and `gui/`.
 The other folders and files are for development.
 
 ## Start
@@ -131,6 +134,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
 |---|---|
 | `-Server` | The FQDN of the Exchange server. Optional. EMT keeps the last server name. On an Exchange server, the default value is the name of that server. |
 | `-Language` | The language code, for example `en` or `ru`. Optional. See [Languages](#languages). |
+| `-Theme` | `Dark` or `Light`. Optional. EMT keeps the last theme. The default theme is `Dark`. |
 
 **Connect:**
 
@@ -143,7 +147,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
 
 | Area | Controls |
 |---|---|
-| Top line | Server, **Connect**, operation timeout, language |
+| Top line | Server, **Connect**, operation timeout, language, theme |
 | Tab **Message search** | Criteria, **Find**, summary line, messages, details of the selected message, actions |
 | Tab **Delete** | Criteria, **Find copies**, source line, summary line, result tabs, delete actions |
 | Log | The messages of the session (common for both tabs) |
@@ -151,6 +155,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
 | Bottom right | The running operation: status, progress, **Cancel** |
 
 - Push Enter to start the search of the open tab.
+- **Theme:** Select **Dark** or **Light** in the list **Theme**. The change occurs immediately. EMT keeps the selection.
 - To stop an operation, click **Cancel**. EMT stops after the current step.
 - **Tables:** Drag a column border to change the width. Click a column header to sort.
   Drag a column header to move the column. Push Ctrl+C to copy the selected rows with headers.
@@ -169,6 +174,8 @@ The message search reads only the message tracking log. It does not open the mai
 5. In the list of messages, select a message.
 6. Examine the tab **Recipients**: the delivery status of each recipient.
 7. If a recipient did not get the message, read the columns **Explanation** and **Server answer**.
+   The column **Folder** shows the folder of the delivery when the message did not go to Inbox: usually an inbox rule moved it.
+   Exchange writes only the name of the folder, not the path. To see the rule, use the [mailbox check](#mailbox-check).
 8. Double-click a message to see the tab **Events**: all tracking events of the message.
 
 ### Criteria
@@ -178,7 +185,7 @@ The message search reads only the message tracking log. It does not open the mai
 | Senders | One or more addresses, parts of addresses or names. Separator: comma or semicolon. |
 | Recipient | One address, a part of an address or a name. A recipient alone is permitted: EMT shows all messages to this address. |
 | Subject contains | A part of the subject |
-| Period | Start and end: date and time. The tracking log uses the exact time. |
+| Period | Start and end: the date (calendar) and the time (the field next to the date, in the format of Windows, for example 14:30). The end includes its minute: 23:59 is up to 23:59:59. **Today**, **Yesterday** and **7 days** give 0:00 to 23:59. The tracking log uses the exact time. |
 | Message ID | The internet message ID |
 
 Set one criterion or more. A period alone is not permitted.
@@ -196,16 +203,21 @@ ANR compares the text with the alias, the display name, the first name, the last
 
 | Status | Color | Meaning |
 |---|---|---|
-| Delivered | Green | Exchange put the message in the mailbox (event `DELIVER`) |
-| Sent to an external system | Blue | Exchange sent the message to an external server (event `SEND`) |
+| Delivered | Green | Exchange put the message in the mailbox (event `DELIVER` or `DUPLICATEDELIVER`) |
+| Sent to an external system | Blue | Exchange sent the message to an external server (event `SEND` or `SENDEXTERNAL`). `SENDEXTERNAL` is a send through a Send connector, for example a hidden copy from a transport rule. |
+| Forwarded by the mailbox | Yellow | The mailbox has forwarding. The message went to the forwarding address, not into the mailbox (event `DROP` with `RESOLVER.FWD.Forwarded`). |
 | Delivery failed | Red | Exchange did not deliver the message (event `FAIL`) |
-| Dropped | Red | Exchange dropped the message (event `DROP` or `POISONMESSAGE`) |
+| Rejected by the group | Red | The group did not accept the message: the group has a restriction on the senders (event `DROP` with `RESOLVER.GRP.BlockedMessage`) |
+| Dropped | Red | Exchange dropped the message (event `DROP` with an error code or without a cause, or `POISONMESSAGE`) |
+| Not sent by an Exchange setting | Grey | Exchange did not send this copy by a setting, not by an error: an automatic forward, an automatic reply (Out of Office), a non-delivery report (event `DROP` with a success code `2.x.x`) |
 | Deferred | Yellow | The delivery is delayed. Exchange tries again (event `DEFER`). |
 | In transit | Grey | The message is between Exchange servers |
-| Group: sent to the members | Grey | The address is a group. The members get the message. |
+| Group: sent to the members | Grey | The address is a group. The members get the message. Exchange can also write the event `DROP` with `RESOLVER.GRP.Expanded` or `RESOLVER.GRP.NotRedirected`: this is not an error. |
 | No delivery data | Grey | The tracking log has only the receive event |
 
 The status of a recipient comes from the most important event. For example, `DELIVER` after `DEFER` gives **Delivered**.
+A `DROP` with `CAT.DuplicateRecipient` (the same recipient two times in the message) gives no status: the other events give it.
+Only **Delivery failed**, **Rejected by the group** and **Dropped** are errors in the summary line.
 
 The column **Explanation** explains the SMTP code in the column **Server answer**:
 
@@ -220,12 +232,21 @@ The column **Explanation** explains the SMTP code in the column **Server answer*
 | `5.7.x` | Rejected: no permission, a delivery restriction, a policy or a filter |
 | Other `5.x.x` / `4.x.x` | A permanent / temporary error |
 
-**Message list:**
+**Colors in the tables:** the rows have no fill color.
 
-| Row color | Meaning |
-|---|---|
-| Red | One or more recipients did not get the message |
-| Yellow | One or more deliveries are not complete |
+- The column **Delivery status** of a message shows each status with its color, for example
+  "● delivered: 8  ● external: 1  ● in transit: 1". The column **Status** of a recipient has one colored status.
+- The left edge of each row shows the result of the message or of the recipient:
+
+| Left edge | Message | Recipient |
+|---|---|---|
+| Red | One or more recipients did not get the message | Delivery failed, rejected by the group, dropped |
+| Yellow | A delivery is delayed, or a mailbox forwards the message | Deferred, forwarded by the mailbox |
+| Grey | One or more deliveries are not complete | In transit, group, not sent by an Exchange setting, no delivery data |
+| Blue | All recipients have the message, some are external | Sent to an external system |
+| Green | All recipients have the message | Delivered |
+
+- In the summary line, only the number of errors is red.
 
 The column **Note** marks a message that Exchange made, not a user: for example, an inbox rule or mailbox forwarding.
 
@@ -279,8 +300,9 @@ Use the tab **Delete** to find the copies of a message in the mailboxes and to d
 
 1. On the tab **Message search**, select the message.
 2. Click **Delete this message…**.
-3. EMT opens the tab **Delete** with the data of the message: sender, subject, message ID, period.
-   The green line says **Data from the tracking log**.
+3. EMT opens the tab **Delete** with the data of the message: sender, subject, message ID.
+   The period is from 5 minutes before the message to 23:59 of its day: the search of copies then uses one day,
+   not the full period of the message search. The green line says **Data from the tracking log**.
 4. Click **Find copies**.
 5. Examine the result tabs.
 6. Click **Delete (soft)** or **Delete permanently**.
@@ -323,8 +345,11 @@ The last two check boxes exclude each other.
   The base subject is the subject without `RE:`, `FW:`, `Fwd:`, `AW:`, `WG:`, `Отв:`, `Пересл:` and similar prefixes.
 - **Subject text:** EMT reads the subject as text. Square brackets, `*` and `?` have no special meaning.
 - **Recipient:** EMT adds the recipient to the KQL query. Without the recipient, `from:sender` finds all messages of the sender.
-- **Period:** Compliance Search uses full days only. The KQL range covers the local days and the UTC days.
+- **Period:** Compliance Search and `Search-Mailbox` use full days only. The KQL range covers the local days and the UTC days.
   Thus the range can be one day larger than the period.
+- **Message ID:** the query (KQL) cannot use the message ID. It finds all items with the sender, the subject and the days.
+  Thus a mailbox can have more items than the tracking log has messages: other messages of the conversation with the same subject,
+  or copies in Recoverable Items. Then the summary line shows the orange warning **CHECK**, and each delete needs the typed word.
 - **Tracking errors:** if a transport server does not answer, the mailbox list can be incomplete.
   The summary line is red and the delete is not available. Select **Search all mailboxes** and do the search again.
 
@@ -352,10 +377,10 @@ A soft delete after a quick search makes a Compliance Search first. This adds 1 
 |---|---|
 | Messages | One row for each message in the tracking log |
 | Tracking log | All tracking events |
-| Recipients | Internal mailboxes and external addresses. A red row is an external address. |
+| Recipients | Internal mailboxes and external addresses. A red left edge marks an external address. |
 | Found in mailboxes | Mailboxes with the message: count and size |
 | Not found | Searched mailboxes without the message (only when other mailboxes have it) |
-| Verification | The result of the last verification |
+| Verification | The result of the last verification. Left edge: red = the message is in the visible folders, yellow = the check failed, green = no copy in the visible folders. |
 
 **NOT CONFIRMED BY THE TRACKING LOG:** the search found items, but the tracking log has no message.
 The summary line is red. Each delete then needs the typed word `DELETE`.
@@ -423,7 +448,7 @@ EMT does not remove searches with other names. EMT does not touch a search that 
 |---|---|
 | `%USERPROFILE%\ExchangeMessageTrail\audit.csv` | One row for each message search, mailbox check, search of copies, delete, verification and cleanup |
 | `%USERPROFILE%\ExchangeMessageTrail\logs\EMT_<date>.log` | The full log of one session |
-| `%APPDATA%\ExchangeMessageTrail\settings.json` | The last server, the language, the options, the timeout and the window size and position. Senders and subject are not kept. |
+| `%APPDATA%\ExchangeMessageTrail\settings.json` | The last server, the language, the theme, the options, the timeout and the window size and position. Senders and subject are not kept. |
 
 At the first start, EMT copies `settings.json` and `audit.csv` of the older version (MailCleaner). The log shows the copy.
 
@@ -469,7 +494,8 @@ See [docs/TRANSLATING.md](docs/TRANSLATING.md).
 | Problem | Cause | Action |
 |---|---|---|
 | `Start Exchange Message Trail in STA mode` | PowerShell runs in MTA mode | Use `EMT.cmd` or the `-STA` parameter |
-| A window says "Exchange Message Trail could not start" | An error at the start. The window shows the cause and the line. | Correct the cause. If the files came in a ZIP file, unblock them (see [Install](#install)). |
+| A window says "Exchange Message Trail could not start" | An error at the start. The window shows the cause and the line. | Correct the cause. If the files came in a ZIP file, unblock them (see [Install](#install)). Make sure that the folder `gui` is present. |
+| The window does not operate correctly | A problem of the WPF window | Start `EMT-Classic.cmd`: the classic window has the same functions. Tell the developer about the problem. |
 | Kerberos error on connect | The computer is not in the domain, or the server name is not an FQDN | Use the FQDN. Use a domain computer. |
 | A button is disabled | Your account does not have the role | See [Permissions](#permissions) |
 | The message search finds nothing | Wrong period, wrong address, or the log data is too old | Read the hints in the log. Make the period larger. Make sure that the date is in the last 30 days. |

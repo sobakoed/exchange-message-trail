@@ -101,6 +101,16 @@ function Test-EmtFullAddress {
     [bool]($Text -match '^[^@\s]+@[^@\s]+\.[^@\s]+$')
 }
 
+function Get-EmtPeriodEnd {
+    <#
+        The end of the period includes its minute: 23:59 is 23:59:59.999, 14:30 is 14:30:59.999.
+        The time fields have minutes only. The tracking log uses the exact time: without this, a message
+        in the last minute of the period is not found.
+    #>
+    param([Parameter(Mandatory)] [datetime] $Value)
+    $m = New-Object DateTime($Value.Year, $Value.Month, $Value.Day, $Value.Hour, $Value.Minute, 0, $Value.Kind)
+    $m.AddMinutes(1).AddTicks(-1)
+}
 function Get-EmtKqlDateRange {
     <#
         KQL filters by whole days only. Returns From (inclusive) and To (exclusive) as yyyy-MM-dd.
@@ -304,6 +314,17 @@ function Get-EmtMissingMailboxes {
     @($Locations | ForEach-Object { $_.ToLowerInvariant() } | Where-Object { $_ -notin $found } | Sort-Object -Unique)
 }
 
+function Get-EmtExtraItemMailboxes {
+    <#
+        The mailboxes with more found items than messages in the tracking log.
+        The query (KQL) cannot use the message ID: it finds all items with the sender, the subject and the days.
+        More items can be other messages with the same subject, or copies in Recoverable Items.
+        No tracking messages (the result is not confirmed): no list, the warning "not confirmed" tells it.
+    #>
+    param([object[]] $Found = @(), [int] $Messages)
+    if ($Messages -le 0) { return }
+    @($Found | Where-Object { $_ -and [int](Get-EmtProp $_ 'Items') -gt $Messages } | ForEach-Object { [string]$_.Mailbox })
+}
 function Get-EmtLargeDeleteWarning {
     <# Text of the warning for a large delete. Empty text = no warning. #>
     param([int] $Items, [int] $Messages, [int] $MaxItems = 100, [int] $MaxMessages = 5)
@@ -1129,9 +1150,38 @@ function Get-EmtStatusRank {
     <# The order of the delivery statuses. A higher status replaces a lower one for the same recipient. #>
     param([string] $Status)
     switch ($Status) {
-        'Delivered' { 7 } 'External' { 6 } 'Failed' { 5 } 'Dropped' { 4 }
-        'Deferred'  { 3 } 'InTransit' { 2 } 'Group' { 1 } default { 0 }
+        'Delivered' { 10 } 'External' { 9 } 'Forwarded' { 8 } 'Failed' { 7 } 'GroupBlocked' { 6 } 'Dropped' { 5 }
+        'Suppressed' { 4 } 'Deferred' { 3 } 'InTransit' { 2 } 'Group' { 1 } default { 0 }
     }
+}
+
+function Get-EmtErrorStatuses {
+    <# The statuses that are a non-delivery: the recipient did not get the message, and Exchange did not plan it. #>
+    'Failed', 'Dropped', 'GroupBlocked'
+}
+
+function Get-EmtDropStatus {
+    <#
+        The status of a DROP event. The server answer tells the cause.
+        Exchange writes DROP also for usual steps with a success code (250 2.1.5):
+          RESOLVER.GRP.Expanded, RESOLVER.GRP.NotRedirected - a group: the members get the message (Group);
+          RESOLVER.FWD.Forwarded - the mailbox has forwarding: the message went to the forwarding address (Forwarded);
+          CAT.DuplicateRecipient - a second copy for the same recipient: no status, the other events give it ($null);
+          RESOLVER.GRP.BlockedMessage - the group did not accept the message (GroupBlocked, a non-delivery);
+          other 2.x.x codes and agent texts - Exchange did not send this copy by a setting (Suppressed):
+            RESOLVER.MSGTYPE.AF (automatic forward), RESOLVER.OOF.* (automatic reply), RESOLVER.MSGTYPE.NDR.
+        A DROP with a 4.x.x or 5.x.x code, or without a cause, is a lost message (Dropped).
+    #>
+    param([string] $Detail)
+    switch -Regex ($Detail) {
+        'RESOLVER\.GRP\.(Expanded|NotRedirected)' { return 'Group' }
+        'RESOLVER\.FWD\.Forwarded'                { return 'Forwarded' }
+        'CAT\.DuplicateRecipient'                  { return $null }
+        'RESOLVER\.GRP\.BlockedMessage'           { return 'GroupBlocked' }
+    }
+    if ($Detail -match '\b[45]\.\d{1,3}\.\d{1,3}\b') { return 'Dropped' }
+    if ($Detail -match '\b2\.\d{1,3}\.\d{1,3}\b' -or $Detail -match '\[Agent:') { return 'Suppressed' }
+    'Dropped'
 }
 
 function Get-EmtEventStatus {
@@ -1142,15 +1192,16 @@ function Get-EmtEventStatus {
         SENDEXTERNAL is a send through a Send connector to a server outside the organization
         (for example a hidden copy that a transport rule adds). This is the end of the delivery for Exchange.
         DUPLICATEDELIVER is a delivery of a second copy to a mailbox that has the message.
+        DROP: Get-EmtDropStatus reads the server answer ($Detail). Many DROP events are not errors.
     #>
-    param([string] $EventId, [string] $Kind)
+    param([string] $EventId, [string] $Kind, [string] $Detail)
     switch ($EventId.ToUpperInvariant()) {
         'DELIVER'          { 'Delivered' }
         'DUPLICATEDELIVER' { 'Delivered' }
         'SEND'          { if ($Kind -eq 'Internal') { 'InTransit' } else { 'External' } }
         'SENDEXTERNAL'  { 'External' }
         'FAIL'          { 'Failed' }
-        'DROP'          { 'Dropped' }
+        'DROP'          { Get-EmtDropStatus $Detail }
         'POISONMESSAGE' { 'Dropped' }
         'DEFER'         { 'Deferred' }
         'EXPAND'        { 'InTransit' }
@@ -1171,6 +1222,20 @@ function Get-EmtStatusHint {
     #>
     param([string] $Text)
     if (-not $Text) { return '' }
+    # The causes of a DROP event with a success code (Get-EmtDropStatus).
+    $code = if ($Text -match '\b([245]\.\d{1,3}\.\d{1,3})\b') { $Matches[1] } else { '' }
+    $special = switch -Regex ($Text) {
+        'RESOLVER\.GRP\.(Expanded|NotRedirected)' { 'hint.grpExpanded'; break }
+        'RESOLVER\.FWD\.Forwarded'                { 'hint.forwarded'; break }
+        'RESOLVER\.MSGTYPE\.AF'                   { 'hint.autoForward'; break }
+        'RESOLVER\.OOF\.'                         { 'hint.oof'; break }
+        'RESOLVER\.MSGTYPE\.NDR'                  { 'hint.ndrSuppressed'; break }
+        'CAT\.DuplicateRecipient'                  { 'hint.duplicate'; break }
+        'RESOLVER\.GRP\.BlockedMessage'           { 'hint.grpBlocked'; break }
+        '\[Agent:'                                 { 'hint.suppressed'; break }
+    }
+    # A text of an agent has no code: the hint starts without "code:".
+    if ($special) { return ((T $special $code) -replace '^:\s*', '') }
     if ($Text -notmatch '\b(?<c>[245])\.(?<s>\d{1,3})\.(?<d>\d{1,3})\b') { return '' }
     $code = "$($Matches['c']).$($Matches['s']).$($Matches['d'])"
     $key = switch -Regex ($code) {
@@ -1193,11 +1258,26 @@ function Get-EmtStatusHint {
     if ($key) { T $key $code } else { '' }
 }
 
+function Get-EmtDeliveryFolder {
+    <#
+        The folder of a delivery, or an empty text. Exchange writes the folder name in the recipient status
+        of a DELIVER event when the message goes to a folder other than Inbox (usually an inbox rule).
+        Only the name, not the path. An SMTP answer (a code x.y.z, "[{LED=...}]") is not a folder.
+    #>
+    param([string] $EventId, [string] $Detail)
+    if ($EventId.ToUpperInvariant() -notin 'DELIVER', 'DUPLICATEDELIVER') { return '' }
+    $d = ([string]$Detail).Trim()
+    if (-not $d) { return '' }
+    if ($d -match '\b[245]\.\d{1,3}\.\d{1,3}\b' -or $d.StartsWith('[{') -or $d -match '^\d{3}\b') { return '' }
+    $d
+}
+
 function Get-EmtDeliveryReport {
     <#
         One row for each message and recipient: the final delivery status from the tracking events.
         The status with the highest rank wins (DELIVER after DEFER = Delivered). With the same rank, the later event wins.
         Kinds: address -> Internal / External / Group / Other.
+        Folder: the folder of the delivery (Get-EmtDeliveryFolder). Then Detail is empty: the folder is not a server answer.
     #>
     param([object[]] $Events = @(), [hashtable] $Kinds = @{})
     $state = [ordered]@{}
@@ -1208,11 +1288,13 @@ function Get-EmtDeliveryReport {
             $a = ([string]$rcpts[$i]).Trim().ToLowerInvariant()
             if (-not $a) { continue }
             $kind = if ($Kinds.ContainsKey($a)) { [string]$Kinds[$a] } else { '' }
-            $code = Get-EmtEventStatus -EventId ([string]$e.EventId) -Kind $kind
+            $detail = if ($i -lt $stats.Count) { [string]$stats[$i] } else { '' }
+            $code = Get-EmtEventStatus -EventId ([string]$e.EventId) -Kind $kind -Detail $detail
             if (-not $code) { continue }
             $key = "$($e.MessageId)|$a"
             $old = if ($state.Contains($key)) { $state[$key] } else { $null }
             if ($old -and (Get-EmtStatusRank $code) -lt (Get-EmtStatusRank $old.Status)) { continue }
+            $folder = Get-EmtDeliveryFolder -EventId ([string]$e.EventId) -Detail $detail
             $state[$key] = [pscustomobject]@{
                 MessageId = [string]$e.MessageId
                 Recipient = $a
@@ -1221,7 +1303,8 @@ function Get-EmtDeliveryReport {
                 Time      = $e.Timestamp
                 Server    = [string](Get-EmtProp $e 'ServerHostname')
                 Event     = [string]$e.EventId
-                Detail    = $(if ($i -lt $stats.Count) { [string]$stats[$i] } else { '' })
+                Folder    = $folder
+                Detail    = $(if ($folder) { '' } else { $detail })
             }
         }
     }
@@ -1232,10 +1315,15 @@ function Get-EmtDeliveryReport {
     }
 }
 
+function Get-EmtStatusOrder {
+    <# The order of the statuses in the status line of a message. #>
+    'Delivered', 'External', 'Forwarded', 'Failed', 'GroupBlocked', 'Dropped', 'Suppressed', 'Deferred', 'InTransit', 'Group', 'Unknown'
+}
+
 function Get-EmtMessageStatusLine {
     <# The status line of one message from its report rows: "Delivered: 5, External: 1, Failed: 1". #>
     param([object[]] $Rows = @())
-    $order = 'Delivered', 'External', 'Failed', 'Dropped', 'Deferred', 'InTransit', 'Group', 'Unknown'
+    $order = Get-EmtStatusOrder
     $parts = foreach ($s in $order) {
         $n = @($Rows | Where-Object { $_.Status -eq $s }).Count
         if ($n) { T "line.$s" $n }
@@ -1281,21 +1369,29 @@ function Invoke-EmtTrace {
     foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
     $report = @(Get-EmtDeliveryReport -Events $events -Kinds $kinds)
 
+    # The recipients of each message in one pass: a search in the full report for each message is slow.
+    $byMsg = @{}
+    foreach ($r in $report) {
+        if (-not $byMsg.ContainsKey($r.MessageId)) { $byMsg[$r.MessageId] = New-Object System.Collections.ArrayList }
+        [void]$byMsg[$r.MessageId].Add($r)
+    }
+    $errorStatuses = @(Get-EmtErrorStatuses)
     $messages = @(foreach ($m in $summary) {
-        $rows = @($report | Where-Object MessageId -eq $m.MessageId)
+        # @( ) keeps an array: PowerShell makes one row of an array a single object, and it has no Count in strict mode.
+        $rows = @(if ($byMsg.ContainsKey($m.MessageId)) { $byMsg[$m.MessageId].ToArray() })
         [pscustomobject]@{
             Time            = $m.Time
             Sender          = $m.Sender
             Subject         = $m.Subject
             Recipients      = $rows.Count
-            Problems        = @($rows | Where-Object { $_.Status -in 'Failed', 'Dropped' }).Count
+            Problems        = @($rows | Where-Object { $_.Status -in $errorStatuses }).Count
             Pending         = @($rows | Where-Object { $_.Status -in 'Deferred', 'InTransit', 'Unknown' }).Count
             StatusLine      = Get-EmtMessageStatusLine $rows
             ServerGenerated = $m.ServerGenerated
             MessageId       = $m.MessageId
         }
     })
-    $failed = @($report | Where-Object { $_.Status -in 'Failed', 'Dropped' }).Count
+    $failed = @($report | Where-Object { $_.Status -in $errorStatuses }).Count
     Write-EmtLog (T 'log.traceDone' $messages.Count $report.Count $failed ([int]$timer.Elapsed.TotalSeconds)) 'Ok'
     Set-EmtProgress 100 (T 'progress.done')
     [pscustomobject]@{

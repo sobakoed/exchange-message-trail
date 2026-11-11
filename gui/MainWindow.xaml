@@ -1,7 +1,7 @@
 <!--
-    The main window of the WPF prototype.
+    The main window of Exchange Message Trail.
     Tag = the text key in the language files (Lang\*.lng). The script sets the texts from the keys.
-    A Tag that starts with "P:" is a text of the prototype. The script keeps these texts.
+    x:Name = the name of the script variable: x:Name="btnSoft" gives $btnSoft.
     The script adds the theme and the styles (Theme.*.xaml, Styles.xaml). Thus the styles use DynamicResource.
 -->
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -23,14 +23,16 @@
     <DockPanel Grid.Row="0" LastChildFill="False">
       <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
         <TextBlock Style="{DynamicResource Label}" Tag="conn.server"/>
-        <TextBox x:Name="tbServer" Width="260" Margin="0,0,8,0"/>
-        <Button x:Name="btnConnect" MinWidth="130" Tag="conn.connect"/>
+        <TextBox x:Name="tbServer" Width="210" Margin="0,0,8,0"/>
+        <Button x:Name="btnConnect" MinWidth="130" Tag="conn.connect" Margin="0,0,16,0"/>
+        <TextBlock Style="{DynamicResource Label}" Tag="conn.timeout"/>
+        <TextBox x:Name="tbTimeout" Width="48" HorizontalContentAlignment="Center" MaxLength="3"/>
       </StackPanel>
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
         <TextBlock Style="{DynamicResource Label}" Tag="conn.language"/>
-        <ComboBox x:Name="cmbLanguage" Width="120" Margin="0,0,16,0"/>
-        <TextBlock Style="{DynamicResource Label}" Tag="P:theme"/>
-        <ComboBox x:Name="cmbTheme" Width="120"/>
+        <ComboBox x:Name="cmbLanguage" Width="110" Margin="0,0,12,0"/>
+        <TextBlock Style="{DynamicResource Label}" Tag="conn.theme"/>
+        <ComboBox x:Name="cmbTheme" Width="110"/>
       </StackPanel>
     </DockPanel>
 
@@ -75,8 +77,10 @@
                           MinWidth="130" IsDefault="True" Tag="crit.find"/>
                   <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <DatePicker x:Name="dtTrStart"/>
+                    <TextBox x:Name="tbTrStartTime" Width="78" Margin="4,0,0,0" HorizontalContentAlignment="Center" MaxLength="8"/>
                     <TextBlock Text="—" Margin="6,0" Foreground="{DynamicResource Fg.Dim}"/>
-                    <DatePicker x:Name="dtTrEnd" Margin="0,0,12,0"/>
+                    <DatePicker x:Name="dtTrEnd"/>
+                    <TextBox x:Name="tbTrEndTime" Width="78" Margin="4,0,12,0" HorizontalContentAlignment="Center" MaxLength="8"/>
                     <Button x:Name="btnTrToday"     Style="{DynamicResource SmallButton}" Tag="crit.today"/>
                     <Button x:Name="btnTrYesterday" Style="{DynamicResource SmallButton}" Tag="crit.yesterday"/>
                     <Button x:Name="btnTrWeek"      Style="{DynamicResource SmallButton}" Tag="crit.week"/>
@@ -115,14 +119,98 @@
           </Grid>
 
           <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0">
-            <Button x:Name="btnTrCheck" Tag="act.checkMailbox"/>
+            <Button x:Name="btnTrCheck" Tag="act.checkMailbox" Margin="0,0,8,0"/>
+            <Button x:Name="btnTrDelete" Style="{DynamicResource DangerButton}" Tag="act.deleteThis" Margin="0,0,24,0"/>
+            <Button x:Name="btnTrExport" Tag="act.export"/>
           </StackPanel>
         </Grid>
       </TabItem>
 
       <TabItem x:Name="pgDelete" Tag="main.delete">
-        <TextBlock Tag="P:noDelete" HorizontalAlignment="Center" Foreground="{DynamicResource Fg.Dim}"
-                   TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+        <Grid Margin="0,10,0,0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <!-- The same order as on the tab "Message search": who, what, content, when. The last row: options and Find copies. -->
+          <Border x:Name="cardDel" Grid.Row="0" Style="{DynamicResource Card}">
+            <StackPanel>
+              <TextBlock Tag="crit.group" FontWeight="SemiBold" Margin="0,0,0,8"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl1"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl2"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Style="{DynamicResource Label}" Tag="crit.senders"/>
+                <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbSenders" Margin="0,3,20,3"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{DynamicResource Label}" Tag="crit.recipient"/>
+                <TextBox   Grid.Row="0" Grid.Column="3" x:Name="tbRecipient" Margin="0,3,0,3"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Style="{DynamicResource Label}" Tag="crit.subject"/>
+                <TextBox   Grid.Row="1" Grid.Column="1" x:Name="tbSubject" Margin="0,3,20,3"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{DynamicResource Label}" Tag="crit.messageId"/>
+                <TextBox   Grid.Row="1" Grid.Column="3" x:Name="tbMessageId" Margin="0,3,0,3"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Style="{DynamicResource Label}" Tag="crit.attachment"/>
+                <TextBox   Grid.Row="2" Grid.Column="1" x:Name="tbAttachment" Margin="0,3,20,3"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{DynamicResource Label}" Tag="crit.keywords"/>
+                <TextBox   Grid.Row="2" Grid.Column="3" x:Name="tbKeywords" Margin="0,3,0,3"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Style="{DynamicResource Label}" Tag="crit.period"/>
+                <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,6,0,0">
+                  <DatePicker x:Name="dtStart"/>
+                  <TextBox x:Name="tbStartTime" Width="78" Margin="4,0,0,0" HorizontalContentAlignment="Center" MaxLength="8"/>
+                  <TextBlock Text="—" Margin="6,0" Foreground="{DynamicResource Fg.Dim}"/>
+                  <DatePicker x:Name="dtEnd"/>
+                  <TextBox x:Name="tbEndTime" Width="78" Margin="4,0,12,0" HorizontalContentAlignment="Center" MaxLength="8"/>
+                  <Button x:Name="btnToday"     Style="{DynamicResource SmallButton}" Tag="crit.today"/>
+                  <Button x:Name="btnYesterday" Style="{DynamicResource SmallButton}" Tag="crit.yesterday"/>
+                  <Button x:Name="btnWeek"      Style="{DynamicResource SmallButton}" Tag="crit.week"/>
+                </StackPanel>
+                <DockPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,0" LastChildFill="False">
+                  <Button x:Name="btnSearch" DockPanel.Dock="Right" Style="{DynamicResource AccentButton}"
+                          MinWidth="130" Tag="crit.findCopies"/>
+                  <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <CheckBox x:Name="chkForwards" Tag="crit.forwards" IsChecked="True" Margin="0,0,18,0"/>
+                    <CheckBox x:Name="chkOnly" Tag="crit.only" IsEnabled="False" Margin="0,0,18,0"/>
+                    <CheckBox x:Name="chkAll" Tag="crit.all"/>
+                  </StackPanel>
+                </DockPanel>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- Where the criteria come from: a found message (confirmed by the tracking log) or the user. -->
+          <TextBlock x:Name="lblDelSource" Grid.Row="1" Margin="4,10,4,0" TextTrimming="CharacterEllipsis"/>
+          <TextBlock x:Name="lblSummary" Grid.Row="2" Style="{DynamicResource Summary}"/>
+
+          <TabControl x:Name="tabs" Grid.Row="3">
+            <TabItem x:Name="tabMessages"   Tag="tab.messages"><DataGrid x:Name="gridMessages" Margin="0,6,0,0"/></TabItem>
+            <TabItem x:Name="tabTracking"   Tag="tab.tracking"><DataGrid x:Name="gridTracking" Margin="0,6,0,0"/></TabItem>
+            <TabItem x:Name="tabRecipients" Tag="tab.recipients"><DataGrid x:Name="gridRecipients" Margin="0,6,0,0"/></TabItem>
+            <TabItem x:Name="tabFound"      Tag="tab.found"><DataGrid x:Name="gridFound" Margin="0,6,0,0"/></TabItem>
+            <TabItem x:Name="tabMissing"    Tag="tab.missing"><DataGrid x:Name="gridMissing" Margin="0,6,0,0"/></TabItem>
+            <TabItem x:Name="tabCheck"      Tag="tab.check"><DataGrid x:Name="gridCheck" Margin="0,6,0,0"/></TabItem>
+          </TabControl>
+
+          <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+            <Button x:Name="btnSoft"    Tag="act.soft" Margin="0,0,8,0"/>
+            <Button x:Name="btnHard"    Style="{DynamicResource DangerButton}" Tag="act.hard" Margin="0,0,8,0"/>
+            <Button x:Name="btnVerify"  Tag="act.verify" Margin="0,0,24,0"/>
+            <Button x:Name="btnExport"  Tag="act.export" Margin="0,0,8,0"/>
+            <Button x:Name="btnCleanup" Tag="conn.cleanup"/>
+          </StackPanel>
+        </Grid>
       </TabItem>
     </TabControl>
 

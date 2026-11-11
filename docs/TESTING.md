@@ -4,7 +4,8 @@ This document gives the unit tests and the test procedure on Exchange.
 
 ## Unit tests
 
-The unit tests examine `src/EMT.Core.ps1`, `src/EMT.Strings.ps1` and the language files. They do not need Exchange.
+The unit tests examine `src/EMT.Core.ps1`, `src/EMT.Strings.ps1`, the language files and the window files (`gui/*.xaml`).
+They do not need Exchange.
 Stub functions and Pester mocks replace the Exchange cmdlets.
 
 **Requirements:** Pester 5.0 or later.
@@ -26,6 +27,14 @@ Invoke-Pester -Path .\tests -Output Detailed
 ```
 
 All tests must pass.
+
+The tests of the window files examine these items:
+
+- each XAML file opens without errors;
+- the dark and the light theme have the same color keys;
+- the styles and the window use only colors and styles that exist;
+- each control variable of the script has an element with `x:Name`;
+- each text key (`Tag="key"`) is in `en.lng`.
 
 ## Syntax check
 
@@ -75,17 +84,20 @@ The procedure uses the English interface. Select **English** in the language lis
 7. Select the message.
 8. Make sure that the tab **Recipients** shows `test2` and `test3` with the status **Delivered** (green).
 9. Make sure that the external address has the status **Sent to an external system** (blue).
-10. Open the tab **Events**.
-11. Make sure that the tab shows the events of the message in time order.
+10. Make sure that the left edge of the message row is blue: all recipients have the message, one is external.
+11. Open the tab **Events**.
+12. Make sure that the tab shows the events of the message in time order.
 
 ### Message search: failed message
 
 1. In **Subject contains**, type the subject of the second message.
 2. Click **Find**.
 3. Select the message.
-4. Make sure that the recipient row is red.
-5. Make sure that **Explanation** tells that the address does not exist (code `5.1.1`).
-6. Make sure that **Server answer** shows the text of the server.
+4. Make sure that the left edge of the recipient row is red, and the status is red.
+5. Make sure that the left edge of the message row is red.
+6. In the summary line, make sure that only the part "Errors: 1" is red.
+7. Make sure that **Explanation** tells that the address does not exist (code `5.1.1`).
+8. Make sure that **Server answer** shows the text of the server.
 
 ### Message search: no result
 
@@ -140,13 +152,22 @@ The procedure uses the English interface. Select **English** in the language lis
 2. Select the message.
 3. Click **Delete this message…**.
 4. Make sure that the tab **Delete** opens.
-5. Make sure that the criteria contain the sender, the subject, the message ID and the period of the message.
+5. Make sure that the criteria contain the sender, the subject and the message ID of the message.
+   Make sure that the period starts 5 minutes before the message and ends at 23:59 of the same day.
 6. Make sure that the source line is green and starts with "Data from the tracking log".
 7. Click **Find copies**.
 8. Make sure that the tab **Found in mailboxes** shows `test1`, `test2` and `test3`.
+   If a mailbox has more items than the tracking log has messages, make sure that the summary line shows the orange warning **CHECK**.
 9. Change one letter in **Subject contains**.
 10. Make sure that the result is cleared.
 11. Make sure that the source line is orange and starts with "Data typed by the user".
+
+### Time of the period
+
+1. On the tab **Message search**, type a time in the start time field, for example `9:30`.
+2. Click **Find**. Make sure that the log shows the period with this time.
+3. Type `25:99` in a time field. Click another field.
+4. Make sure that the log shows the warning about the time, and the field shows the last correct time.
 
 ### Search speed
 
@@ -201,6 +222,11 @@ The procedure uses the English interface. Select **English** in the language lis
 8. Make sure that all text fields of the criteria have the same width.
 9. Open the other tab. Make sure that the fields have the same width and position.
 10. Drag the border of a table row. Make sure that the row height does not change.
+11. Select **Light** in the list **Theme**. Make sure that all colors change at once, also in the tables and in the log.
+12. Select **Dark** again. Make sure that the title bar of the window is dark.
+13. Click the calendar button of a date field. Make sure that the calendar is in the colors of the theme.
+14. Make sure that the date fields use the date format of Windows (**Settings > Time & language > Region**).
+15. Make sure that the first day of the week in the calendar is the first day of the week of Windows.
 
 ### Start and close
 
@@ -212,6 +238,14 @@ The procedure uses the English interface. Select **English** in the language lis
 6. Close EMT.
 7. Start EMT again. Make sure that the window has the same size and position.
 8. Maximize the window. Close EMT. Start EMT again. Make sure that the window is maximized.
+
+### Classic window
+
+1. Start `EMT-Classic.cmd`.
+2. Make sure that the classic window (Windows Forms) opens.
+3. Connect to the server. Make sure that **Find** on the tab **Message search** operates.
+4. Close the classic window.
+5. Start `EMT.cmd`. Make sure that the theme and the window size are the same as before.
 
 ### Cancel
 
