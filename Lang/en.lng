@@ -287,9 +287,11 @@ log.noMailboxRole = The mailbox check is not available: no Get-Mailbox and Get-I
 trcrit.group = Find messages in the tracking log
 crit.week = 7 days
 crit.days14 = 14 days
+crit.show = Show criteria
 crit.findCopies = Find copies
 tip.week = Period: the last 7 days, from 0:00 six days ago to 23:59 today.
 tip.days14 = Period: the last 14 days, from 0:00 thirteen days ago to 23:59 today.
+tip.show = The window is small: the criteria are hidden to give space to the result. Click to show the criteria.
 tip.trRecipient = An address, a part of an address or a name of the recipient. Without a sender: all messages to this address.
 status.trace = Message search...
 log.traceStart = Message search: senders [{0}], recipient [{1}], subject [{2}], period {3} to {4}.
@@ -431,3 +433,7 @@ dlg.exportPartial = The data is complete for {0} of {1} messages. Load the data 
 # ---- Help ----
 tip.help = Help (F1): the user guide opens in the browser.
 help.missing = The help file is not found: {0}
+
+# ---- Shortcut ----
+log.shortcutMade = The shortcut with the EMT icon: {0}. Copy it to the desktop or to the Start menu if necessary.
+log.shortcutFailed = The shortcut was not made: {0}

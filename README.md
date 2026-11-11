@@ -103,9 +103,9 @@ Get-ChildItem -Recurse | Unblock-File
 | `EMT.cmd` | The launcher. It starts PowerShell in STA mode with a hidden console. |
 | `gui/` | The window: the layout (`MainWindow.xaml`), the styles (`Styles.xaml`) the themes (`Theme.Dark.xaml`, `Theme.Light.xaml`) and the icon (`emt.ico`). |
 | `help/` | The user guide: `en.html`, `ru.html`, the style, the script and the screenshots (`img/en`, `img/ru`). See [User guide](#user-guide). |
-| `tools/` | `Make-HelpScreenshots.ps1`: makes the screenshots of the user guide again. |
+| `tools/` | Only for the development: `Make-HelpScreenshots.ps1` makes the screenshots of the user guide again. A server does not need this folder. |
 | `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms) with the same functions. A fallback for one version. See [Troubleshooting](#troubleshooting). |
-| `src/` | The program logic without the window. |
+| `src/` | The program logic without the window (`EMT.Core.ps1`). `New-EmtShortcut.ps1` makes a shortcut with the EMT icon. |
 | `src/EMT.Core.ps1` | The Exchange operations: message search, mailbox check, search of copies, delete, cleanup. |
 | `src/EMT.Strings.ps1` | The language loader and the check of language files. |
 | `Lang/` | The user interface texts. One file for each language: `en.lng`, `ru.lng`. See [Languages](#languages). |
@@ -135,7 +135,15 @@ Use one of these procedures.
 
 1. Double-click `EMT.cmd`.
 
-**Procedure B: PowerShell**
+**Procedure B: the shortcut with the EMT icon**
+
+1. Double-click `Exchange Message Trail` in the EMT folder.
+
+EMT makes this shortcut in its folder at the first start. If you move the folder, EMT makes the shortcut again at the next start.
+Copy the shortcut to the desktop or to the Start menu if necessary.
+The shortcut opens `EMT.cmd`. It has no PowerShell command line: an antivirus can delete a shortcut that starts a hidden PowerShell.
+
+**Procedure C: PowerShell**
 
 1. Open Windows PowerShell.
 2. Go to the EMT folder.

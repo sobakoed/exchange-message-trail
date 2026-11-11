@@ -4,3 +4,5 @@ audit.csv
 *.csv
 testResults.xml
 .vscode/
+# The shortcut that EMT makes in its folder: it has the paths of this computer.
+/Exchange Message Trail.lnk

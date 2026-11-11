@@ -51,8 +51,13 @@
           <!-- Criteria. Row 0: who. Row 1: what. Row 2: when and Find. -->
           <Border x:Name="cardTr" Grid.Row="0" Style="{DynamicResource Card}">
             <StackPanel>
-              <TextBlock Tag="trcrit.group" FontWeight="SemiBold" Margin="0,0,0,8"/>
-              <Grid>
+              <!-- A small window: after a search, one line with the criteria replaces the card. -->
+              <DockPanel x:Name="trCompact" Visibility="Collapsed">
+                <Button x:Name="btnTrShowCriteria" DockPanel.Dock="Right" Style="{DynamicResource SmallButton}" Margin="12,0,0,0" Tag="crit.show"/>
+                <TextBlock x:Name="lblTrCompact" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+              </DockPanel>
+              <TextBlock x:Name="lblTrTitle" Tag="trcrit.group" FontWeight="SemiBold" Margin="0,0,0,8"/>
+              <Grid x:Name="trCriteria">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl1"/>
                   <ColumnDefinition Width="*"/>
@@ -141,8 +146,12 @@
           <!-- The same order as on the tab "Message search": who, what, content, when. The last row: options and Find copies. -->
           <Border x:Name="cardDel" Grid.Row="0" Style="{DynamicResource Card}">
             <StackPanel>
-              <TextBlock Tag="crit.group" FontWeight="SemiBold" Margin="0,0,0,8"/>
-              <Grid>
+              <DockPanel x:Name="delCompact" Visibility="Collapsed">
+                <Button x:Name="btnDelShowCriteria" DockPanel.Dock="Right" Style="{DynamicResource SmallButton}" Margin="12,0,0,0" Tag="crit.show"/>
+                <TextBlock x:Name="lblDelCompact" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+              </DockPanel>
+              <TextBlock x:Name="lblDelTitle" Tag="crit.group" FontWeight="SemiBold" Margin="0,0,0,8"/>
+              <Grid x:Name="delCriteria">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl1"/>
                   <ColumnDefinition Width="*"/>

@@ -1081,6 +1081,21 @@ Describe 'Window files (gui\*.xaml)' {
         Add-Type -AssemblyName System.Drawing
         { (New-Object System.Drawing.Icon($ico, 16, 16)).Dispose() } | Should -Not -Throw
     }
+    It 'makes a shortcut with the EMT icon and the application ID of the window' {
+        $dir = Join-Path $env:TEMP ('EMT-lnk-' + [guid]::NewGuid().ToString('n'))
+        try {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'src\New-EmtShortcut.ps1') -Path $dir | Out-Null
+            $lnk = Join-Path $dir 'Exchange Message Trail.lnk'
+            Test-Path $lnk | Should -BeTrue
+            $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+            # The shortcut opens EMT.cmd: no PowerShell command line (an antivirus can delete such a shortcut).
+            $sc.TargetPath | Should -Be ([IO.Path]::GetFullPath((Join-Path $root 'EMT.cmd')))
+            $sc.Arguments | Should -BeNullOrEmpty
+            $sc.IconLocation | Should -Match 'gui\\emt\.ico'
+            $item = (New-Object -ComObject Shell.Application).NameSpace($dir).ParseName('Exchange Message Trail.lnk')
+            $item.ExtendedProperty('System.AppUserModel.ID') | Should -Be 'ExchangeMessageTrail'
+        } finally { Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
     It 'gives the EMT icon and the application ID to both windows' {
         foreach ($f in 'ExchangeMessageTrail.ps1', 'ExchangeMessageTrail.Classic.ps1') {
             $src = [IO.File]::ReadAllText((Join-Path $root $f), [Text.Encoding]::UTF8)

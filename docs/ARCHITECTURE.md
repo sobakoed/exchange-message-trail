@@ -12,6 +12,7 @@ This document gives the structure of the Exchange Message Trail (EMT) code.
 | `gui/Theme.Dark.xaml`, `gui/Theme.Light.xaml` | The colors of the dark and the light theme |
 | `src/EMT.Core.ps1` | The logic without the user interface |
 | `src/EMT.Strings.ps1` | The language loader, the function `T` and the language file check |
+| `src/New-EmtShortcut.ps1` | Makes the shortcut with the EMT icon and the application ID of the window in the EMT folder. The shortcut opens `EMT.cmd`. EMT makes it at the first start and after a move of the folder (the settings key `ShortcutFolder`). A removed shortcut stays removed. |
 | `Lang/*.lng` | The user interface texts, one file for each language |
 | `EMT.cmd` | The launcher (STA mode, hidden console) |
 | `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms): a fallback for one version |

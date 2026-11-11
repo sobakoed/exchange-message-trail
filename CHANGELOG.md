@@ -65,10 +65,12 @@ The new window: WPF with a dark and a light theme. The functions and the core ar
 - The button **14 days** for the period on the two tabs.
 - The button of the current period is green, also after a search. A manual change of the period removes the mark.
 - Small screens (HD 1280 x 720, Full HD with the scale 150 %): the window fits in the screen. If the default size does not fit, the window opens maximized. The log is smaller.
+  After a search, one line with the criteria replaces the criteria card. **Show criteria** shows the card again.
 - The log shows a horizontal scroll bar only for a line that is longer than the log. Before, the bar was always there and scrolled to an empty area.
 - A narrower window does not cut the column headers. The grid scrolls.
 - The screenshots of the user guide show the full window: the title bar and the frame too.
 - The EMT icon in the title bar, on the taskbar and in the user guide. EMT is a separate taskbar button, not PowerShell.
+- The shortcut `Exchange Message Trail` with the EMT icon in the EMT folder. The shortcut opens `EMT.cmd`. EMT makes it at the first start and after a move of the folder. A removed shortcut stays removed (for example, removed by an antivirus).
 - `tools/Make-HelpScreenshots.ps1` makes the screenshots of the guide with example data. No modal window opens.
 - A unit test compares the version of the guide with this file.
 

@@ -113,6 +113,12 @@ function SnapWindow($Win, [string] $Name) {
     Write-Host "  $Name.png $($bmp.Width)x$($bmp.Height)"
     $bmp.Dispose()
 }
+# The example day is 2026-11-10. "Today" is always 2026-11-11 for the mark of the quick period:
+# the screenshots show the same mark ("Yesterday") on each day.
+$script:RealQuickPeriod = ${function:Get-EmtQuickPeriod}
+function Get-EmtQuickPeriod { param($Start, $End, $Now) & $script:RealQuickPeriod -Start $Start -End $End -Now ([datetime]'2026-11-11 09:31') }
+foreach ($set in $script:PeriodSets) { $set.Mark = $null }
+Update-EmtPeriodMarks
 function Show-EmtMessage { param($Text, $Title, $Kind) $true }
 function Show-EmtConfirm { param($Title, $Text, $OkText, $RequireWord) $true }
 function Export-EmtSets { param($Stem, $Sets) }

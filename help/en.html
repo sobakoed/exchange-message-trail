@@ -111,6 +111,12 @@
     <li>Double-click <code>EMT.cmd</code>.</li>
   </ol>
   <p>The window opens in front of the other windows. The PowerShell console stays hidden.</p>
+  <h3 id="shortcut">Shortcut</h3>
+  <p>The shortcut <code>Exchange Message Trail</code> with the EMT icon is in the EMT folder. EMT makes it at the first start.
+  If you move the folder, EMT makes the shortcut again at the next start. Copy the shortcut to the desktop or to the Start menu if necessary.</p>
+  <p>The shortcut opens <code>EMT.cmd</code>. If the shortcut is removed (by you or by an antivirus), EMT does not make it again in the same folder.
+  To make it again, run this command in the EMT folder:</p>
+  <pre><code>powershell.exe -ExecutionPolicy Bypass -File .\src\New-EmtShortcut.ps1</code></pre>
   <p>To start EMT from PowerShell, type this command:</p>
   <pre><code>powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Server exch01.contoso.com</code></pre>
   <table>
@@ -227,6 +233,7 @@
     <li>The end includes its minute: <code>23:59</code> is up to 23:59:59.</li>
     <li><span class="btn">Today</span>, <span class="btn">Yesterday</span>, <span class="btn">7 days</span> and <span class="btn">14 days</span> set the period from 0:00 to 23:59.</li>
     <li>The button of the current period is green. A manual change of the period removes the green mark.</li>
+    <li>A small screen: after a search, one line with the criteria replaces the criteria. This gives more space to the result. Click <span class="btn">Show criteria</span> to change the criteria. The tab <b>Delete</b> operates in the same way.</li>
     <li>A wrong time goes back to the last correct time. The log shows a warning.</li>
     <li>The date format and the first day of the week come from the regional settings of Windows.</li>
   </ul>

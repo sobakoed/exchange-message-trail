@@ -82,7 +82,9 @@ $GuiDir = Join-Path $PSScriptRoot 'gui'
 
 # The EMT icon: the title bar of all windows and the taskbar. A missing file gives the PowerShell icon.
 $script:EmtIcon = $null
-try { $script:EmtIcon = [System.Windows.Media.Imaging.BitmapFrame]::Create((New-Object Uri (Join-Path $GuiDir 'emt.ico'))) } catch { }
+# OnLoad: the file is read at once and stays free (an update of the folder can replace it while EMT runs).
+try { $script:EmtIcon = [System.Windows.Media.Imaging.BitmapFrame]::Create((New-Object Uri (Join-Path $GuiDir 'emt.ico')),
+          [System.Windows.Media.Imaging.BitmapCreateOptions]::None, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad) } catch { }
 
 #region ---------- Paths, settings, shared state ----------
 
@@ -119,6 +121,7 @@ $script:Caps            = $null      # capabilities after Connect
 $script:Trace           = $null      # result of the last message search
 $script:MailboxCheck    = $null      # result of the last mailbox check (MessageId, Mailbox, Findings)
 $script:Result          = $null      # result of the last search on the tab "Delete"
+$script:Compact         = $null      # the criteria cards of a small window (see Update-EmtCompact)
 $script:Check           = $null      # result of the last verification
 $script:Job             = $null      # running background operation
 $script:Loading         = $false     # true while the UI fills controls (no invalidation)
@@ -396,6 +399,7 @@ function Update-EmtLanguage {
     Set-EmtDateCulture
     Update-EmtTexts $window
     foreach ($x in $script:Tips) { $x.Control.ToolTip = T $x.Key }
+    if ($script:Compact) { foreach ($c in $script:Compact) { if ($c.On) { $c.Text.Text = Get-EmtCompactText $c; $c.Text.ToolTip = $c.Text.Text } } }
     $was = $script:Loading
     $script:Loading = $true
     try {
@@ -914,6 +918,7 @@ Set-EmtTip $btnTrToday      'tip.today'
 Set-EmtTip $btnTrYesterday  'tip.yesterday'
 Set-EmtTip $btnTrWeek       'tip.week'
 Set-EmtTip $btnTrDays14     'tip.days14'
+Set-EmtTip $btnTrShowCriteria 'tip.show'
 Set-EmtTip $btnTrCheck      'tip.checkMailbox'
 Set-EmtTip $btnTrDelete     'tip.deleteThis'
 Set-EmtTip $btnTrExport     'tip.export'
@@ -924,6 +929,7 @@ Set-EmtTip $btnToday        'tip.today'
 Set-EmtTip $btnYesterday    'tip.yesterday'
 Set-EmtTip $btnWeek         'tip.week'
 Set-EmtTip $btnDays14       'tip.days14'
+Set-EmtTip $btnDelShowCriteria 'tip.show'
 Set-EmtTip $chkForwards     'tip.forwards'
 Set-EmtTip $chkOnly         'tip.only'
 Set-EmtTip $chkAll          'tip.all'
@@ -1043,6 +1049,7 @@ function Clear-EmtResultViews {
     foreach ($p in $delPages.Values) { Clear-EmtGrid $p[1] }
     Update-EmtTabTitles
     Set-EmtLabel $lblSummary (T 'sum.none') 'Fg' ''
+    if ($script:Compact) { Request-EmtCompact }
 }
 
 function Clear-EmtResults {
@@ -1303,6 +1310,7 @@ function Clear-EmtTraceViews {
     foreach ($g in $gridTrMessages, $gridTrRecipients, $gridTrEvents, $gridTrMailbox) { Clear-EmtGrid $g }
     Update-EmtTabTitles
     Set-EmtLabel $lblTrSummary (T 'trsum.none') 'Fg' ''
+    if ($script:Compact) { Request-EmtCompact }
 }
 
 function Show-EmtTraceViews($t) {
@@ -1428,6 +1436,7 @@ function Show-EmtTraceResult($t) {
     }
     $first = @($gridTrMessages.ItemsSource)[0]
     if ($first) { $gridTrMessages.SelectedItem = $first }
+    Request-EmtCompact -AfterSearch
     $c = $t.Criteria
     Write-EmtAudit -Path $AuditPath -Record @{
         Server = $script:ConnectedServer; Action = 'Trace'
@@ -1489,6 +1498,7 @@ function Show-EmtSearchResult($r) {
     Clear-EmtGrid $gridCheck
     Show-EmtResultViews $r
     $tabs.SelectedItem = $tabFound
+    Request-EmtCompact -AfterSearch
 
     Write-EmtAudit -Path $AuditPath -Record @{
         Server = $script:ConnectedServer; Action = 'Search'; SearchName = $r.SearchName; Query = $r.Query
@@ -2023,6 +2033,84 @@ foreach ($set in $script:PeriodSets) {
     foreach ($tb in $set.StartTime, $set.EndTime) { $tb.Add_TextChanged({ Update-EmtPeriodMarks }) }
 }
 
+# ---- A small window: the criteria card becomes one line ----
+# Only if the result has too little space (a small screen). After a search, one line with the criteria
+# and "Show criteria" replace the card. A larger window shows the card again.
+$script:Compact = @(
+    @{ Card = $cardTr; Title = $lblTrTitle; Criteria = $trCriteria; Bar = $trCompact; Text = $lblTrCompact
+       Area = $gridTrMessages.Parent; Need = 300; On = $false; Saved = 0; UserOpened = $false
+       HasResult = { [bool]$script:Trace -and [bool]@($script:Trace.Messages).Count }
+       Fields = { @(@('crit.senders', $tbTrSenders.Text), @('crit.recipient', $tbTrRecipient.Text), @('crit.subject', $tbTrSubject.Text),
+                    @('crit.messageId', $tbTrMessageId.Text)) }
+       Options = { @() }
+       Period = @($dtTrStart, $tbTrStartTime, $dtTrEnd, $tbTrEndTime) }
+    @{ Card = $cardDel; Title = $lblDelTitle; Criteria = $delCriteria; Bar = $delCompact; Text = $lblDelCompact
+       Area = $tabs; Need = 220; On = $false; Saved = 0; UserOpened = $false
+       HasResult = { [bool]$script:Result }
+       Fields = { @(@('crit.senders', $tbSenders.Text), @('crit.recipient', $tbRecipient.Text), @('crit.subject', $tbSubject.Text),
+                    @('crit.messageId', $tbMessageId.Text), @('crit.attachment', $tbAttachment.Text), @('crit.keywords', $tbKeywords.Text)) }
+       Options = { @(foreach ($x in $chkForwards, $chkOnly, $chkAll) { if ($x.IsChecked -and $x.IsEnabled) { [string]$x.Content } }) }
+       Period = @($dtStart, $tbStartTime, $dtEnd, $tbEndTime) }
+)
+
+function Get-EmtCompactText($c) {
+    <# The criteria in one line: only the fields with a value, then the period. #>
+    $parts = @(foreach ($f in (& $c.Fields)) { if ([string]$f[1].Trim()) { "$(T $f[0]) $($f[1].Trim())" } })
+    $p = $c.Period
+    $fmt = $script:PcCulture.DateTimeFormat.ShortDatePattern
+    $s = (Get-EmtPeriodValue $p[0] $p[1]).ToString($fmt, $script:PcCulture) + ' ' + $p[1].Text
+    $e = (Get-EmtPeriodValue $p[2] $p[3]).ToString($fmt, $script:PcCulture) + ' ' + $p[3].Text
+    $parts += "$(T 'crit.period') $s $([char]0x2014) $e"
+    $parts += @(& $c.Options)
+    $parts -join '    '
+}
+
+function Set-EmtCompact($c, [bool] $On) {
+    if ($c.On -eq $On) { return }
+    if ($On) { $c.Saved = $c.Card.ActualHeight }
+    $c.On = $On
+    $full = if ($On) { 'Collapsed' } else { 'Visible' }
+    $c.Title.Visibility = $full; $c.Criteria.Visibility = $full
+    $c.Bar.Visibility = if ($On) { 'Visible' } else { 'Collapsed' }
+    if ($On) { $c.Text.Text = Get-EmtCompactText $c; $c.Text.ToolTip = $c.Text.Text }
+}
+
+function Update-EmtCompact([switch] $AfterSearch) {
+    <#
+        The card becomes one line if the result area is lower than Need (with the full card).
+        It becomes full again if the window is large enough, or if the result is gone.
+        After "Show criteria", the card stays full until the next search.
+    #>
+    if (-not $script:Compact) { return }
+    foreach ($c in $script:Compact) {
+        if (-not (& $c.HasResult)) { Set-EmtCompact $c $false; $c.UserOpened = $false; continue }
+        if ($AfterSearch) { $c.UserOpened = $false }
+        $h = $c.Area.ActualHeight
+        if (-not ($h -gt 0)) { continue }              # the tab is not visible: no size
+        if ($c.On) {
+            $full = $h - ($c.Saved - $c.Card.ActualHeight)
+            if ($full -ge $c.Need) { Set-EmtCompact $c $false }
+        } elseif (-not $c.UserOpened -and $h -lt $c.Need) {
+            Set-EmtCompact $c $true
+        }
+    }
+}
+
+$script:CompactAfterSearch = $false
+function Request-EmtCompact([switch] $AfterSearch) {
+    <# After the layout: the heights are then correct. #>
+    if ($AfterSearch) { $script:CompactAfterSearch = $true }
+    [void]$window.Dispatcher.BeginInvoke([Action]{
+        $a = $script:CompactAfterSearch; $script:CompactAfterSearch = $false
+        Update-EmtCompact -AfterSearch:$a
+    }, [System.Windows.Threading.DispatcherPriority]::ContextIdle)
+}
+
+$btnTrShowCriteria.Add_Click({ $c = $script:Compact[0]; $c.UserOpened = $true; Set-EmtCompact $c $false })
+$btnDelShowCriteria.Add_Click({ $c = $script:Compact[1]; $c.UserOpened = $true; Set-EmtCompact $c $false })
+$window.Add_SizeChanged({ Request-EmtCompact })
+$mainTabs.Add_SelectionChanged({ param($s, $e) if ($e.OriginalSource -eq $mainTabs) { Request-EmtCompact } })
+
 # ---- Common ----
 
 $btnCancel.Add_Click({
@@ -2072,6 +2160,39 @@ $timer.Add_Tick({
 
 $window.Add_SourceInitialized({ Set-EmtTitleBar $window })
 
+function Update-EmtShortcut {
+    <#
+        The shortcut "Exchange Message Trail.lnk" with the EMT icon is in the EMT folder. It opens EMT.cmd.
+        EMT makes it at the first start and after a move of the folder (the shortcut points to an earlier folder).
+        The key ShortcutFolder of the settings keeps the folder of the last try. A shortcut that is removed later
+        (by the user or by an antivirus) stays removed: no new try, no new antivirus alert at each start.
+        src\New-EmtShortcut.ps1 makes the shortcut. The user can run it to make the shortcut again.
+    #>
+    $file = Join-Path $PSScriptRoot 'Exchange Message Trail.lnk'
+    $cmd = Join-Path $PSScriptRoot 'EMT.cmd'
+    $isGood = {
+        (Test-Path -LiteralPath $file) -and
+        [string]::Equals((New-Object -ComObject WScript.Shell).CreateShortcut($file).TargetPath, $cmd, [StringComparison]::OrdinalIgnoreCase)
+    }
+    try {
+        if (& $isGood) { return }
+        $s = Read-EmtSettings
+        $tried = $s.ContainsKey('ShortcutFolder') -and [string]::Equals([string]$s.ShortcutFolder, $PSScriptRoot, [StringComparison]::OrdinalIgnoreCase)
+        if ($tried -and -not (Test-Path -LiteralPath $file)) { return }
+        $s.ShortcutFolder = $PSScriptRoot
+        try { $s | ConvertTo-Json | Set-Content -Path $SettingsPath -Encoding UTF8 } catch { }
+        # Some errors (for example, a script that cannot run) do not stop the call: collect them.
+        $errs = @(& (Join-Path $PSScriptRoot 'src\New-EmtShortcut.ps1') 2>&1 6>$null |
+                  Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+        # The result counts, not the call: examine the shortcut again.
+        if (& $isGood) { Write-EmtLog (T 'log.shortcutMade' $file); return }
+        $why = if ($errs.Count) { $errs[0].Exception.Message } else { $file }
+        Write-EmtLog (T 'log.shortcutFailed' $why) 'Warn'
+    } catch {
+        Write-EmtLog (T 'log.shortcutFailed' $_.Exception.Message) 'Warn'
+    }
+}
+
 $window.Add_ContentRendered({
     # Show the window in front of the other windows once. Topmost stays off: dialogs of other programs are not hidden.
     $window.Topmost = $true
@@ -2080,6 +2201,7 @@ $window.Add_ContentRendered({
     Write-EmtLog (T 'log.started' $LogPath)
     Write-EmtLog (T 'log.auditFile' $AuditPath)
     foreach ($m in $script:Migrated) { Write-EmtLog (T 'log.migrated' $m) 'Ok' }
+    Update-EmtShortcut
     if ($tbServer.Text) { $btnConnect.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
 })
 

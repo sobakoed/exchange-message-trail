@@ -247,6 +247,18 @@ The procedure uses the English interface. Select **English** in the language lis
 23. Make sure that the calendar is in the colors of the theme.
 24. Make sure that the date fields use the date format of Windows (**Settings > Time & language > Region**).
 25. Make sure that the calendar starts the week on the first day of the week of Windows.
+26. Click **7 days**.
+27. Click **Find**.
+28. Make sure that the button **7 days** stays green.
+29. Change the start time.
+30. Make sure that no period button is green.
+31. Make the window 1280 x 720 or smaller. A screen with the scale 150 % also gives this size.
+32. Click **Find**.
+33. Make sure that one line with the criteria replaces the criteria card.
+34. Click **Show criteria**.
+35. Make sure that the criteria card shows again.
+36. Maximize the window on a Full HD screen with the scale 100 %.
+37. Make sure that the criteria card is always full.
 
 ### Start and close
 
@@ -262,6 +274,19 @@ The procedure uses the English interface. Select **English** in the language lis
 10. Close EMT.
 11. Start EMT again.
 12. Make sure that the window is maximized.
+13. Remove the shortcut `Exchange Message Trail` from the EMT folder.
+14. Start EMT with `EMT.cmd`.
+15. Make sure that the EMT folder has the shortcut `Exchange Message Trail` with the EMT icon. No question shows.
+16. Close EMT.
+17. Start EMT with the shortcut.
+18. Make sure that EMT starts.
+19. Pin the shortcut to the taskbar.
+20. Start EMT with the pinned shortcut.
+21. Make sure that the taskbar shows one EMT button, not two.
+22. Remove the shortcut. Start EMT with `EMT.cmd`.
+23. Make sure that EMT does not make the shortcut again.
+24. Move the EMT folder to a different place. Start EMT with `EMT.cmd`.
+25. Make sure that the folder has the shortcut and that it starts EMT from the new place.
 
 ### User guide
 
