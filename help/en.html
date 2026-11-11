@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="emt-version" content="2.0.0">
+<title>Exchange Message Trail — User guide</title>
+<link rel="stylesheet" href="help.css">
+<link rel="icon" type="image/svg+xml" href="img/emt.svg">
+<script src="help.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
+  <span class="version">Version 2.0.0 · User guide</span>
+  <span class="spacer"></span>
+  <div class="switch">
+    <a class="active" href="en.html">English</a>
+    <a href="ru.html">Русский</a>
+    <button id="theme-button" type="button" data-system="Theme: system" data-dark="Theme: dark" data-light="Theme: light">Theme: system</button>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <p class="title">Contents</p>
+  <ol>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#start">Install and start</a></li>
+    <li><a href="#window">The window</a></li>
+    <li><a href="#connect">Connection and roles</a></li>
+    <li><a href="#search">Message search</a>
+      <ol>
+        <li><a href="#criteria">Criteria</a></li>
+        <li><a href="#period">Period and time</a></li>
+        <li><a href="#addresses">Partial addresses</a></li>
+        <li><a href="#by-recipient">Search by a recipient</a></li>
+        <li><a href="#statuses">Delivery statuses and colors</a></li>
+        <li><a href="#columns">Recipient columns</a></li>
+        <li><a href="#events">Events</a></li>
+        <li><a href="#nothing">Nothing found</a></li>
+      </ol>
+    </li>
+    <li><a href="#mailbox">Mailbox check</a></li>
+    <li><a href="#delete">Delete</a>
+      <ol>
+        <li><a href="#delete-from-search">From the message search</a></li>
+        <li><a href="#delete-own">With your own criteria</a></li>
+        <li><a href="#delete-warnings">Warnings</a></li>
+        <li><a href="#delete-types">Soft and hard delete</a></li>
+        <li><a href="#verify">Verification</a></li>
+        <li><a href="#cleanup">Cleanup of old searches</a></li>
+      </ol>
+    </li>
+    <li><a href="#examples">Examples</a></li>
+    <li><a href="#files">Files and audit</a></li>
+    <li><a href="#language-theme">Language and theme</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#exchange2019">Exchange 2019 behavior</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ================================================================== -->
+<section id="overview">
+  <h1>Exchange Message Trail</h1>
+  <p class="lead">EMT finds a message in Exchange Server 2016 and 2019 (on-premises). It shows the delivery to each recipient.
+  When it is necessary, EMT deletes the message from the mailboxes.</p>
+  <p>EMT answers these questions:</p>
+  <ul>
+    <li>Did a user send the message?</li>
+    <li>Did the message arrive? In which folder?</li>
+    <li>Why did the message not arrive? At which step did the delivery stop?</li>
+  </ul>
+  <div class="cards">
+    <div class="card"><h3>Message search</h3><p>Finds the message in the message tracking log. Shows the status of each recipient. Examines the mailbox of a recipient.</p><span class="tag">Seconds · Read-only</span></div>
+    <div class="card"><h3>Delete</h3><p>Finds the copies of a message in the mailboxes. Deletes them. Verifies the result.</p><span class="tag">Seconds to minutes · Changes data</span></div>
+  </div>
+  <figure>
+    <img src="img/en/window.png" alt="The window of EMT after a message search">
+    <figcaption>The window after a message search. The example data is not real.</figcaption>
+  </figure>
+</section>
+
+<!-- ================================================================== -->
+<section id="start">
+  <h2>Install and start</h2>
+  <h3>Requirements</h3>
+  <table>
+    <tr><th>Item</th><th>Requirement</th></tr>
+    <tr><td>Exchange</td><td>Exchange Server 2016 or 2019, on-premises</td></tr>
+    <tr><td>Computer</td><td>The Exchange server, or a Windows computer in the same domain</td></tr>
+    <tr><td>PowerShell</td><td>Windows PowerShell 5.1</td></tr>
+    <tr><td>.NET</td><td>.NET Framework 4.5 or later</td></tr>
+    <tr><td>Network</td><td>HTTP access to <code>http://&lt;server&gt;/PowerShell/</code></td></tr>
+    <tr><td>Authentication</td><td>Kerberos (a domain account)</td></tr>
+  </table>
+  <p>You do not have to install the Exchange Management Tools. EMT connects through remote PowerShell.</p>
+
+  <h3>Install</h3>
+  <ol class="steps">
+    <li>Copy the EMT folder to the computer.</li>
+    <li>Keep the folder structure. EMT needs the folders <code>src</code>, <code>Lang</code>, <code>gui</code> and <code>help</code>.</li>
+    <li>If you downloaded a ZIP file, unblock the files:
+      <pre><code>Get-ChildItem -Recurse | Unblock-File</code></pre></li>
+  </ol>
+
+  <h3>Start</h3>
+  <ol class="steps">
+    <li>Double-click <code>EMT.cmd</code>.</li>
+  </ol>
+  <p>The window opens in front of the other windows. The PowerShell console stays hidden.</p>
+  <p>To start EMT from PowerShell, type this command:</p>
+  <pre><code>powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Server exch01.contoso.com</code></pre>
+  <table>
+    <tr><th>Parameter</th><th>Function</th></tr>
+    <tr><td><code>-Server</code></td><td>The FQDN of the Exchange server. EMT keeps the last server name.</td></tr>
+    <tr><td><code>-Language</code></td><td>The language code, for example <code>en</code> or <code>ru</code>.</td></tr>
+    <tr><td><code>-Theme</code></td><td><code>Dark</code> or <code>Light</code>. The default theme is <code>Dark</code>.</td></tr>
+  </table>
+  <div class="callout">
+    <b class="label">Classic window</b>
+    <p><code>EMT-Classic.cmd</code> starts the earlier window (Windows Forms). It has the same functions.
+    Use it only if the usual window does not operate. A later version removes it.</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section id="window">
+  <h2>The window</h2>
+  <figure>
+    <div class="shot">
+      <img src="img/en/window.png" alt="The parts of the window">
+      <span class="pin" style="left:57%;top:5.6%">1</span>
+      <span class="pin" style="left:97.6%;top:9%">2</span>
+      <span class="pin" style="left:17%;top:9.7%">3</span>
+      <span class="pin" style="left:21%;top:14.2%">4</span>
+      <span class="pin" style="left:86%;top:24.7%">5</span>
+      <span class="pin" style="left:44%;top:29.3%">6</span>
+      <span class="pin" style="left:50%;top:53%">7</span>
+      <span class="pin" style="left:31.6%;top:59.3%">8</span>
+      <span class="pin" style="left:42.7%;top:81.7%">9</span>
+      <span class="pin" style="left:50%;top:92.6%">10</span>
+      <span class="pin" style="left:22%;top:97.9%">11</span>
+    </div>
+  </figure>
+  <table>
+    <tr><th>#</th><th>Part</th><th>Function</th></tr>
+    <tr><td><span class="pin-inline">1</span></td><td>Top line</td><td>The server, <span class="btn">Connect</span>, the timeout of the operations, the language and the theme</td></tr>
+    <tr><td><span class="pin-inline">2</span></td><td><span class="btn">?</span></td><td>Opens this guide. The key <kbd>F1</kbd> also opens it.</td></tr>
+    <tr><td><span class="pin-inline">3</span></td><td>Tabs</td><td><b>Message search</b> and <b>Delete</b></td></tr>
+    <tr><td><span class="pin-inline">4</span></td><td>Criteria</td><td>Senders, recipient, subject, message ID and period</td></tr>
+    <tr><td><span class="pin-inline">5</span></td><td><span class="btn accent">Find</span></td><td>Starts the search. The key <kbd>Enter</kbd> also starts it.</td></tr>
+    <tr><td><span class="pin-inline">6</span></td><td>Summary line</td><td>The numbers of the result. Only the number of errors is red.</td></tr>
+    <tr><td><span class="pin-inline">7</span></td><td>Messages</td><td>One row for each message</td></tr>
+    <tr><td><span class="pin-inline">8</span></td><td>Details</td><td>The recipients, the events and the mailbox check of the selected message</td></tr>
+    <tr><td><span class="pin-inline">9</span></td><td>Actions</td><td><span class="btn">Check the recipient mailbox</span>, <span class="btn danger">Delete this message…</span>, <span class="btn">Export to CSV</span></td></tr>
+    <tr><td><span class="pin-inline">10</span></td><td>Log</td><td>The messages of the session. Green = OK, orange = warning, red = error.</td></tr>
+    <tr><td><span class="pin-inline">11</span></td><td>Bottom line</td><td>The connection on the left. The running operation, the progress and <span class="btn">Cancel</span> on the right.</td></tr>
+  </table>
+  <h3>Tables</h3>
+  <ul>
+    <li>Drag the border of a column header to change the width.</li>
+    <li>Click a column header to sort the rows.</li>
+    <li>Drag a column header to move the column.</li>
+    <li>Push <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy the selected rows with the headers.</li>
+    <li>The tab name shows the row count, for example <b>Recipients (5)</b>.</li>
+  </ul>
+  <p>To stop an operation, click <span class="btn">Cancel</span>. EMT stops after the current step.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="connect">
+  <h2>Connection and roles</h2>
+  <figure><img src="img/en/top-line.png" alt="The top line"></figure>
+  <ol class="steps">
+    <li>In the field <b>Exchange server (FQDN)</b>, type the full server name.</li>
+    <li>Click <span class="btn">Connect</span>.</li>
+    <li>Make sure that the bottom line shows a green indicator and "Connected".</li>
+    <li>Make sure that the log shows no warning about a missing role.</li>
+  </ol>
+  <figure><img src="img/en/bottom-line.png" alt="The bottom line"></figure>
+  <p>EMT examines the roles of your account. A function without its role is not available: its button is disabled.
+  The log shows one warning for each function that is not available.</p>
+  <table>
+    <tr><th>Function</th><th>Cmdlets</th><th>Role group</th></tr>
+    <tr><td>Message search</td><td><code>Get-MessageTrackingLog</code>, <code>Get-TransportService</code>, <code>Get-Recipient</code></td><td>Organization Management, Records Management or Compliance Management</td></tr>
+    <tr><td>Mailbox check</td><td><code>Get-InboxRule</code>, <code>Get-MailboxJunkEmailConfiguration</code>, <code>Get-Mailbox</code>, <code>Get-MailboxStatistics</code></td><td>Organization Management or Recipient Management</td></tr>
+    <tr><td>Find copies, verification</td><td><code>New-ComplianceSearch</code>, <code>Search-Mailbox</code></td><td>Discovery Management</td></tr>
+    <tr><td>Soft delete</td><td><code>New-ComplianceSearchAction</code></td><td>Discovery Management</td></tr>
+    <tr><td>Hard delete</td><td><code>Search-Mailbox -DeleteContent</code></td><td>The role Mailbox Import Export (assign it manually)</td></tr>
+  </table>
+  <p>To assign the role Mailbox Import Export, type this command in the Exchange Management Shell:</p>
+  <pre><code>New-ManagementRoleAssignment -Role "Mailbox Import Export" -User "&lt;account&gt;"</code></pre>
+  <p>Close EMT and start it again after a role change.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="search">
+  <h2>Message search</h2>
+  <p>The message search reads only the message tracking log. It does not open the mailboxes. It does not change data.</p>
+  <ol class="steps">
+    <li>Open the tab <b>Message search</b>.</li>
+    <li>Type one or more criteria.</li>
+    <li>Set the period.</li>
+    <li>Click <span class="btn accent">Find</span>.</li>
+    <li>Select a message in the list.</li>
+    <li>Examine the tab <b>Recipients</b>.</li>
+  </ol>
+
+  <h3 id="criteria">Criteria</h3>
+  <figure><img src="img/en/search-criteria.png" alt="The criteria of the message search"></figure>
+  <table>
+    <tr><th>Field</th><th>Use</th></tr>
+    <tr><td>Senders</td><td>One or more addresses, parts of addresses or names. The separator is a comma or a semicolon.</td></tr>
+    <tr><td>Recipient</td><td>One address, a part of an address or a name. A recipient alone is permitted.</td></tr>
+    <tr><td>Subject contains</td><td>A part of the subject</td></tr>
+    <tr><td>Message ID</td><td>The internet message ID, for example <code>&lt;a1b2c3@contoso.com&gt;</code></td></tr>
+    <tr><td>Period</td><td>The start and the end: a date and a time</td></tr>
+  </table>
+  <p>Set one criterion or more. A period alone is not permitted. The maximum period is 31 days.</p>
+
+  <h3 id="period">Period and time</h3>
+  <ul>
+    <li>Each date has a time field. The time uses the format of Windows, for example <code>14:30</code> or <code>2:30 PM</code>.</li>
+    <li>The end includes its minute: <code>23:59</code> is up to 23:59:59.</li>
+    <li><span class="btn">Today</span>, <span class="btn">Yesterday</span>, <span class="btn">7 days</span> and <span class="btn">14 days</span> set the period from 0:00 to 23:59.</li>
+    <li>The button of the current period is green. A manual change of the period removes the green mark.</li>
+    <li>A wrong time goes back to the last correct time. The log shows a warning.</li>
+    <li>The date format and the first day of the week come from the regional settings of Windows.</li>
+  </ul>
+  <figure><img src="img/en/calendar.png" alt="The calendar" style="max-width:260px"><figcaption>The calendar of a date field.</figcaption></figure>
+
+  <h3 id="addresses">Partial addresses</h3>
+  <p>You can type a part of an address or a name, for example <code>kim</code>.
+  EMT finds the full address in the Exchange address book (<code>Get-Recipient -Anr</code>).</p>
+  <table>
+    <tr><th>Matches</th><th>Result</th></tr>
+    <tr><td>One</td><td>EMT puts the full address in the field. The log shows the change.</td></tr>
+    <tr><td>More than one</td><td>A window shows the list. Select the address. For senders, you can select more than one.</td></tr>
+    <tr><td>None</td><td>An error window shows the text. The search does not start.</td></tr>
+  </table>
+  <figure><img src="img/en/pick-address.png" alt="The selection of an address" style="max-width:600px"></figure>
+
+  <h3 id="by-recipient">Search by a recipient</h3>
+  <p>A search with a recipient is fast also for many messages.</p>
+  <ul>
+    <li>The list shows the delivery to this recipient only.</li>
+    <li>The column <b>Note</b> shows "Other recipients: select the message".</li>
+    <li>The summary line starts with "Recipient x:". The numbers are for this recipient.</li>
+    <li>When you select a message, EMT loads all its recipients and events. This takes about one second.</li>
+    <li>When you export the result, EMT asks if it must load all messages first.</li>
+  </ul>
+  <figure><img src="img/en/recipient-search.png" alt="A search by a recipient"><figcaption>The first message has all recipients. The other messages show the note.</figcaption></figure>
+
+  <h3 id="statuses">Delivery statuses and colors</h3>
+  <p>The rows have no fill color. Two marks show the result:</p>
+  <ul>
+    <li>The column <b>Delivery status</b> shows each status with its color, for example
+      <span class="t-green"><span class="dot green"></span>delivered: 3</span>
+      <span class="t-blue"><span class="dot blue"></span>external: 1</span>
+      <span class="t-red"><span class="dot red"></span>failed: 1</span>.</li>
+    <li>The left edge of a row shows the worst status of the message.</li>
+  </ul>
+  <figure><img src="img/en/message-list.png" alt="The list of messages"></figure>
+  <table>
+    <tr><th>Status</th><th>Color</th><th>Meaning</th></tr>
+    <tr><td>Delivered</td><td><span class="dot green"></span>Green</td><td>Exchange put the message in the mailbox (<code>DELIVER</code>, <code>DUPLICATEDELIVER</code>).</td></tr>
+    <tr><td>Sent to an external system</td><td><span class="dot blue"></span>Blue</td><td>Exchange sent the message to an external server (<code>SEND</code>, <code>SENDEXTERNAL</code>).</td></tr>
+    <tr><td>Forwarded by the mailbox</td><td><span class="dot yellow"></span>Yellow</td><td>The mailbox has forwarding. The message went to the forwarding address, not into the mailbox.</td></tr>
+    <tr><td>Deferred</td><td><span class="dot yellow"></span>Yellow</td><td>The delivery is delayed. Exchange tries again (<code>DEFER</code>).</td></tr>
+    <tr><td>Delivery failed</td><td><span class="dot red"></span>Red</td><td>Exchange did not deliver the message (<code>FAIL</code>).</td></tr>
+    <tr><td>Rejected by the group</td><td><span class="dot red"></span>Red</td><td>The group has a restriction on the senders.</td></tr>
+    <tr><td>Dropped</td><td><span class="dot red"></span>Red</td><td>Exchange dropped the message with an error code.</td></tr>
+    <tr><td>In transit</td><td><span class="dot grey"></span>Grey</td><td>The message is between Exchange servers.</td></tr>
+    <tr><td>Group: sent to the members</td><td><span class="dot grey"></span>Grey</td><td>The address is a group. The members get the message.</td></tr>
+    <tr><td>Not sent by an Exchange setting</td><td><span class="dot grey"></span>Grey</td><td>An automatic reply, an automatic forward or a report that Exchange does not send. This is not an error.</td></tr>
+    <tr><td>No delivery data</td><td><span class="dot grey"></span>Grey</td><td>The tracking log has only the receive event.</td></tr>
+  </table>
+  <table>
+    <tr><th>Left edge</th><th>Message</th><th>Recipient</th></tr>
+    <tr><td><span class="edge red"></span>Red</td><td>One or more recipients did not get the message</td><td>Delivery failed, rejected by the group, dropped</td></tr>
+    <tr><td><span class="edge yellow"></span>Yellow</td><td>A delivery is delayed, or a mailbox forwards the message</td><td>Deferred, forwarded by the mailbox</td></tr>
+    <tr><td><span class="edge grey"></span>Grey</td><td>One or more deliveries are not complete</td><td>In transit, group, not sent by a setting, no data</td></tr>
+    <tr><td><span class="edge blue"></span>Blue</td><td>All recipients have the message, some are external</td><td>Sent to an external system</td></tr>
+    <tr><td><span class="edge green"></span>Green</td><td>All recipients have the message</td><td>Delivered</td></tr>
+  </table>
+  <div class="callout tip">
+    <b class="label">A DROP event is not always an error</b>
+    <p>Exchange writes <code>DROP</code> also for usual steps, for example the expansion of a group. EMT reads the server answer and shows the correct status.</p>
+  </div>
+
+  <h3 id="columns">Recipient columns</h3>
+  <figure><img src="img/en/recipients-failed.png" alt="A recipient with an error"><figcaption>The address does not exist (5.1.1). The column Explanation tells the cause.</figcaption></figure>
+  <table>
+    <tr><th>Column</th><th>Content</th></tr>
+    <tr><td>Explanation</td><td>The cause of a problem, from the code of the server answer. Empty for a usual delivery.</td></tr>
+    <tr><td>Folder</td><td>The folder of the delivery when it is not Inbox. Usually an inbox rule moved the message.</td></tr>
+    <tr><td>Server answer</td><td>The text of the server, for example <code>550 5.1.1 RESOLVER.ADR.RecipNotFound</code>.</td></tr>
+  </table>
+  <figure><img src="img/en/recipients-folder.png" alt="A delivery to a folder"><figcaption>The message went to the folder "Projects". The group shows "Group: sent to the members".</figcaption></figure>
+  <table>
+    <tr><th>Code</th><th>Explanation</th></tr>
+    <tr><td><code>5.1.1</code>, <code>5.1.10</code></td><td>The address does not exist.</td></tr>
+    <tr><td><code>5.2.2</code></td><td>The recipient mailbox is full.</td></tr>
+    <tr><td><code>5.2.3</code>, <code>5.3.4</code></td><td>The message is too large.</td></tr>
+    <tr><td><code>4.4.7</code>, <code>5.4.7</code></td><td>The delivery time expired.</td></tr>
+    <tr><td><code>4.4.x</code></td><td>No connection to the recipient server. Exchange tries again.</td></tr>
+    <tr><td><code>5.7.x</code></td><td>Rejected: no permission, a restriction, a policy or a filter.</td></tr>
+  </table>
+
+  <h3 id="events">Events</h3>
+  <p>Double-click a message to open the tab <b>Events</b>. The tab shows all tracking events of the message in time order.</p>
+  <figure><img src="img/en/events.png" alt="The events of a message"></figure>
+
+  <h3 id="nothing">Nothing found</h3>
+  <p>When the search finds no message, the log shows what to examine:</p>
+  <ul>
+    <li>the period: the message can be earlier or later;</li>
+    <li>the addresses: the message can come from another address or go to a group;</li>
+    <li>the subject;</li>
+    <li>the folders Outbox and Sent Items of the sender: the user can have not sent the message.</li>
+  </ul>
+  <p>The tracking log keeps data for 30 days by default.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="mailbox">
+  <h2>Mailbox check</h2>
+  <p>The tracking log shows the message only up to the mailbox. The mailbox check shows the causes in the mailbox. It is read-only.</p>
+  <ol class="steps">
+    <li>Select the message.</li>
+    <li>On the tab <b>Recipients</b>, select an internal recipient.</li>
+    <li>Click <span class="btn">Check the recipient mailbox</span>.</li>
+    <li>Examine the tab <b>Recipient mailbox</b>.</li>
+  </ol>
+  <figure><img src="img/en/mailbox-check.png" alt="The mailbox check"><figcaption>An inbox rule moves the message to the folder "Projects".</figcaption></figure>
+  <table>
+    <tr><th>Area</th><th>What EMT examines</th></tr>
+    <tr><td>Rules</td><td>The inbox rules: move, delete, forward. EMT tells if a rule applies to this message.</td></tr>
+    <tr><td>Junk e-mail</td><td>The junk e-mail filter, the blocked and the trusted senders</td></tr>
+    <tr><td>Forwarding</td><td>The forwarding of the mailbox</td></tr>
+    <tr><td>Quota</td><td>The size of the mailbox and its limits</td></tr>
+  </table>
+  <p>The button is disabled for an external address.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="delete">
+  <h2>Delete</h2>
+  <div class="callout danger">
+    <b class="label">WARNING</b>
+    <p>A hard delete is permanent. The user cannot recover the message. Examine the result before each delete.</p>
+  </div>
+
+  <h3 id="delete-from-search">From the message search (recommended)</h3>
+  <ol class="steps">
+    <li>On the tab <b>Message search</b>, select the message.</li>
+    <li>Click <span class="btn danger">Delete this message…</span>.</li>
+    <li>Make sure that the green line says "Data from the tracking log".</li>
+    <li>Click <span class="btn accent">Find copies</span>.</li>
+    <li>Examine the result tabs.</li>
+    <li>Click <span class="btn">Delete (soft)</span> or <span class="btn danger">Delete (hard)</span>.</li>
+    <li>Read the confirmation window.</li>
+    <li>Confirm the delete.</li>
+    <li>Examine the tab <b>Verification</b>.</li>
+  </ol>
+  <p>EMT sets the period from 5 minutes before the message to 23:59 of its day. Then the search of copies uses one day.</p>
+  <figure><img src="img/en/delete.png" alt="The tab Delete after Find copies"></figure>
+
+  <h3 id="delete-own">With your own criteria</h3>
+  <figure><img src="img/en/delete-criteria.png" alt="The criteria of the tab Delete"></figure>
+  <table>
+    <tr><th>Criterion or option</th><th>Function</th></tr>
+    <tr><td>Attachment name</td><td>A file name in the message</td></tr>
+    <tr><td>Words in the text</td><td>A phrase in the text of the message</td></tr>
+    <tr><td>Include forwards (FW:)</td><td>Adds the messages with the same subject from other senders</td></tr>
+    <tr><td>Recipient mailbox only</td><td>Searches and deletes only in the mailbox of the field <b>Recipient</b></td></tr>
+    <tr><td>Search all mailboxes</td><td>Searches in all mailboxes of the organization. This is slow.</td></tr>
+  </table>
+  <p>A line over the result shows the source of the criteria: green = from the tracking log, orange = typed by the user.
+  A change of a criterion clears the result.</p>
+  <table>
+    <tr><th>Mailboxes</th><th>Method</th><th>Time</th></tr>
+    <tr><td>1 to 10</td><td>Quick search (<code>Search-Mailbox</code>)</td><td>Seconds</td></tr>
+    <tr><td>More than 10, or all</td><td>Compliance Search</td><td>1 to 3 minutes and more</td></tr>
+  </table>
+
+  <h3 id="delete-warnings">Warnings</h3>
+  <table>
+    <tr><th>Warning</th><th>Meaning</th><th>Action</th></tr>
+    <tr><td class="t-orange">CHECK: mailboxes with more items than the tracking log has messages</td>
+        <td>The query cannot use the message ID. It also finds other messages with the same sender and subject on these days, and copies in Recoverable Items.</td>
+        <td>Examine the tab <b>Found in mailboxes</b>. Each delete needs the typed word.</td></tr>
+    <tr><td class="t-red">NOT CONFIRMED BY THE TRACKING LOG</td><td>The search found items, but the tracking log has no message.</td><td>Examine the criteria. Each delete needs the typed word.</td></tr>
+    <tr><td class="t-red">External recipients</td><td>EMT cannot delete a message from an external mailbox.</td><td>Tell your security team about each external recipient.</td></tr>
+  </table>
+
+  <h3 id="delete-types">Soft and hard delete</h3>
+  <table>
+    <tr><th></th><th>Soft delete</th><th>Hard delete</th></tr>
+    <tr><td>Button</td><td><span class="btn">Delete (soft)</span></td><td><span class="btn danger">Delete (hard)</span></td></tr>
+    <tr><td>Cmdlet</td><td><code>New-ComplianceSearchAction -Purge -PurgeType SoftDelete</code></td><td><code>Search-Mailbox -SearchDumpster -DeleteContent</code></td></tr>
+    <tr><td>Result</td><td>The message goes to Recoverable Items. The user can recover it in Outlook.</td><td>The message is removed also from Recoverable Items.</td></tr>
+    <tr><td>Confirmation</td><td>A window. The typed word only with a warning.</td><td>A window and the typed word <code>DELETE</code></td></tr>
+  </table>
+  <figure><img src="img/en/confirm-hard.png" alt="The confirmation of a hard delete" style="max-width:660px"><figcaption>The confirmation shows the warnings, the counts, the query and the mailboxes.</figcaption></figure>
+  <div class="callout warn">
+    <b class="label">Holds</b>
+    <p>A mailbox on Litigation Hold or In-Place Hold keeps a copy after a hard delete in a hidden folder. The user does not see it.</p>
+  </div>
+
+  <h3 id="verify">Verification</h3>
+  <p>After each delete, EMT examines each mailbox again. The tab <b>Verification</b> shows the result.</p>
+  <figure><img src="img/en/verification.png" alt="The verification after a soft delete"></figure>
+  <table>
+    <tr><th>Left edge</th><th>Meaning</th></tr>
+    <tr><td><span class="edge green"></span>Green</td><td>No copy in the visible folders</td></tr>
+    <tr><td><span class="edge red"></span>Red</td><td>The message is still in the visible folders</td></tr>
+    <tr><td><span class="edge yellow"></span>Yellow</td><td>The verification failed. See the column <b>Note</b>.</td></tr>
+  </table>
+  <p>After a soft delete, the column <b>Total (with Recoverable Items)</b> is more than 0. This is correct.</p>
+
+  <h3 id="cleanup">Cleanup of old searches</h3>
+  <ol class="steps">
+    <li>Click <span class="btn">Clean up old searches</span>.</li>
+    <li>Type the age of the searches in days.</li>
+    <li>Examine the list of the searches.</li>
+    <li>Confirm the cleanup.</li>
+  </ol>
+  <p>EMT removes only its own searches: <code>EMT_*</code> and the older <code>MC_*</code>. It does not remove a search that still runs.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="examples">
+  <h2>Examples</h2>
+
+  <details class="example" open>
+    <summary>A message did not arrive: the address does not exist</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>In <b>Senders</b>, type the address of the sender.</li>
+        <li>Click <span class="btn">Today</span>.</li>
+        <li>Click <span class="btn accent">Find</span>.</li>
+        <li>Find the message with a red left edge.</li>
+        <li>Select the message.</li>
+        <li>Read the columns <b>Explanation</b> and <b>Server answer</b>.</li>
+      </ol>
+      <figure><img src="img/en/recipients-failed.png" alt="Delivery failed, 5.1.1"></figure>
+      <p>Result: <code>5.1.1</code>, the address does not exist. Tell the sender the correct address.</p>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>The message arrived, but the user does not see it</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>Find the message.</li>
+        <li>Select the message.</li>
+        <li>Examine the column <b>Folder</b> of the recipient.</li>
+        <li>Select the recipient.</li>
+        <li>Click <span class="btn">Check the recipient mailbox</span>.</li>
+      </ol>
+      <figure><img src="img/en/mailbox-check.png" alt="An inbox rule"></figure>
+      <p>Result: an inbox rule moves the message to the folder "Projects". Tell the user the folder.</p>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>The mailbox forwards the messages to another address</summary>
+    <div class="body">
+      <p>The status is <span class="t-yellow"><span class="dot yellow"></span>Forwarded by the mailbox</span>. The left edge is yellow.</p>
+      <figure><img src="img/en/recipients-forwarded.png" alt="Forwarded by the mailbox"></figure>
+      <p>The message did not go into the mailbox. Use the mailbox check to see the forwarding address.</p>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>A hidden copy for the security team (transport rule)</summary>
+    <div class="body">
+      <p>A transport rule adds a hidden copy. Exchange sends it through a Send connector (<code>SENDEXTERNAL</code>).
+      EMT shows <span class="t-blue"><span class="dot blue"></span>Sent to an external system</span>.</p>
+      <figure><img src="img/en/recipients-sendexternal.png" alt="SENDEXTERNAL"></figure>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>The delivery to an external server is delayed</summary>
+    <div class="body">
+      <p>The status is <span class="t-yellow"><span class="dot yellow"></span>Deferred</span>. Exchange tries again.
+      The server answer tells the cause, for example <code>451 4.4.0</code>.</p>
+      <figure><img src="img/en/recipients-deferred.png" alt="Deferred"></figure>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>All messages to one recipient for a week</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>Clear <b>Senders</b> and <b>Subject contains</b>.</li>
+        <li>In <b>Recipient</b>, type the address.</li>
+        <li>Click <span class="btn">7 days</span>.</li>
+        <li>Click <span class="btn accent">Find</span>.</li>
+        <li>Select a message to see all its recipients.</li>
+      </ol>
+      <figure><img src="img/en/recipient-search.png" alt="A search by a recipient"></figure>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>Delete a phishing message from all recipients</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>Find the message on the tab <b>Message search</b>.</li>
+        <li>Select the message.</li>
+        <li>Click <span class="btn danger">Delete this message…</span>.</li>
+        <li>Click <span class="btn accent">Find copies</span>.</li>
+        <li>Examine the tab <b>Found in mailboxes</b>.</li>
+        <li>Examine the tab <b>Recipients</b> for external recipients.</li>
+        <li>Click <span class="btn">Delete (soft)</span>.</li>
+        <li>Confirm the delete.</li>
+        <li>Examine the tab <b>Verification</b>.</li>
+      </ol>
+      <p>If the users must not recover the message, do a hard delete after the soft delete.</p>
+      <figure><img src="img/en/delete.png" alt="Find copies"></figure>
+    </div>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section id="files">
+  <h2>Files and audit</h2>
+  <table>
+    <tr><th>File</th><th>Content</th></tr>
+    <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\audit.csv</code></td><td>One row for each message search, mailbox check, search of copies, delete, verification and cleanup</td></tr>
+    <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\logs\EMT_&lt;date&gt;.log</code></td><td>The full log of one session</td></tr>
+    <tr><td><code>%APPDATA%\ExchangeMessageTrail\settings.json</code></td><td>The last server, the language, the theme, the options, the timeout and the window size. Senders and subjects are not kept.</td></tr>
+  </table>
+  <p>Click <span class="btn">Export to CSV</span> to save the data of a tab as CSV files.</p>
+  <div class="callout warn">
+    <b class="label">Personal data</b>
+    <p>The log, the audit file and the export files contain mailbox addresses. Keep them in a safe location.</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section id="language-theme">
+  <h2>Language and theme</h2>
+  <ul>
+    <li>Select the language in the list <b>Language</b>. The change occurs immediately.</li>
+    <li>Select <b>Dark</b> or <b>Light</b> in the list <b>Theme</b>. The change occurs immediately.</li>
+    <li>EMT keeps the selection in <code>settings.json</code>.</li>
+  </ul>
+  <p>The languages are files in the folder <code>Lang</code>. To add a language, put a new <code>.lng</code> file in this folder.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="troubleshooting">
+  <h2>Troubleshooting</h2>
+  <table>
+    <tr><th>Problem</th><th>Cause</th><th>Action</th></tr>
+    <tr><td>A window says "Exchange Message Trail could not start"</td><td>An error at the start</td><td>Read the cause in the window. Make sure that the folders <code>gui</code>, <code>src</code> and <code>Lang</code> are present.</td></tr>
+    <tr><td>Kerberos error on connect</td><td>The computer is not in the domain, or the name is not an FQDN</td><td>Use the FQDN. Use a domain computer.</td></tr>
+    <tr><td>A button is disabled</td><td>Your account does not have the role</td><td>See <a href="#connect">Connection and roles</a>.</td></tr>
+    <tr><td>The message search finds nothing</td><td>The period, the address, or the log data is too old</td><td>Read the hints in the log. Make the period larger.</td></tr>
+    <tr><td>Delivered, but the user does not see the message</td><td>A rule, the junk e-mail filter or forwarding</td><td>Use the <a href="#mailbox">mailbox check</a>.</td></tr>
+    <tr><td>Found 0 copies, but the message exists</td><td>The message is unindexed, or the subject is different</td><td>Use <b>Search all mailboxes</b>. Make the subject text shorter.</td></tr>
+    <tr><td>The window does not operate correctly</td><td>A problem of the window</td><td>Start <code>EMT-Classic.cmd</code>. Tell the developer about the problem.</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================== -->
+<section id="exchange2019">
+  <h2>Exchange 2019 behavior</h2>
+  <p>These facts come from tests on Exchange Server 2019. EMT obeys them.</p>
+  <table>
+    <tr><th>Behavior</th><th>Rule</th></tr>
+    <tr><td>A <code>*-ComplianceSearch*</code> cmdlet with <code>-ErrorAction Stop</code> fails</td><td>Do not use <code>-ErrorAction Stop</code> with these cmdlets.</td></tr>
+    <tr><td><code>Remove-ComplianceSearch</code> removes the search in the background</td><td>Examine the search again for up to 60 seconds.</td></tr>
+    <tr><td>A running search cannot be removed</td><td>Wait for the status <code>Completed</code>.</td></tr>
+    <tr><td>Many <code>DROP</code> events have the success code <code>250 2.1.5</code></td><td>Read the cause in the server answer.</td></tr>
+  </table>
+  <footer>
+    <p>Exchange Message Trail 2.0.0 · The screenshots show example data (contoso), not real data.</p>
+  </footer>
+</section>
+
+</main>
+</div>
+</body>
+</html>

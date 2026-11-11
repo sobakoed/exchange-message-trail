@@ -114,7 +114,7 @@ app.title = Exchange Message Trail — message search
 conn.server = Exchange server (FQDN):
 conn.connect = Connect
 conn.reconnect = Reconnect
-conn.timeout = Operation timeout, min:
+conn.timeout = Timeout, min:
 conn.cleanup = Clean up old searches
 conn.language = Language:
 conn.notConnected = Not connected.
@@ -204,7 +204,7 @@ missing.reason = The user deleted or moved the message, or the message is not in
 
 # ---- Window: actions and run area ----
 act.soft = Delete (soft)
-act.hard = Delete permanently
+act.hard = Delete (hard)
 act.verify = Verify
 act.export = Export to CSV
 act.cancel = Cancel
@@ -278,7 +278,7 @@ log.unconfirmed = The tracking log does not confirm the found messages ({0}). Ex
 sum.unconfirmed = NOT CONFIRMED BY THE TRACKING LOG — examine the messages before a delete.
 confirm.unconfirmed = WARNING: the tracking log did not find these messages. The search found them only with the KQL query. Make sure that these are the correct messages.
 
-# ---- Exchange Message Trail 1.0: trace, mailbox check ----
+# ---- Exchange Message Trail 1.0: message search, mailbox check ----
 app.short = Exchange Message Trail
 main.trace = Message search
 main.delete = Delete
@@ -286,8 +286,10 @@ log.migrated = A file of the older version was copied: {0}
 log.noMailboxRole = The mailbox check is not available: no Get-Mailbox and Get-InboxRule cmdlets.
 trcrit.group = Find messages in the tracking log
 crit.week = 7 days
+crit.days14 = 14 days
 crit.findCopies = Find copies
 tip.week = Period: the last 7 days, from 0:00 six days ago to 23:59 today.
+tip.days14 = Period: the last 14 days, from 0:00 thirteen days ago to 23:59 today.
 tip.trRecipient = An address, a part of an address or a name of the recipient. Without a sender: all messages to this address.
 status.trace = Message search...
 log.traceStart = Message search: senders [{0}], recipient [{1}], subject [{2}], period {3} to {4}.
@@ -414,7 +416,18 @@ hint.grpBlocked = {0}: the group did not accept the message. The group has a res
 hint.suppressed = {0}: Exchange did not send this copy. This is a setting, not an error.
 
 # ---- Search of copies: more items than messages; the time of the period ----
-sum.extraItems = CHECK: {0} mailboxes have more items than the tracking log has messages ({1}).
-confirm.extraItems = CHECK: some mailboxes have more items than the tracking log has messages ({0}): {1}. The query cannot use the message ID: it finds all items with this sender and this subject on these days, also other messages of the conversation and the copies in Recoverable Items. The delete removes all these items.
+sum.extraItems = CHECK: mailboxes with more items than the tracking log has messages ({1}): {0}.
+confirm.extraItems = CHECK: some mailboxes have more items than the tracking log has messages ({0}): {1}. The query cannot use the message ID. It finds all items with this sender and this subject on these days. These can be other messages of the conversation or copies in Recoverable Items. The delete removes all these items.
 tip.time = The time in the format of Windows, for example 14:30. The end of the period includes its minute: 23:59 is up to 23:59:59. The search of messages uses the exact time. The search of copies uses whole days.
 crit.timeBad = The time is not correct. Type the time in the format of Windows, for example 14:30.
+
+# ---- Message search by a recipient: the other recipients load on selection ----
+log.tracePartial = Search by the recipient {0}: the list shows the delivery to this recipient. The other recipients of a message load when you select the message.
+status.detail = Loading the recipients of the message...
+note.partial = Other recipients: select the message
+trsum.partial = Recipient {0}:
+dlg.exportPartial = The data is complete for {0} of {1} messages. Load the data of all messages before the export? This can take some minutes. No: export the data as it is.
+
+# ---- Help ----
+tip.help = Help (F1): the user guide opens in the browser.
+help.missing = The help file is not found: {0}

@@ -13,7 +13,7 @@
   <Grid Margin="14,10,14,6" Grid.IsSharedSizeScope="True">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*" MinHeight="380"/>
+      <RowDefinition Height="*" MinHeight="300"/>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="120" MinHeight="60"/>
       <RowDefinition Height="Auto"/>
@@ -33,6 +33,7 @@
         <ComboBox x:Name="cmbLanguage" Width="110" Margin="0,0,12,0"/>
         <TextBlock Style="{DynamicResource Label}" Tag="conn.theme"/>
         <ComboBox x:Name="cmbTheme" Width="110"/>
+        <Button x:Name="btnHelp" Content="?" MinWidth="30" Width="30" Padding="0" Margin="12,0,0,0" FontWeight="Bold"/>
       </StackPanel>
     </DockPanel>
 
@@ -84,6 +85,7 @@
                     <Button x:Name="btnTrToday"     Style="{DynamicResource SmallButton}" Tag="crit.today"/>
                     <Button x:Name="btnTrYesterday" Style="{DynamicResource SmallButton}" Tag="crit.yesterday"/>
                     <Button x:Name="btnTrWeek"      Style="{DynamicResource SmallButton}" Tag="crit.week"/>
+                    <Button x:Name="btnTrDays14"    Style="{DynamicResource SmallButton}" Tag="crit.days14"/>
                   </StackPanel>
                 </DockPanel>
               </Grid>
@@ -176,6 +178,7 @@
                   <Button x:Name="btnToday"     Style="{DynamicResource SmallButton}" Tag="crit.today"/>
                   <Button x:Name="btnYesterday" Style="{DynamicResource SmallButton}" Tag="crit.yesterday"/>
                   <Button x:Name="btnWeek"      Style="{DynamicResource SmallButton}" Tag="crit.week"/>
+                  <Button x:Name="btnDays14"    Style="{DynamicResource SmallButton}" Tag="crit.days14"/>
                 </StackPanel>
                 <DockPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,0" LastChildFill="False">
                   <Button x:Name="btnSearch" DockPanel.Dock="Right" Style="{DynamicResource AccentButton}"

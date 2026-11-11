@@ -5,4 +5,9 @@
 *.lng text eol=crlf
 *.xaml text eol=crlf
 *.md  text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.svg text eol=lf
 *.png binary
+*.ico binary

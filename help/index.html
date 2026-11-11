@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="emt-version" content="2.0.0">
+<title>Exchange Message Trail — Help</title>
+<link rel="stylesheet" href="help.css">
+<link rel="icon" type="image/svg+xml" href="img/emt.svg">
+<script src="help.js"></script>
+<script>
+  // The page opens the guide in the language of the browser. "?nolang" stops this (the links below).
+  if (location.search.indexOf('nolang') < 0) {
+    var l = (navigator.language || 'en').toLowerCase();
+    location.replace(l.indexOf('ru') === 0 || l.indexOf('uk') === 0 || l.indexOf('be') === 0 ? 'ru.html' : 'en.html');
+  }
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
+  <span class="version">2.0.0</span>
+</header>
+<main style="max-width:760px;margin:0 auto">
+  <h1>Help / Справка</h1>
+  <p class="lead">Select the language. / Выберите язык.</p>
+  <div class="cards">
+    <a class="card" href="en.html"><h3>English</h3><p>The user guide of Exchange Message Trail.</p></a>
+    <a class="card" href="ru.html"><h3>Русский</h3><p>Руководство пользователя Exchange Message Trail.</p></a>
+  </div>
+</main>
+</body>
+</html>

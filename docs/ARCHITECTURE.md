@@ -64,6 +64,7 @@ The runspace uses the execution policy `Bypass`: `Import-PSSession` makes a temp
 | `Connect` | — | `Connect-EmtExchange` | Capabilities |
 | `Resolve` | both | `Resolve-EmtAddressInputs` (`Get-Recipient -Anr`) | Candidates for each partial address |
 | `Trace` | Message search | `Invoke-EmtTrace` | Messages, delivery report, events, hints |
+| `TraceDetail` | Message search | `Get-EmtMessageDetail` | All events and recipients of the given messages |
 | `CheckMailbox` | Message search | `Invoke-EmtMailboxCheck` | Findings and the data of the checks |
 | `Search` | Delete | `Invoke-EmtSearch` | Search result |
 | `SoftDelete` | Delete | `Invoke-EmtSoftDelete`, then `Get-EmtSettledCopyStatus` | Delete status and verification |
@@ -72,13 +73,17 @@ The runspace uses the execution policy `Bypass`: `Import-PSSession` makes a temp
 | `ListOld` | Delete | `Get-EmtOldSearches` | Old `EMT_*` and `MC_*` searches |
 | `RemoveOld` | Delete | `Remove-EmtSearches` | None |
 
-## Trace (tab Message search)
+## Message search
 
 `Invoke-EmtTrace` reads only the tracking log. It needs only the Message Tracking role.
 
 1. `Test-EmtCriteria -ForTrace` examines the criteria. A recipient alone is a usable criterion.
 2. `Find-EmtTrackingEvents` reads the tracking log of all transport servers.
-   With a recipient filter, a second pass by message ID gets all recipients.
+   With a recipient filter, a second pass by message ID gets all recipients (`Get-EmtEventsByMessageId`).
+   `Get-MessageTrackingLog` accepts one message ID: the second pass makes one call for each message and server.
+   The window uses `-Partial` for a search by a recipient: no second pass, the report has only this recipient.
+   When the user selects a message, the operation `TraceDetail` loads its other recipients (`Request-EmtDetail`).
+   `Merge-EmtDetail` puts the data into the result and changes the row in place. The search of copies always makes the second pass.
 3. `Get-EmtMessageSummary` makes one row for each message ID. Events without a message ID are not messages.
 4. `Resolve-EmtRecipients` classifies each address: internal, external, group or other.
 5. `Get-EmtDeliveryReport` makes one row for each message and recipient.
@@ -183,6 +188,7 @@ The window has a common top line (server, **Connect**, timeout, language, theme)
 | Title bar | `Set-EmtTitleBar` calls `DwmSetWindowAttribute` (dark title bar for the dark theme). Older Windows versions ignore it. |
 | Dialogs | `New-EmtDialog` makes a window with the theme. `Show-EmtMessage`, `Show-EmtPick`, `Show-EmtConfirm` (`New-EmtConfirmWindow`), `Show-EmtInput`. The folder selection of the export is the standard Windows dialog. |
 | Errors | `Dispatcher.UnhandledException` catches an error of an event handler. The window stays open, the log and a message show the error. |
+| Help | The button **?** and the key F1 call `Open-EmtHelp`: it opens `help\<language>.html` in the default browser. |
 
 `Update-EmtConnIndicator` sets the indicator of the bottom line: green = connected, grey = not connected.
 The missing roles are not in the window: the log shows one warning for each function that is not available.
@@ -201,7 +207,7 @@ The missing roles are not in the window: the log shows one warning for each func
 | Delete this message… | A message is selected, Search or Verify |
 | Find copies | Connected, Search or Verify |
 | Delete (soft) | A clean result, no delete yet, SoftDelete + Search + Verify |
-| Delete permanently | A clean result, no hard delete yet, HardDelete |
+| Delete (hard) | A clean result, no hard delete yet, HardDelete |
 | Verify | Copies found, Verify |
 | Clean up old searches | Connected, Search |
 | Cancel | An operation runs |
@@ -248,7 +254,10 @@ shows an orange warning, and the delete confirmation needs the typed word.
 
 `Set-EmtGridData` binds a `DataTable`. The columns have the property names. A property with an empty header key
 is data only. The header texts come from the current language.
-`Resize-EmtGrids` sets the initial widths once, when the grid is visible (60–450 px, the last column gets the free space).
+`Resize-EmtGrids` sets the initial widths once, when the grid is visible (60–450 px).
+`Get-EmtColumnWidth` measures the header and the values of up to 300 rows (`Measure-EmtText`).
+The automatic width of WPF can come before the rows are on the grid: then it fits the header only.
+The last column gets the free space only if all columns fit. Else the grid scrolls: a star column would cut the other columns.
 Then the widths are fixed: a sort keeps them. The row height is fixed (`CanUserResizeRows = False`).
 
 The rows have no fill color. Two parameters of `Set-EmtGridData` give the colors:
@@ -299,4 +308,8 @@ The audit file uses fixed English values. The language does not change them.
 - Give an element an `x:Name` before the script uses it. A unit test finds variables without an element.
 - A script block with `GetNewClosure()` does not see the functions of the script. Use it only for local variables
   of a dialog (for example `$w.DialogResult = $true`).
-- Do not open a modal dialog in an automatic test. Make the window with `New-EmtConfirmWindow` and show it outside the screen.
+- Do not open a modal dialog in an automatic test. Make the window with `New-EmtConfirmWindow` or `New-EmtPickWindow`
+  and show it outside the screen.
+- Update the user guide (`help/`) with each commit: the texts in English and in Russian, and the screenshots.
+  Run `tools/Make-HelpScreenshots.ps1` for the screenshots. A unit test compares the version of the guide with `CHANGELOG.md`.
+- Write the English texts of the guide in ASD-STE100: 20 words in a sentence at most, one action in one step.

@@ -58,6 +58,14 @@ if (-not ('EmtDwm' -as [type])) {
 [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(System.IntPtr hwnd, int attr, ref int value, int size);
 '@
 }
+if (-not ('EmtShell' -as [type])) {
+    Add-Type -Namespace '' -Name 'EmtShell' -MemberDefinition @'
+[DllImport("shell32.dll")] public static extern int SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string id);
+'@
+}
+# An own application ID: the taskbar shows EMT as a separate button with the EMT icon, not as PowerShell.
+# Set it before the first window opens.
+try { [void][EmtShell]::SetCurrentProcessExplicitAppUserModelID('ExchangeMessageTrail') } catch { }
 
 # Hide the PowerShell console window, but only if it belongs to EMT alone.
 # One process in the console: the console was made for EMT (EMT.cmd, a shortcut, "Run").
@@ -71,6 +79,10 @@ if ($consoleWindow -ne [IntPtr]::Zero -and [EmtConsole]::GetConsoleProcessList((
 $CorePath = Join-Path $PSScriptRoot 'src\EMT.Core.ps1'
 . $CorePath
 $GuiDir = Join-Path $PSScriptRoot 'gui'
+
+# The EMT icon: the title bar of all windows and the taskbar. A missing file gives the PowerShell icon.
+$script:EmtIcon = $null
+try { $script:EmtIcon = [System.Windows.Media.Imaging.BitmapFrame]::Create((New-Object Uri (Join-Path $GuiDir 'emt.ico'))) } catch { }
 
 #region ---------- Paths, settings, shared state ----------
 
@@ -118,12 +130,16 @@ $script:PendingCleanup  = $null      # names confirmed for cleanup; the timer st
 $script:CleanupNames    = $null
 $script:Deleted         = ''         # last delete on the current result: '', 'Soft' or 'Hard'
 $script:ReportByMsg     = @{}        # MessageId -> the report rows of the message
+$script:DetailLoaded    = @{}        # MessageId -> $true: the message has all recipients (partial message search)
+$script:PendingDetail   = ''         # MessageId: load its recipients when no operation runs
 $script:PcCulture       = [Globalization.CultureInfo]::CurrentCulture   # the regional settings of Windows (Set-EmtDateCulture)
 $script:Theme           = 'Dark'
 $script:LanguageCodes   = @()
 $script:ThemeCodes      = @('Dark', 'Light')
 $script:GridHeaders     = @{}        # grid -> ordered map "property" -> "text key" of the column header
 $script:GridNeedsSize   = @{}        # grid -> true: set the column widths when the grid is visible
+$script:GridLastWidth   = @{}        # grid -> the width of the last column from its content
+$script:GridResizeHooked = @{}       # grid -> true: the grid has the SizeChanged handler
 $script:Tips            = New-Object System.Collections.Generic.List[object]   # control + tooltip key
 $script:XamlText        = @{}        # file name -> text (the dialogs load the theme again)
 $script:LastTime        = @{}        # time field -> the last good time text
@@ -408,6 +424,7 @@ function New-EmtDialog([string] $Title, [double] $Width) {
     $w.ResizeMode = 'NoResize'
     $w.FontFamily = 'Segoe UI'; $w.FontSize = 12
     $w.UseLayoutRounding = $true
+    if ($script:EmtIcon) { $w.Icon = $script:EmtIcon }
     if ($Width) { $w.Width = $Width; $w.SizeToContent = 'Height' } else { $w.SizeToContent = 'WidthAndHeight' }
     if ($window -and $window.IsLoaded) { $w.Owner = $window }
     Add-EmtTheme $w
@@ -463,6 +480,16 @@ function Show-EmtMessage {
 function Show-EmtPick {
     <# Selection of one or more addresses from the candidates. Returns the selected addresses, or $null on cancel. #>
     param([string] $Text, [object[]] $Candidates, [switch] $Multi, [int] $Max = 25)
+    $d = New-EmtPickWindow -Text $Text -Candidates $Candidates -Multi:$Multi -Max $Max
+    $answer = $d.Window.ShowDialog()
+    $picked = @(foreach ($item in $d.List.SelectedItems) { $Candidates[$d.List.Items.IndexOf($item)].Address })
+    if (-not $answer -or -not $picked.Count) { return $null }
+    , $picked
+}
+
+function New-EmtPickWindow {
+    <# Makes the selection window of the addresses. It does not show it. Returns the window and the list. #>
+    param([string] $Text, [object[]] $Candidates, [switch] $Multi, [int] $Max = 25)
     $w = New-EmtDialog -Title (T 'pick.title') -Width 640
     $root = New-Object System.Windows.Controls.DockPanel
     $root.Margin = '18,16,18,14'
@@ -495,10 +522,7 @@ function Show-EmtPick {
     $list.Add_MouseDoubleClick({ if ($list.SelectedIndex -ge 0) { $w.DialogResult = $true } }.GetNewClosure())
 
     $w.Content = $root
-    $answer = $w.ShowDialog()
-    $picked = @(foreach ($item in $list.SelectedItems) { $Candidates[$list.Items.IndexOf($item)].Address })
-    if (-not $answer -or -not $picked.Count) { return $null }
-    , $picked
+    [pscustomobject]@{ Window = $w; List = $list }
 }
 
 function New-EmtDialogButtons([string] $OkText, [string] $OkStyle = '') {
@@ -596,6 +620,15 @@ function Show-EmtInput {
     if ($w.ShowDialog()) { $box.Text } else { $null }
 }
 
+function Open-EmtHelp {
+    <# Opens the user guide in the interface language. If the guide has no page for this language, the English page opens. #>
+    $dir = Join-Path $PSScriptRoot 'help'
+    $page = Join-Path $dir "$($Sync.Lang).html"
+    if (-not (Test-Path $page)) { $page = Join-Path $dir 'en.html' }
+    if (-not (Test-Path $page)) { [void](Show-EmtMessage -Text (T 'help.missing' $page) -Kind Warn); return }
+    Start-Process -FilePath $page
+}
+
 function Export-EmtSets([string] $Stem, [System.Collections.Specialized.OrderedDictionary] $Sets) {
     <# Saves each set as <folder>\<stem>-<name>.csv. The user selects the folder (the standard Windows dialog). #>
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -684,6 +717,11 @@ function Set-EmtGridData {
     }
     $script:GridHeaders[$Grid] = $Columns
     $script:GridNeedsSize[$Grid] = $true
+    $script:GridLastWidth.Remove($Grid)
+    if (-not $script:GridResizeHooked.ContainsKey($Grid)) {
+        $script:GridResizeHooked[$Grid] = $true
+        $Grid.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-EmtLastColumn $s } })
+    }
     $Grid.ItemsSource = $dt.DefaultView
     # The widths come from the content after the layout. The dispatcher calls the function after the layout.
     [void]$window.Dispatcher.BeginInvoke([Action]{ Resize-EmtGrids }, [System.Windows.Threading.DispatcherPriority]::ContextIdle)
@@ -693,6 +731,41 @@ function Clear-EmtGrid($Grid) {
     $Grid.ItemsSource = $null
     $Grid.Columns.Clear()
     $script:GridNeedsSize[$Grid] = $false
+}
+
+function Measure-EmtText([string] $Text, $Grid, [switch] $Bold) {
+    <# The width of a text in the font of a grid, in pixels. #>
+    if (-not $Text) { return 0 }
+    $weight = if ($Bold) { [System.Windows.FontWeights]::SemiBold } else { $Grid.FontWeight }
+    $face = New-Object System.Windows.Media.Typeface($Grid.FontFamily, $Grid.FontStyle, $weight, $Grid.FontStretch)
+    $ft = New-Object System.Windows.Media.FormattedText($Text, [Globalization.CultureInfo]::CurrentCulture,
+              [System.Windows.FlowDirection]::LeftToRight, $face, $Grid.FontSize, [System.Windows.Media.Brushes]::Black)
+    $ft.WidthIncludingTrailingWhitespace
+}
+
+function Get-EmtColumnWidth($Grid, $Column) {
+    <#
+        The width of a column from its header and its values (up to 300 rows): the widest text and the paddings.
+        The automatic width of WPF can come before the rows are on the grid: then it fits the header only.
+    #>
+    $w = (Measure-EmtText ([string]$Column.Header) $Grid -Bold) + 30      # header padding 8 + 14, the sort arrow
+    $prop = $Column.SortMemberPath
+    $format = if ($Column -is [System.Windows.Controls.DataGridTextColumn] -and $Column.Binding.StringFormat) { $Column.Binding.StringFormat } else { '' }
+    $n = 0
+    foreach ($v in @($Grid.ItemsSource)) {
+        if (++$n -gt 300) { break }
+        $cell = 0
+        if ($Column -is [System.Windows.Controls.DataGridTemplateColumn] -and $v.Row.Table.Columns.Contains('Parts') -and $v.Row['Parts'] -is [array]) {
+            # The status parts: a dot (14 px) and a text for each part, 14 px between the parts.
+            foreach ($p in $v.Row['Parts']) { $cell += 14 + (Measure-EmtText ([string]$p['Text']) $Grid) + 14 }
+        } elseif ($prop -and $v.Row.Table.Columns.Contains($prop)) {
+            $x = $v.Row[$prop]
+            $s = if ($x -is [DBNull]) { '' } elseif ($format -and $x -is [datetime]) { $x.ToString($format) } else { [string]$x }
+            $cell = Measure-EmtText $s $Grid
+        }
+        $w = [math]::Max($w, $cell + 32)                                  # cell padding 8 + 8, the margin of the text, the grid line
+    }
+    [math]::Ceiling($w)
 }
 
 function Resize-EmtGrids {
@@ -706,13 +779,38 @@ function Resize-EmtGrids {
         $script:GridNeedsSize[$g] = $false
         # The mark column has a fixed width: it cannot change.
         $cols = @($g.Columns | Where-Object { $_.Visibility -eq 'Visible' -and $_.CanUserResize })
+        $sum = 0
         foreach ($c in $cols) {
-            $w = [math]::Max(60, [math]::Min(450, $c.ActualWidth))
+            $w = [math]::Max(60, [math]::Min(450, (Get-EmtColumnWidth $g $c)))
             $c.Width = New-Object System.Windows.Controls.DataGridLength($w)
+            $sum += $w
         }
-        $last = $cols[-1]
-        $last.MinWidth = $last.ActualWidth
+        # The last column gets the free space only if all columns fit. A star column with too little space
+        # makes the grid narrow the other columns: then the texts are cut. Without free space, the grid scrolls.
+        $script:GridLastWidth[$g] = $cols[-1].Width.Value
+        Update-EmtLastColumn $g
+    }
+}
+
+function Update-EmtLastColumn($Grid) {
+    <#
+        The last column gets the free space only if all columns fit. A star column with too little space
+        makes the grid narrow the other columns: then the texts are cut. Without free space, the grid scrolls.
+        The grid calls this function also when its width changes (the window size).
+    #>
+    if (-not $script:GridLastWidth.ContainsKey($Grid) -or $script:GridNeedsSize[$Grid]) { return }
+    $cols = @($Grid.Columns | Where-Object { $_.Visibility -eq 'Visible' -and $_.CanUserResize })
+    if (-not $cols.Count) { return }
+    $last = $cols[-1]; $natural = $script:GridLastWidth[$Grid]
+    $sum = $natural
+    for ($i = 0; $i -lt $cols.Count - 1; $i++) { $sum += $cols[$i].ActualWidth }
+    $fits = ($Grid.ActualWidth - 30 - $sum) -gt 0
+    if ($fits -and -not $last.Width.IsStar) {
+        $last.MinWidth = $natural
         $last.Width = New-Object System.Windows.Controls.DataGridLength(1, [System.Windows.Controls.DataGridLengthUnitType]::Star)
+    } elseif (-not $fits -and $last.Width.IsStar) {
+        $last.MinWidth = 20
+        $last.Width = New-Object System.Windows.Controls.DataGridLength($natural)
     }
 }
 
@@ -720,6 +818,19 @@ function Get-EmtSelectedRow($Grid) {
     <# The DataRow of the selected row of a grid, or $null. #>
     $item = $Grid.SelectedItem
     if ($item -is [System.Data.DataRowView]) { $item.Row } else { $null }
+}
+
+$script:LogTextWidth = 0
+
+function Update-EmtLogWidth {
+    <#
+        No word wrap in the log: one log line is one line. The page has the width of the visible area,
+        or the width of the longest line. A horizontal scroll bar shows only for a line that is longer than the area.
+    #>
+    if (-not $log -or -not $log.Document) { return }
+    $view = $log.ViewportWidth
+    if (-not ($view -gt 0)) { $view = 600 }
+    $log.Document.PageWidth = [math]::Max($view, $script:LogTextWidth + 8)
 }
 
 function Add-EmtLogLine([string] $Line) {
@@ -733,6 +844,8 @@ function Add-EmtLogLine([string] $Line) {
     Set-EmtBrush $run $key ([System.Windows.Documents.TextElement]::ForegroundProperty)
     $script:LogPara.Inlines.Add($run)
     $script:LogPara.Inlines.Add((New-Object System.Windows.Documents.LineBreak))
+    $w = Measure-EmtText $Line $log
+    if ($w -gt $script:LogTextWidth) { $script:LogTextWidth = $w; Update-EmtLogWidth }
     $log.ScrollToEnd()
     try { Add-Content -Path $LogPath -Value $Line -Encoding UTF8 } catch { }
 }
@@ -759,6 +872,7 @@ $script:Theme = if ($Theme) { $Theme }
 $xamlPath = Join-Path $GuiDir 'MainWindow.xaml'
 [xml]$xamlDoc = [IO.File]::ReadAllText($xamlPath, [Text.Encoding]::UTF8)
 $window = [System.Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xamlDoc))
+if ($script:EmtIcon) { $window.Icon = $script:EmtIcon }
 Add-EmtTheme $window
 
 # A variable for each element with x:Name: $tbServer, $btnTrFind, ...
@@ -770,11 +884,16 @@ foreach ($n in $xamlDoc.SelectNodes('//*[@*[local-name()="Name"]]')) {
 
 $doc = New-Object System.Windows.Documents.FlowDocument
 $doc.PagePadding = '0'
-$doc.PageWidth = 4000      # no word wrap: one log line is one line
 $script:LogPara = New-Object System.Windows.Documents.Paragraph
 $script:LogPara.Margin = '0'
 $doc.Blocks.Add($script:LogPara)
 $log.Document = $doc
+Update-EmtLogWidth
+# The visible area changes with the window size and with the vertical scroll bar: the page width follows it.
+$log.AddHandler([System.Windows.Controls.ScrollViewer]::ScrollChangedEvent, [System.Windows.Controls.ScrollChangedEventHandler]{
+    param($s, $e)
+    if ($e.ViewportWidthChange -ne 0) { Update-EmtLogWidth }
+})
 
 foreach ($l in $available) { [void]$cmbLanguage.Items.Add($l.Name) }
 
@@ -794,6 +913,7 @@ Set-EmtTip $tbTrMessageId   'tip.messageId'
 Set-EmtTip $btnTrToday      'tip.today'
 Set-EmtTip $btnTrYesterday  'tip.yesterday'
 Set-EmtTip $btnTrWeek       'tip.week'
+Set-EmtTip $btnTrDays14     'tip.days14'
 Set-EmtTip $btnTrCheck      'tip.checkMailbox'
 Set-EmtTip $btnTrDelete     'tip.deleteThis'
 Set-EmtTip $btnTrExport     'tip.export'
@@ -803,6 +923,7 @@ Set-EmtTip $tbMessageId     'tip.messageId'
 Set-EmtTip $btnToday        'tip.today'
 Set-EmtTip $btnYesterday    'tip.yesterday'
 Set-EmtTip $btnWeek         'tip.week'
+Set-EmtTip $btnDays14       'tip.days14'
 Set-EmtTip $chkForwards     'tip.forwards'
 Set-EmtTip $chkOnly         'tip.only'
 Set-EmtTip $chkAll          'tip.all'
@@ -815,6 +936,7 @@ Set-EmtTip $tbTimeout       'tip.timeout'
 foreach ($tb in $tbTrStartTime, $tbTrEndTime, $tbStartTime, $tbEndTime) { Set-EmtTip $tb 'tip.time' }
 Set-EmtTip $cmbLanguage     'tip.language'
 Set-EmtTip $cmbTheme        'tip.theme'
+Set-EmtTip $btnHelp         'tip.help'
 
 #endregion
 
@@ -1094,6 +1216,89 @@ function Get-EmtReportOf([string] $MessageId) {
     if ($script:ReportByMsg -and $script:ReportByMsg.ContainsKey($MessageId)) { $script:ReportByMsg[$MessageId].ToArray() }
 }
 
+function Test-EmtDetailLoaded([string] $MessageId) {
+    <# $true if the message has all its recipients: a full message search, or the details are loaded. #>
+    -not ($script:Trace -and (Get-EmtProp $script:Trace 'Partial')) -or $script:DetailLoaded.ContainsKey($MessageId)
+}
+
+function Get-EmtMessageNote($Message) {
+    <# The note of a message: made by Exchange, or the other recipients are not loaded yet. #>
+    if ($Message.ServerGenerated) { T 'note.serverGenerated' }
+    elseif (-not (Test-EmtDetailLoaded $Message.MessageId)) { T 'note.partial' }
+    else { '' }
+}
+
+function Request-EmtDetail([string] $MessageId) {
+    <#
+        Loads all recipients of one message (operation TraceDetail). If an operation runs, the timer starts the load later.
+        The user can select other messages quickly: the timer loads only the message that is selected at that time.
+    #>
+    if ($script:Job) { $script:PendingDetail = $MessageId; return }
+    $script:PendingDetail = ''
+    $c = $script:Trace.Criteria
+    Start-EmtOperation -Name 'TraceDetail' -StatusText (T 'status.detail') -Params @{
+        MessageIds = @($MessageId); Start = $c.Start; End = $c.End
+    } -OnSuccess {
+        param($d)
+        Merge-EmtDetail $d
+        Show-EmtTraceDetail
+    }
+}
+
+function Merge-EmtDetail($Detail) {
+    <# Puts the full data of messages (Get-EmtMessageDetail) into the result of the message search, and updates their rows. #>
+    $t = $script:Trace
+    if (-not $t -or -not $Detail) { return }
+    $ids = @($Detail.MessageIds)
+    $t.Events = @(@($t.Events | Where-Object { $_.MessageId -notin $ids }) + @($Detail.Events))
+    $t.Report = @(@($t.Report | Where-Object { $_.MessageId -notin $ids }) + @($Detail.Report))
+    $byMsg = @{}
+    foreach ($r in @($Detail.Report)) {
+        if (-not $byMsg.ContainsKey($r.MessageId)) { $byMsg[$r.MessageId] = New-Object System.Collections.ArrayList }
+        [void]$byMsg[$r.MessageId].Add($r)
+    }
+    $messages = @{}
+    foreach ($m in @($t.Messages)) { $messages[$m.MessageId] = $m }
+    $views = @{}
+    foreach ($v in @($gridTrMessages.ItemsSource)) { $views[[string]$v.Row['MessageId']] = $v }
+    foreach ($id in $ids) {
+        # Assignment in each branch: `$x = if (...) { $list }` sends the list through the pipeline and unrolls it.
+        if ($byMsg.ContainsKey($id)) { $list = $byMsg[$id] } else { $list = New-Object System.Collections.ArrayList }
+        $script:ReportByMsg[$id] = $list
+        $script:DetailLoaded[$id] = $true
+        $rows = @($list.ToArray())
+        $m = $messages[$id]
+        if ($m) {
+            $m.Recipients = $rows.Count
+            $m.Problems   = @($rows | Where-Object { $_.Status -in (Get-EmtErrorStatuses) }).Count
+            $m.StatusLine = Get-EmtMessageStatusLine $rows
+        }
+        # The row changes in place: the grid keeps its scroll position and the selection.
+        $v = $views[$id]
+        if ($v) {
+            $v.Row['Recipients'] = $rows.Count
+            $v.Row['StatusLine'] = Get-EmtMessageStatusLine $rows
+            $v.Row['Parts']      = [object[]]@(Get-EmtStatusParts $rows)
+            $v.Row['Mark']       = [string](Get-EmtStatusMark $rows)
+            $v.Row['Note']       = $(if ($m) { Get-EmtMessageNote $m } else { '' })
+        }
+    }
+}
+
+function Export-EmtTrace {
+    <# Saves the result of the message search as CSV files. The column Complete tells if a message has all recipients. #>
+    $t = $script:Trace
+    Export-EmtSets -Stem ('EMT_trace_{0:yyyyMMdd_HHmmss}' -f (Get-Date)) -Sets ([ordered]@{
+        'messages'   = @($t.Messages | Select-Object Time, Sender, Subject, Recipients, MessageId,
+                            @{ n = 'Complete'; e = { Test-EmtDetailLoaded $_.MessageId } })
+        'recipients' = @($t.Report | Select-Object MessageId, Recipient, Kind, Status, Time, Server, Folder, Detail, Hint)
+        'events'     = @($t.Events | Select-Object Timestamp, ServerHostname, EventId, Source, Sender,
+                            @{ n = 'Recipients'; e = { $_.Recipients -join '; ' } },
+                            @{ n = 'RecipientStatus'; e = { $_.RecipientStatus -join '; ' } }, MessageSubject, MessageId)
+        'mailbox'    = @($(if ($script:MailboxCheck) { $script:MailboxCheck.Findings }))
+    })
+}
+
 function Clear-EmtTraceViews {
     foreach ($g in $gridTrMessages, $gridTrRecipients, $gridTrEvents, $gridTrMailbox) { Clear-EmtGrid $g }
     Update-EmtTabTitles
@@ -1115,7 +1320,7 @@ function Show-EmtTraceViews($t) {
         [pscustomobject]@{
             Time = $_.Time; Sender = $_.Sender; Subject = $_.Subject; Recipients = $_.Recipients
             StatusLine = (Get-EmtMessageStatusLine $rcpt)
-            Note = $(if ($_.ServerGenerated) { T 'note.serverGenerated' } else { '' })
+            Note = (Get-EmtMessageNote $_)
             MessageId = $_.MessageId; Rows = $rcpt
         }
     })
@@ -1136,7 +1341,9 @@ function Show-EmtTraceViews($t) {
         # Only the number of errors is red. The other parts have the usual text color.
         $values = @($msgs.Count, $report.Count, (& $count @('Delivered')), (& $count @('External')),
                     $failed, (& $count @('Deferred', 'InTransit', 'Unknown')), $t.Seconds)
-        Set-EmtSummaryParts -Label $lblTrSummary -Template (T 'trsum.text') -Values $values -Alert 4 -Prefix $prefix
+        # A partial search counts the searched recipient only: the line starts with "Recipient x:".
+        $lead = if (Get-EmtProp $t 'Partial') { T 'trsum.partial' $t.Criteria.Recipient } else { '' }
+        Set-EmtSummaryParts -Label $lblTrSummary -Template (T 'trsum.text') -Values $values -Alert 4 -Prefix $prefix -Lead $lead
     } else {
         Set-EmtLabel $lblTrSummary (T 'trsum.empty') 'Text.Orange' (@($t.NoResultHints) -join "`r`n")
         if ($prefix) { Set-EmtLabel $lblTrSummary ($prefix + '   ' + $lblTrSummary.Text) 'Text.Red' $lblTrSummary.ToolTip }
@@ -1158,6 +1365,14 @@ function Show-EmtTraceDetail {
     if (-not $t -or -not $msgId) {
         foreach ($g in $gridTrRecipients, $gridTrEvents, $gridTrMailbox) { Clear-EmtGrid $g }
         Update-EmtTabTitles
+        Set-UiState
+        return
+    }
+    # A partial message search: the other recipients of this message are not loaded yet.
+    if (-not (Test-EmtDetailLoaded $msgId)) {
+        foreach ($g in $gridTrRecipients, $gridTrEvents, $gridTrMailbox) { Clear-EmtGrid $g }
+        Update-EmtTabTitles
+        Request-EmtDetail $msgId
         Set-UiState
         return
     }
@@ -1204,6 +1419,8 @@ function Show-EmtMailboxView($mc) {
 function Show-EmtTraceResult($t) {
     $script:Trace = $t
     $script:MailboxCheck = $null
+    $script:DetailLoaded = @{}
+    $script:PendingDetail = ''
     Show-EmtTraceViews $t
     if (-not @($t.Messages).Count) {
         Write-EmtLog (T 'log.traceEmpty') 'Warn'
@@ -1434,7 +1651,8 @@ function Start-EmtTrace {
     Clear-EmtTraceViews
     $fmt = T 'fmt.date'
     Write-EmtLog (T 'log.traceStart' ($crit.Senders -join ', ') $crit.Recipient $crit.Subject $crit.Start.ToString($fmt) $crit.End.ToString($fmt))
-    Start-EmtOperation -Name 'Trace' -Params @{ Criteria = $crit } -StatusText (T 'status.trace') -OnSuccess {
+    # A search by a recipient is partial: the other recipients of a message load when the user selects it.
+    Start-EmtOperation -Name 'Trace' -Params @{ Criteria = $crit; Partial = [bool]$crit.Recipient } -StatusText (T 'status.trace') -OnSuccess {
         param($t) Show-EmtTraceResult $t
     }
 }
@@ -1481,7 +1699,7 @@ function Open-EmtDeleteForMessage {
 
 function Set-EmtPeriod($Start, $StartTime, $End, $EndTime, [int] $StartDays, [int] $EndDays) {
     <#
-        A quick period: today, yesterday or the last 7 days. The start is 0:00, the end is 23:59 of the last day
+        A quick period: today, yesterday, the last 7 days or the last 14 days. The start is 0:00, the end is 23:59 of the last day
         (the end includes its minute). $EndDays is the day after the last day: 1 = today is the last day.
     #>
     Set-EmtPeriodValue $Start $StartTime (Get-Date).Date.AddDays($StartDays)
@@ -1560,6 +1778,10 @@ $cmbLanguage.Add_SelectionChanged({
     Write-EmtLog (T 'log.language')
 })
 
+# Help: the button "?" and the key F1 open the user guide (help\<language>.html) in the browser.
+$btnHelp.Add_Click({ Open-EmtHelp })
+$window.Add_PreviewKeyDown({ param($s, $e) if ($e.Key -eq [System.Windows.Input.Key]::F1) { $e.Handled = $true; Open-EmtHelp } })
+
 $cmbTheme.Add_SelectionChanged({
     if ($script:Loading -or $cmbTheme.SelectedIndex -lt 0) { return }
     $name = $script:ThemeCodes[$cmbTheme.SelectedIndex]
@@ -1582,6 +1804,7 @@ $mainTabs.Add_SelectionChanged({
 $btnTrToday.Add_Click({     Set-EmtPeriod $dtTrStart $tbTrStartTime $dtTrEnd $tbTrEndTime 0 1 })
 $btnTrYesterday.Add_Click({ Set-EmtPeriod $dtTrStart $tbTrStartTime $dtTrEnd $tbTrEndTime -1 0 })
 $btnTrWeek.Add_Click({      Set-EmtPeriod $dtTrStart $tbTrStartTime $dtTrEnd $tbTrEndTime -6 1 })
+$btnTrDays14.Add_Click({    Set-EmtPeriod $dtTrStart $tbTrStartTime $dtTrEnd $tbTrEndTime -13 1 })
 
 $btnTrFind.Add_Click({
     $crit = Get-EmtTraceCriteria
@@ -1634,15 +1857,17 @@ $btnTrCheck.Add_Click({
 $btnTrDelete.Add_Click({ Open-EmtDeleteForMessage })
 
 $btnTrExport.Add_Click({
+    # A partial message search: the user can load all recipients of all messages before the export.
     $t = $script:Trace
-    Export-EmtSets -Stem ('EMT_trace_{0:yyyyMMdd_HHmmss}' -f (Get-Date)) -Sets ([ordered]@{
-        'messages'   = @($t.Messages | Select-Object Time, Sender, Subject, Recipients, MessageId)
-        'recipients' = @($t.Report | Select-Object MessageId, Recipient, Kind, Status, Time, Server, Folder, Detail, Hint)
-        'events'     = @($t.Events | Select-Object Timestamp, ServerHostname, EventId, Source, Sender,
-                            @{ n = 'Recipients'; e = { $_.Recipients -join '; ' } },
-                            @{ n = 'RecipientStatus'; e = { $_.RecipientStatus -join '; ' } }, MessageSubject, MessageId)
-        'mailbox'    = @($(if ($script:MailboxCheck) { $script:MailboxCheck.Findings }))
-    })
+    $missing = @($t.Messages | Where-Object { -not (Test-EmtDetailLoaded $_.MessageId) } | ForEach-Object { [string]$_.MessageId })
+    $total = @($t.Messages).Count
+    if ($missing.Count -and (Show-EmtMessage -Text (T 'dlg.exportPartial' ($total - $missing.Count) $total) -Kind Question)) {
+        Start-EmtOperation -Name 'TraceDetail' -StatusText (T 'status.detail') -Params @{
+            MessageIds = $missing; Start = $t.Criteria.Start; End = $t.Criteria.End
+        } -OnSuccess { param($d) Merge-EmtDetail $d; Show-EmtTraceDetail; Export-EmtTrace }
+        return
+    }
+    Export-EmtTrace
 })
 
 # ---- Delete ----
@@ -1650,6 +1875,7 @@ $btnTrExport.Add_Click({
 $btnToday.Add_Click({     Set-EmtPeriod $dtStart $tbStartTime $dtEnd $tbEndTime 0 1 })
 $btnYesterday.Add_Click({ Set-EmtPeriod $dtStart $tbStartTime $dtEnd $tbEndTime -1 0 })
 $btnWeek.Add_Click({      Set-EmtPeriod $dtStart $tbStartTime $dtEnd $tbEndTime -6 1 })
+$btnDays14.Add_Click({    Set-EmtPeriod $dtStart $tbStartTime $dtEnd $tbEndTime -13 1 })
 
 $btnSearch.Add_Click({
     $crit = Get-EmtCriteria
@@ -1764,6 +1990,39 @@ $chkOnly.Add_Checked({ $chkAll.IsChecked = $false; Invoke-EmtInvalidate })
 $chkOnly.Add_Unchecked({ Invoke-EmtInvalidate })
 $tbRecipient.Add_TextChanged({ $chkOnly.IsEnabled = [bool]$tbRecipient.Text.Trim() })
 
+# ---- The mark of the quick period ----
+# The button of the current period has a green border and a light green background, also after a search.
+# The mark comes from the period fields: a manual change removes it. Midnight changes "today": the timer examines it.
+$script:PeriodSets = @(
+    @{ Start = $dtTrStart; StartTime = $tbTrStartTime; End = $dtTrEnd; EndTime = $tbTrEndTime; Mark = $null
+       Buttons = @{ Today = $btnTrToday; Yesterday = $btnTrYesterday; Week = $btnTrWeek; Days14 = $btnTrDays14 } }
+    @{ Start = $dtStart; StartTime = $tbStartTime; End = $dtEnd; EndTime = $tbEndTime; Mark = $null
+       Buttons = @{ Today = $btnToday; Yesterday = $btnYesterday; Week = $btnWeek; Days14 = $btnDays14 } }
+)
+$script:PeriodMarkDay = (Get-Date).Date
+
+function Update-EmtPeriodMarks {
+    foreach ($set in $script:PeriodSets) {
+        $k = Get-EmtQuickPeriod -Start (Get-EmtPeriodValue $set.Start $set.StartTime) -End (Get-EmtPeriodValue $set.End $set.EndTime)
+        if ($set.Mark -eq $k) { continue }
+        $set.Mark = $k
+        foreach ($name in $set.Buttons.Keys) {
+            $b = $set.Buttons[$name]
+            if ($name -eq $k) {
+                Set-EmtBrush $b 'Accent.Border' ([System.Windows.Controls.Control]::BorderBrushProperty)
+                Set-EmtBrush $b 'Accent.Soft' ([System.Windows.Controls.Control]::BackgroundProperty)
+            } else {
+                $b.ClearValue([System.Windows.Controls.Control]::BorderBrushProperty)
+                $b.ClearValue([System.Windows.Controls.Control]::BackgroundProperty)
+            }
+        }
+    }
+}
+foreach ($set in $script:PeriodSets) {
+    foreach ($d in $set.Start, $set.End) { $d.Add_SelectedDateChanged({ Update-EmtPeriodMarks }) }
+    foreach ($tb in $set.StartTime, $set.EndTime) { $tb.Add_TextChanged({ Update-EmtPeriodMarks }) }
+}
+
 # ---- Common ----
 
 $btnCancel.Add_Click({
@@ -1776,6 +2035,7 @@ $btnCancel.Add_Click({
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(400)
 $timer.Add_Tick({
+    if ((Get-Date).Date -ne $script:PeriodMarkDay) { $script:PeriodMarkDay = (Get-Date).Date; Update-EmtPeriodMarks }
     $line = $null
     while ($Sync.Log.TryDequeue([ref]$line)) { Add-EmtLogLine $line }
     if ($script:Job) {
@@ -1791,6 +2051,12 @@ $timer.Add_Tick({
                 while ($Sync.Log.TryDequeue([ref]$line)) { Add-EmtLogLine $line }
             } finally { $timer.Start() }
         }
+    }
+    elseif ($script:PendingDetail) {
+        # Load the message that is selected now. The user can have selected another message during the operation.
+        $id = Get-EmtSelectedMessageId
+        $script:PendingDetail = ''
+        if ($id -and -not (Test-EmtDetailLoaded $id)) { Request-EmtDetail $id }
     }
     elseif ($script:PendingCleanup) {
         $script:CleanupNames = $script:PendingCleanup
@@ -1847,24 +2113,40 @@ if ($settings.ContainsKey('TimeoutMinutes')) {
 }
 $tbTimeout.Text = [string]$script:LastTimeout
 $cmbLanguage.SelectedIndex = [array]::IndexOf($script:LanguageCodes, [string]$Sync.Lang)
+# Small screens (HD 1280 x 720, or Full HD with the scale 150 %): the window must fit in the work area
+# (the screen without the taskbar). The minimum size cannot be larger than the work area.
+# If the default size does not fit, the window opens maximized. The log is smaller: the grids get the space.
+$wa = [System.Windows.SystemParameters]::WorkArea
+if ($wa.Width -gt 0 -and $wa.Height -gt 0) {
+    $window.MinWidth  = [math]::Min($window.MinWidth, $wa.Width)
+    $window.MinHeight = [math]::Min($window.MinHeight, $wa.Height)
+    if ($window.Width -gt $wa.Width -or $window.Height -gt $wa.Height) {
+        $window.Width = [math]::Min($window.Width, $wa.Width); $window.Height = [math]::Min($window.Height, $wa.Height)
+        $window.WindowState = 'Maximized'
+    }
+    if ($wa.Height -lt 800) { $log.Parent.RowDefinitions[3].Height = New-Object System.Windows.GridLength(72) }
+}
 # The last window size and position. Only if the window is on the screen now (a monitor can be removed).
+# The size cannot be larger than all screens together.
 if ($settings.ContainsKey('WpfWindow') -and $settings.WpfWindow) {
     try {
         $wb = $settings.WpfWindow
         $vs = New-Object System.Windows.Rect([System.Windows.SystemParameters]::VirtualScreenLeft, [System.Windows.SystemParameters]::VirtualScreenTop,
                                              [System.Windows.SystemParameters]::VirtualScreenWidth, [System.Windows.SystemParameters]::VirtualScreenHeight)
         $rect = New-Object System.Windows.Rect([int]$wb.X, [int]$wb.Y,
-            [math]::Max([int]$wb.Width, $window.MinWidth), [math]::Max([int]$wb.Height, $window.MinHeight))
+            [math]::Min($vs.Width, [math]::Max([int]$wb.Width, $window.MinWidth)),
+            [math]::Min($vs.Height, [math]::Max([int]$wb.Height, $window.MinHeight)))
         $part = [System.Windows.Rect]::Intersect($vs, $rect)
         if (-not $part.IsEmpty -and $part.Width -ge 200 -and $part.Height -ge 100) {
             $window.WindowStartupLocation = 'Manual'
             $window.Left = $rect.X; $window.Top = $rect.Y; $window.Width = $rect.Width; $window.Height = $rect.Height
-            if ([bool]$wb.Maximized) { $window.WindowState = 'Maximized' }
+            $window.WindowState = if ([bool]$wb.Maximized) { 'Maximized' } else { 'Normal' }
         }
     } catch { }
 }
 Set-EmtPeriod $dtTrStart $tbTrStartTime $dtTrEnd $tbTrEndTime 0 1
 Set-EmtPeriod $dtStart $tbStartTime $dtEnd $tbEndTime 0 1
+Update-EmtPeriodMarks
 # The first day of the week comes from the regional settings of Windows, not from the interface language.
 # For example: Monday in Europe, Sunday in the USA. The user can change it in the Windows settings.
 foreach ($d in $dtTrStart, $dtTrEnd, $dtStart, $dtEnd) { $d.FirstDayOfWeek = $script:PcCulture.DateTimeFormat.FirstDayOfWeek }

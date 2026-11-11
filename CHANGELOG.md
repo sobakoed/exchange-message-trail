@@ -36,6 +36,9 @@ The new window: WPF with a dark and a light theme. The functions and the core ar
 - The recipients table has the new column **Folder** before **Server answer**: the folder of the delivery when it is not Inbox
   (usually an inbox rule). Before, the folder name was in the column **Server answer**. The CSV export has the column too.
 - The message search in the background runspace groups the recipients by message one time: a large result is faster.
+- A search by a recipient is fast also for many messages. Before, EMT made one call for each message and server
+  (214 messages and 2 servers: 428 calls, some minutes). Now the list shows the delivery to this recipient.
+  The other recipients of a message load when the user selects it. The export asks to load all messages.
 
 **Search of copies**
 
@@ -54,7 +57,28 @@ The new window: WPF with a dark and a light theme. The functions and the core ar
 - The end of the period includes its minute: 23:59 is up to 23:59:59. **Today**, **Yesterday** and **7 days** give 0:00 to 23:59
   (before: 0:00 to 0:00 of the next day). Also in the classic window.
 
+**User guide**
+
+- New folder `help`: the user guide in English and in Russian (HTML), with screenshots and examples.
+  The guide operates without the Internet. The button **?** and the key F1 open it.
+  A click on a screenshot shows it in its full size.
+- The button **14 days** for the period on the two tabs.
+- The button of the current period is green, also after a search. A manual change of the period removes the mark.
+- Small screens (HD 1280 x 720, Full HD with the scale 150 %): the window fits in the screen. If the default size does not fit, the window opens maximized. The log is smaller.
+- The log shows a horizontal scroll bar only for a line that is longer than the log. Before, the bar was always there and scrolled to an empty area.
+- A narrower window does not cut the column headers. The grid scrolls.
+- The screenshots of the user guide show the full window: the title bar and the frame too.
+- The EMT icon in the title bar, on the taskbar and in the user guide. EMT is a separate taskbar button, not PowerShell.
+- `tools/Make-HelpScreenshots.ps1` makes the screenshots of the guide with example data. No modal window opens.
+- A unit test compares the version of the guide with this file.
+
 **Other**
+
+- The column widths come from the header and the values. Before, the grid could cut the texts
+  when the columns did not fit. Now the grid scrolls.
+- The label of the timeout is shorter: "Timeout, min:". All controls of the top line fit at the minimum width.
+
+- One term for the hard delete: the button **Delete permanently** is now **Delete (hard)**, the same as **Delete (soft)**.
 
 - `settings.json` keeps the theme and the size of the WPF window (key `WpfWindow`). Other keys stay.
 - New language keys: `conn.theme`, `theme.Dark`, `theme.Light`, `tip.theme`, `dlg.ok`, `dlg.yes`, `dlg.no`, `conn.timeoutBad`.
@@ -70,7 +94,7 @@ The new window: WPF with a dark and a light theme. The functions and the core ar
   Before, the time was 35 seconds. EMT made the status line of each message from the full recipient list.
   Now EMT sorts the recipients by message one time.
 - Message search: the event `SENDEXTERNAL` gives the status **Sent to an external system**.
-  Exchange writes this event for a send through a Send connector, for example for a hidden copy from a transport rule.
+  Exchange writes this event for a send through a Send connector. An example is a hidden copy from a transport rule.
   Before, EMT did not know the event and showed **In transit** for these recipients.
 - Message search: the event `DUPLICATEDELIVER` gives the status **Delivered**.
 - The date fields of the period use the regional settings of Windows: the date format, the time format

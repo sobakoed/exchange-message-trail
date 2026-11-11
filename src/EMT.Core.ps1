@@ -111,6 +111,25 @@ function Get-EmtPeriodEnd {
     $m = New-Object DateTime($Value.Year, $Value.Month, $Value.Day, $Value.Hour, $Value.Minute, 0, $Value.Kind)
     $m.AddMinutes(1).AddTicks(-1)
 }
+function Get-EmtQuickPeriodDays {
+    <# The quick period buttons: the first day and the day after the last day, from today. #>
+    [ordered]@{ Today = @(0, 1); Yesterday = @(-1, 0); Week = @(-6, 1); Days14 = @(-13, 1) }
+}
+function Get-EmtQuickPeriod {
+    <#
+        The quick period button that has the same period as the fields: Today, Yesterday, Week, Days14,
+        or an empty string. The start is 0:00 of the first day, the end is 23:59 of the last day (to the minute).
+        The window marks this button. A manual change of the period removes the mark.
+    #>
+    param([Parameter(Mandatory)] [datetime] $Start, [Parameter(Mandatory)] [datetime] $End, [datetime] $Now = (Get-Date))
+    $s = New-Object DateTime($Start.Year, $Start.Month, $Start.Day, $Start.Hour, $Start.Minute, 0)
+    $e = New-Object DateTime($End.Year, $End.Month, $End.Day, $End.Hour, $End.Minute, 0)
+    $days = Get-EmtQuickPeriodDays
+    foreach ($k in $days.Keys) {
+        if ($s -eq $Now.Date.AddDays($days[$k][0]) -and $e -eq $Now.Date.AddDays($days[$k][1]).AddMinutes(-1)) { return $k }
+    }
+    ''
+}
 function Get-EmtKqlDateRange {
     <#
         KQL filters by whole days only. Returns From (inclusive) and To (exclusive) as yyyy-MM-dd.
@@ -509,20 +528,9 @@ function Find-EmtTrackingEvents {
     $source = $raw
     if ($Recipient -and $CompleteRecipients -and $ids.Count) {
         Write-EmtLog (T 'log.secondPass')
-        $source = New-Object System.Collections.Generic.List[object]
-        $total = [math]::Max(1, $ids.Count * $servers.Count); $n = 0
-        foreach ($id in $ids) {
-            foreach ($srv in $servers) {
-                Test-EmtCancel
-                $n++; Set-EmtProgress (30 + [int](5 * $n / $total)) (T 'progress.trackingId' $srv)
-                $ev = $null
-                foreach ($e in @(Get-MessageTrackingLog -Server $srv -MessageId $id -Start $Start -End $End.AddDays(1) `
-                                     -ResultSize Unlimited -ErrorAction SilentlyContinue -ErrorVariable ev)) {
-                    if ($e) { $source.Add($e) }
-                }
-                foreach ($x in @($ev)) { if ($x) { $trackErrors.Add("${srv}: $($x.Exception.Message)") } }
-            }
-        }
+        $pass = Get-EmtEventsByMessageId -MessageIds $ids -Start $Start -End $End -Servers $servers -ProgressFrom 30 -ProgressTo 35
+        $source = $pass.Events
+        foreach ($x in $pass.Errors) { $trackErrors.Add($x) }
     }
     $errs = @($trackErrors | Sort-Object -Unique)
     foreach ($t in $errs) { Write-EmtLog (T 'log.trackError' $t) 'Error' }
@@ -532,6 +540,36 @@ function Find-EmtTrackingEvents {
         Servers = $servers
         Errors  = $errs
     }
+}
+
+function Get-EmtEventsByMessageId {
+    <#
+        All tracking events of each message ID on each transport server.
+        Get-MessageTrackingLog accepts one message ID: one call for each message ID and each server.
+        The end is one day later: a delivery can occur after the end of the period. Returns Events and Errors.
+    #>
+    param(
+        [Parameter(Mandatory)] [string[]] $MessageIds, [Parameter(Mandatory)] [datetime] $Start,
+        [Parameter(Mandatory)] [datetime] $End, [Parameter(Mandatory)] [string[]] $Servers,
+        [int] $ProgressFrom = 0, [int] $ProgressTo = 100
+    )
+    $events = New-Object System.Collections.Generic.List[object]
+    $errors = New-Object System.Collections.Generic.List[string]
+    $total = [math]::Max(1, $MessageIds.Count * $Servers.Count); $n = 0
+    foreach ($id in $MessageIds) {
+        foreach ($srv in $Servers) {
+            Test-EmtCancel
+            $n++; Set-EmtProgress ($ProgressFrom + [int](($ProgressTo - $ProgressFrom) * $n / $total)) (T 'progress.trackingId' $srv)
+            $ev = $null
+            foreach ($e in @(Get-MessageTrackingLog -Server $srv -MessageId $id -Start $Start -End $End.AddDays(1) `
+                                 -ResultSize Unlimited -ErrorAction SilentlyContinue -ErrorVariable ev)) {
+                if ($e) { $events.Add($e) }
+            }
+            foreach ($x in @($ev)) { if ($x) { $errors.Add("${srv}: $($x.Exception.Message)") } }
+        }
+    }
+    # ToArray(), not @(): PowerShell 5.1 can fail on @() of a generic List.
+    [pscustomobject]@{ Events = $events.ToArray(); Errors = $errors.ToArray() }
 }
 
 function Select-EmtUniqueEvents {
@@ -1348,17 +1386,22 @@ function Invoke-EmtTrace {
     <#
         Trace: only the message tracking log, no mailbox search. Seconds, not minutes.
         Needs only the Message Tracking role. Returns the messages, the delivery report and the events.
+        -Partial with a recipient: no second pass by message ID. The search is fast for many messages.
+        The report has only the rows of this recipient. Get-EmtMessageDetail gives the other recipients of a message.
     #>
-    param([Parameter(Mandatory)] [hashtable] $Criteria)
+    param([Parameter(Mandatory)] [hashtable] $Criteria, [switch] $Partial)
     $Criteria = Complete-EmtCriteria $Criteria
     $problems = @(Test-EmtCriteria $Criteria -ForTrace)
     if ($problems.Count) { throw ($problems -join ' ') }
     $caps = Get-EmtCapabilities
     if (-not $caps.Tracking) { throw (T 'log.noTrackRole') }
+    # A partial search only with a recipient filter: without it, the search has no second pass.
+    $partialSearch = [bool]($Partial -and $Criteria.Recipient)
+    if ($partialSearch) { Write-EmtLog (T 'log.tracePartial' $Criteria.Recipient) }
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
 
     $tracking = Find-EmtTrackingEvents -Senders @($Criteria.Senders) -Subject $Criteria.Subject -Recipient $Criteria.Recipient `
-                    -MessageId $Criteria.MessageId -Start $Criteria.Start -End $Criteria.End -CompleteRecipients
+                    -MessageId $Criteria.MessageId -Start $Criteria.Start -End $Criteria.End -CompleteRecipients:(-not $partialSearch)
     $events = @($tracking.Events)
     $summary = @(Get-EmtMessageSummary -Events $events -ServerNames $tracking.Servers)
 
@@ -1368,6 +1411,8 @@ function Invoke-EmtTrace {
     $kinds = @{}
     foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
     $report = @(Get-EmtDeliveryReport -Events $events -Kinds $kinds)
+    # A partial search knows the full delivery of the searched recipient only. The other rows are not complete.
+    if ($partialSearch) { $report = @($report | Where-Object { $_.Recipient -eq ([string]$Criteria.Recipient).ToLowerInvariant() }) }
 
     # The recipients of each message in one pass: a search in the full report for each message is slow.
     $byMsg = @{}
@@ -1403,7 +1448,32 @@ function Invoke-EmtTrace {
         TrackingErrors = @($tracking.Errors)
         NoResultHints  = $(if ($messages.Count) { @() } else { @(Get-EmtNoResultHints $Criteria) })
         Seconds        = [int]$timer.Elapsed.TotalSeconds
+        Partial        = $partialSearch
     }
+}
+
+function Get-EmtMessageDetail {
+    <#
+        The full data of messages after a partial message search (Invoke-EmtTrace -Partial):
+        all events, all recipients and the delivery report. Two calls for each message with two servers.
+    #>
+    param(
+        [Parameter(Mandatory)] [string[]] $MessageIds, [Parameter(Mandatory)] [datetime] $Start,
+        [Parameter(Mandatory)] [datetime] $End
+    )
+    $servers = @(Get-TransportService | ForEach-Object { [string]$_.Name })
+    $pass = Get-EmtEventsByMessageId -MessageIds $MessageIds -Start $Start -End $End -Servers $servers -ProgressFrom 5 -ProgressTo 80
+    $errs = @($pass.Errors | Sort-Object -Unique)
+    foreach ($t in $errs) { Write-EmtLog (T 'log.trackError' $t) 'Error' }
+    $events = @(Select-EmtUniqueEvents -Events $pass.Events -MessageIds $MessageIds)
+    $addresses = @($events | ForEach-Object { @(Get-EmtProp $_ 'Recipients') } | Where-Object { $_ } |
+                   ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object -Unique)
+    $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains))
+    $kinds = @{}
+    foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
+    $report = @(Get-EmtDeliveryReport -Events $events -Kinds $kinds)
+    Set-EmtProgress 100 (T 'progress.done')
+    [pscustomobject]@{ MessageIds = @($MessageIds); Events = $events; Report = $report; Recipients = $recipients; Errors = $errs }
 }
 
 #endregion
@@ -1568,7 +1638,8 @@ function Invoke-EmtOperation {
     param([Parameter(Mandatory)] [string] $Name, [hashtable] $Params = @{})
     switch ($Name) {
         'Connect'      { Connect-EmtExchange -Server $Params.Server }
-        'Trace'        { Invoke-EmtTrace -Criteria $Params.Criteria }
+        'Trace'        { Invoke-EmtTrace -Criteria $Params.Criteria -Partial:([bool]$Params.Partial) }
+        'TraceDetail'  { Get-EmtMessageDetail -MessageIds $Params.MessageIds -Start $Params.Start -End $Params.End }
         'CheckMailbox' { Invoke-EmtMailboxCheck -Mailbox $Params.Mailbox -Sender $Params.Sender -Subject $Params.Subject }
         'Resolve'      { @(Resolve-EmtAddressInputs -Inputs $Params.Inputs) }
         'Search'       { Invoke-EmtSearch -Criteria $Params.Criteria -TimeoutMinutes $Params.TimeoutMinutes }

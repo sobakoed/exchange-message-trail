@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- The EMT icon (the same drawing as gui/emt.ico): an envelope and a loupe. -->
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#2D333B"/>
+  <rect x="48" y="72" width="160" height="112" rx="10" fill="none" stroke="#E6EDF3" stroke-width="14" stroke-linejoin="round"/>
+  <polyline points="56,82 128,133.6 200,82" fill="none" stroke="#E6EDF3" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="194" cy="184" r="34" fill="#2D333B" stroke="#3FB950" stroke-width="16"/>
+  <line x1="218" y1="208" x2="234" y2="224" stroke="#3FB950" stroke-width="22" stroke-linecap="round"/>
+</svg>

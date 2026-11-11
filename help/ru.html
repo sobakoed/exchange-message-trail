@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="emt-version" content="2.0.0">
+<title>Exchange Message Trail — Руководство пользователя</title>
+<link rel="stylesheet" href="help.css">
+<link rel="icon" type="image/svg+xml" href="img/emt.svg">
+<script src="help.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
+  <span class="version">Версия 2.0.0 · Руководство пользователя</span>
+  <span class="spacer"></span>
+  <div class="switch">
+    <a href="en.html">English</a>
+    <a class="active" href="ru.html">Русский</a>
+    <button id="theme-button" type="button" data-system="Тема: как в системе" data-dark="Тема: тёмная" data-light="Тема: светлая">Тема: как в системе</button>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <p class="title">Содержание</p>
+  <ol>
+    <li><a href="#overview">Обзор</a></li>
+    <li><a href="#start">Установка и запуск</a></li>
+    <li><a href="#window">Окно</a></li>
+    <li><a href="#connect">Подключение и роли</a></li>
+    <li><a href="#search">Поиск писем</a>
+      <ol>
+        <li><a href="#criteria">Критерии</a></li>
+        <li><a href="#period">Период и время</a></li>
+        <li><a href="#addresses">Неполные адреса</a></li>
+        <li><a href="#by-recipient">Поиск по получателю</a></li>
+        <li><a href="#statuses">Статусы и цвета</a></li>
+        <li><a href="#columns">Колонки получателей</a></li>
+        <li><a href="#events">События</a></li>
+        <li><a href="#nothing">Ничего не найдено</a></li>
+      </ol>
+    </li>
+    <li><a href="#mailbox">Проверка ящика</a></li>
+    <li><a href="#delete">Удаление</a>
+      <ol>
+        <li><a href="#delete-from-search">Из поиска писем</a></li>
+        <li><a href="#delete-own">По своим критериям</a></li>
+        <li><a href="#delete-warnings">Предупреждения</a></li>
+        <li><a href="#delete-types">Мягкое и безвозвратное</a></li>
+        <li><a href="#verify">Проверка</a></li>
+        <li><a href="#cleanup">Очистка старых поисков</a></li>
+      </ol>
+    </li>
+    <li><a href="#examples">Примеры</a></li>
+    <li><a href="#files">Файлы и журнал действий</a></li>
+    <li><a href="#language-theme">Язык и тема</a></li>
+    <li><a href="#troubleshooting">Неполадки</a></li>
+    <li><a href="#exchange2019">Особенности Exchange 2019</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ================================================================== -->
+<section id="overview">
+  <h1>Exchange Message Trail</h1>
+  <p class="lead">EMT находит письмо в Exchange Server 2016 и 2019 (on-premises) и показывает доставку каждому получателю.
+  Если нужно, EMT удаляет письмо из ящиков.</p>
+  <p>EMT отвечает на вопросы:</p>
+  <ul>
+    <li>Отправил ли пользователь письмо?</li>
+    <li>Дошло ли письмо? В какую папку?</li>
+    <li>Почему письмо не дошло? На каком шаге остановилась доставка?</li>
+  </ul>
+  <div class="cards">
+    <div class="card"><h3>Поиск писем</h3><p>Находит письмо в журнале доставки. Показывает статус каждого получателя. Проверяет ящик получателя.</p><span class="tag">Секунды · Только чтение</span></div>
+    <div class="card"><h3>Удаление</h3><p>Находит копии письма в ящиках. Удаляет их. Проверяет результат.</p><span class="tag">Секунды — минуты · Меняет данные</span></div>
+  </div>
+  <figure>
+    <img src="img/ru/window.png" alt="Окно EMT после поиска писем">
+    <figcaption>Окно после поиска писем. Данные на снимках выдуманные.</figcaption>
+  </figure>
+</section>
+
+<!-- ================================================================== -->
+<section id="start">
+  <h2>Установка и запуск</h2>
+  <h3>Требования</h3>
+  <table>
+    <tr><th>Что</th><th>Требование</th></tr>
+    <tr><td>Exchange</td><td>Exchange Server 2016 или 2019, on-premises</td></tr>
+    <tr><td>Компьютер</td><td>Сервер Exchange или компьютер Windows в том же домене</td></tr>
+    <tr><td>PowerShell</td><td>Windows PowerShell 5.1</td></tr>
+    <tr><td>.NET</td><td>.NET Framework 4.5 или новее</td></tr>
+    <tr><td>Сеть</td><td>Доступ по HTTP к <code>http://&lt;сервер&gt;/PowerShell/</code></td></tr>
+    <tr><td>Вход</td><td>Kerberos (доменная учётная запись)</td></tr>
+  </table>
+  <p>Exchange Management Tools ставить не нужно. EMT подключается через удалённый PowerShell.</p>
+
+  <h3>Установка</h3>
+  <ol class="steps">
+    <li>Скопируйте папку EMT на компьютер.</li>
+    <li>Сохраните структуру папок. EMT нужны папки <code>src</code>, <code>Lang</code>, <code>gui</code> и <code>help</code>.</li>
+    <li>Если вы скачали ZIP-архив, разблокируйте файлы:
+      <pre><code>Get-ChildItem -Recurse | Unblock-File</code></pre></li>
+  </ol>
+
+  <h3>Запуск</h3>
+  <ol class="steps">
+    <li>Дважды щёлкните <code>EMT.cmd</code>.</li>
+  </ol>
+  <p>Окно открывается поверх остальных окон. Консоль PowerShell не видна.</p>
+  <p>Запуск из PowerShell:</p>
+  <pre><code>powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Server exch01.contoso.com</code></pre>
+  <table>
+    <tr><th>Параметр</th><th>Назначение</th></tr>
+    <tr><td><code>-Server</code></td><td>FQDN сервера Exchange. EMT запоминает последний сервер.</td></tr>
+    <tr><td><code>-Language</code></td><td>Код языка, например <code>en</code> или <code>ru</code>.</td></tr>
+    <tr><td><code>-Theme</code></td><td><code>Dark</code> или <code>Light</code>. По умолчанию <code>Dark</code>.</td></tr>
+  </table>
+  <div class="callout">
+    <b class="label">Классическое окно</b>
+    <p><code>EMT-Classic.cmd</code> запускает прежнее окно (Windows Forms) с теми же функциями.
+    Используйте его, только если обычное окно не работает. В одной из следующих версий его уберут.</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section id="window">
+  <h2>Окно</h2>
+  <figure>
+    <div class="shot">
+      <img src="img/ru/window.png" alt="Части окна">
+      <span class="pin" style="left:57%;top:5.6%">1</span>
+      <span class="pin" style="left:97.6%;top:9%">2</span>
+      <span class="pin" style="left:17%;top:9.7%">3</span>
+      <span class="pin" style="left:21%;top:14.2%">4</span>
+      <span class="pin" style="left:86%;top:24.7%">5</span>
+      <span class="pin" style="left:44%;top:29.3%">6</span>
+      <span class="pin" style="left:50%;top:53%">7</span>
+      <span class="pin" style="left:31.6%;top:59.3%">8</span>
+      <span class="pin" style="left:42.7%;top:81.7%">9</span>
+      <span class="pin" style="left:50%;top:92.6%">10</span>
+      <span class="pin" style="left:22%;top:97.9%">11</span>
+    </div>
+  </figure>
+  <table>
+    <tr><th>№</th><th>Часть</th><th>Назначение</th></tr>
+    <tr><td><span class="pin-inline">1</span></td><td>Верхняя строка</td><td>Сервер, <span class="btn">Подключиться</span>, таймаут операций, язык и тема</td></tr>
+    <tr><td><span class="pin-inline">2</span></td><td><span class="btn">?</span></td><td>Открывает эту справку. Клавиша <kbd>F1</kbd> тоже.</td></tr>
+    <tr><td><span class="pin-inline">3</span></td><td>Вкладки</td><td><b>Поиск писем</b> и <b>Удаление</b></td></tr>
+    <tr><td><span class="pin-inline">4</span></td><td>Критерии</td><td>Отправители, получатель, тема, MessageId и период</td></tr>
+    <tr><td><span class="pin-inline">5</span></td><td><span class="btn accent">Найти</span></td><td>Запускает поиск. Клавиша <kbd>Enter</kbd> тоже.</td></tr>
+    <tr><td><span class="pin-inline">6</span></td><td>Строка итогов</td><td>Числа результата. Красным выделено только число ошибок.</td></tr>
+    <tr><td><span class="pin-inline">7</span></td><td>Письма</td><td>Одна строка на каждое письмо</td></tr>
+    <tr><td><span class="pin-inline">8</span></td><td>Подробности</td><td>Получатели, события и проверка ящика выбранного письма</td></tr>
+    <tr><td><span class="pin-inline">9</span></td><td>Действия</td><td><span class="btn">Проверить ящик получателя</span>, <span class="btn danger">Удалить это письмо…</span>, <span class="btn">Экспорт в CSV</span></td></tr>
+    <tr><td><span class="pin-inline">10</span></td><td>Лог</td><td>Сообщения сеанса. Зелёный — успех, оранжевый — предупреждение, красный — ошибка.</td></tr>
+    <tr><td><span class="pin-inline">11</span></td><td>Нижняя строка</td><td>Слева — подключение. Справа — текущая операция, ход выполнения и <span class="btn">Отмена</span>.</td></tr>
+  </table>
+  <h3>Таблицы</h3>
+  <ul>
+    <li>Чтобы изменить ширину колонки, перетащите границу заголовка.</li>
+    <li>Чтобы отсортировать строки, щёлкните заголовок колонки.</li>
+    <li>Чтобы переставить колонку, перетащите её заголовок.</li>
+    <li>Чтобы скопировать выбранные строки с заголовками, нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>.</li>
+    <li>В названии вкладки — число строк, например <b>Получатели (5)</b>.</li>
+  </ul>
+  <p>Чтобы остановить операцию, нажмите <span class="btn">Отмена</span>. EMT остановится после текущего шага.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="connect">
+  <h2>Подключение и роли</h2>
+  <figure><img src="img/ru/top-line.png" alt="Верхняя строка"></figure>
+  <ol class="steps">
+    <li>В поле <b>Сервер Exchange (FQDN)</b> введите полное имя сервера.</li>
+    <li>Нажмите <span class="btn">Подключиться</span>.</li>
+    <li>Убедитесь, что в нижней строке зелёный индикатор и «Подключено».</li>
+    <li>Убедитесь, что в логе нет предупреждений о недостающих ролях.</li>
+  </ol>
+  <figure><img src="img/ru/bottom-line.png" alt="Нижняя строка"></figure>
+  <p>При подключении EMT проверяет роли вашей учётной записи. Функция без нужной роли недоступна: её кнопка выключена.
+  Лог показывает предупреждение для каждой недоступной функции.</p>
+  <table>
+    <tr><th>Функция</th><th>Командлеты</th><th>Группа ролей</th></tr>
+    <tr><td>Поиск писем</td><td><code>Get-MessageTrackingLog</code>, <code>Get-TransportService</code>, <code>Get-Recipient</code></td><td>Organization Management, Records Management или Compliance Management</td></tr>
+    <tr><td>Проверка ящика</td><td><code>Get-InboxRule</code>, <code>Get-MailboxJunkEmailConfiguration</code>, <code>Get-Mailbox</code>, <code>Get-MailboxStatistics</code></td><td>Organization Management или Recipient Management</td></tr>
+    <tr><td>Поиск копий, проверка</td><td><code>New-ComplianceSearch</code>, <code>Search-Mailbox</code></td><td>Discovery Management</td></tr>
+    <tr><td>Мягкое удаление</td><td><code>New-ComplianceSearchAction</code></td><td>Discovery Management</td></tr>
+    <tr><td>Безвозвратное удаление</td><td><code>Search-Mailbox -DeleteContent</code></td><td>Роль Mailbox Import Export (назначается вручную)</td></tr>
+  </table>
+  <p>Чтобы назначить роль Mailbox Import Export, выполните в Exchange Management Shell:</p>
+  <pre><code>New-ManagementRoleAssignment -Role "Mailbox Import Export" -User "&lt;учётная запись&gt;"</code></pre>
+  <p>После изменения ролей закройте EMT и запустите снова.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="search">
+  <h2>Поиск писем</h2>
+  <p>Поиск писем читает только журнал доставки. Он не открывает ящики и не меняет данные.</p>
+  <ol class="steps">
+    <li>Откройте вкладку <b>Поиск писем</b>.</li>
+    <li>Введите один или несколько критериев.</li>
+    <li>Задайте период.</li>
+    <li>Нажмите <span class="btn accent">Найти</span>.</li>
+    <li>Выберите письмо в списке.</li>
+    <li>Посмотрите вкладку <b>Получатели</b>.</li>
+  </ol>
+
+  <h3 id="criteria">Критерии</h3>
+  <figure><img src="img/ru/search-criteria.png" alt="Критерии поиска писем"></figure>
+  <table>
+    <tr><th>Поле</th><th>Что вводить</th></tr>
+    <tr><td>Отправители</td><td>Один или несколько адресов, частей адреса или имён. Разделитель — запятая или точка с запятой.</td></tr>
+    <tr><td>Получатель</td><td>Один адрес, часть адреса или имя. Можно искать только по получателю.</td></tr>
+    <tr><td>Тема содержит</td><td>Часть темы</td></tr>
+    <tr><td>MessageId</td><td>Internet Message-ID, например <code>&lt;a1b2c3@contoso.com&gt;</code></td></tr>
+    <tr><td>Период</td><td>Начало и конец: дата и время</td></tr>
+  </table>
+  <p>Задайте хотя бы один критерий. Только период — нельзя. Период — не больше 31 дня.</p>
+
+  <h3 id="period">Период и время</h3>
+  <ul>
+    <li>У каждой даты есть поле времени. Время — в формате Windows, например <code>14:30</code>.</li>
+    <li>Конец периода включает свою минуту: <code>23:59</code> — это до 23:59:59.</li>
+    <li><span class="btn">Сегодня</span>, <span class="btn">Вчера</span>, <span class="btn">7 дней</span> и <span class="btn">14 дней</span> ставят период с 0:00 до 23:59.</li>
+    <li>Кнопка текущего периода отмечена зелёным. Если изменить период вручную, отметка снимается.</li>
+    <li>Неверное время возвращается к последнему верному. В логе появляется предупреждение.</li>
+    <li>Формат даты и первый день недели берутся из региональных настроек Windows.</li>
+  </ul>
+  <figure><img src="img/ru/calendar.png" alt="Календарь" style="max-width:260px"><figcaption>Календарь поля даты.</figcaption></figure>
+
+  <h3 id="addresses">Неполные адреса</h3>
+  <p>Можно ввести часть адреса или имени, например <code>kim</code>.
+  EMT найдёт полный адрес в адресной книге Exchange (<code>Get-Recipient -Anr</code>).</p>
+  <table>
+    <tr><th>Найдено</th><th>Что будет</th></tr>
+    <tr><td>Один адрес</td><td>EMT подставит полный адрес в поле. Лог покажет замену.</td></tr>
+    <tr><td>Несколько</td><td>Откроется окно со списком. Выберите адрес. Для отправителей можно выбрать несколько.</td></tr>
+    <tr><td>Ни одного</td><td>Окно с ошибкой покажет текст. Поиск не начнётся.</td></tr>
+  </table>
+  <figure><img src="img/ru/pick-address.png" alt="Выбор адреса" style="max-width:600px"></figure>
+
+  <h3 id="by-recipient">Поиск по получателю</h3>
+  <p>Поиск по получателю быстрый даже для большого числа писем.</p>
+  <ul>
+    <li>Список показывает доставку только этому получателю.</li>
+    <li>В колонке <b>Пометка</b> — «Остальные получатели — при выборе письма».</li>
+    <li>Строка итогов начинается с «Получатель x:». Числа — по этому получателю.</li>
+    <li>При выборе письма EMT загружает всех его получателей и события. Это около секунды.</li>
+    <li>При экспорте EMT спросит, загрузить ли сначала все письма.</li>
+  </ul>
+  <figure><img src="img/ru/recipient-search.png" alt="Поиск по получателю"><figcaption>У первого письма загружены все получатели. У остальных — пометка.</figcaption></figure>
+
+  <h3 id="statuses">Статусы и цвета</h3>
+  <p>Строки не заливаются цветом. Результат показывают две отметки:</p>
+  <ul>
+    <li>Колонка <b>Статус доставки</b> показывает каждый статус своим цветом, например
+      <span class="t-green"><span class="dot green"></span>доставлено: 3</span>
+      <span class="t-blue"><span class="dot blue"></span>наружу: 1</span>
+      <span class="t-red"><span class="dot red"></span>ошибок: 1</span>.</li>
+    <li>Левый край строки показывает худший статус письма.</li>
+  </ul>
+  <figure><img src="img/ru/message-list.png" alt="Список писем"></figure>
+  <table>
+    <tr><th>Статус</th><th>Цвет</th><th>Что значит</th></tr>
+    <tr><td>Доставлено</td><td><span class="dot green"></span>Зелёный</td><td>Exchange положил письмо в ящик (<code>DELIVER</code>, <code>DUPLICATEDELIVER</code>).</td></tr>
+    <tr><td>Отправлено наружу</td><td><span class="dot blue"></span>Синий</td><td>Exchange передал письмо внешнему серверу (<code>SEND</code>, <code>SENDEXTERNAL</code>).</td></tr>
+    <tr><td>Переслано (пересылка ящика)</td><td><span class="dot yellow"></span>Жёлтый</td><td>У ящика включена пересылка. Письмо ушло на адрес пересылки, в ящик не попало.</td></tr>
+    <tr><td>Задержано</td><td><span class="dot yellow"></span>Жёлтый</td><td>Доставка задерживается, Exchange повторяет попытки (<code>DEFER</code>).</td></tr>
+    <tr><td>Ошибка доставки</td><td><span class="dot red"></span>Красный</td><td>Exchange не доставил письмо (<code>FAIL</code>).</td></tr>
+    <tr><td>Отклонено группой</td><td><span class="dot red"></span>Красный</td><td>У группы ограничение на отправителей.</td></tr>
+    <tr><td>Отброшено</td><td><span class="dot red"></span>Красный</td><td>Exchange отбросил письмо с кодом ошибки.</td></tr>
+    <tr><td>В пути</td><td><span class="dot grey"></span>Серый</td><td>Письмо передаётся между серверами Exchange.</td></tr>
+    <tr><td>Группа: разослано участникам</td><td><span class="dot grey"></span>Серый</td><td>Адрес — группа. Письмо получают участники.</td></tr>
+    <tr><td>Не отправлено по настройке Exchange</td><td><span class="dot grey"></span>Серый</td><td>Автоответ, автопересылка или отчёт, которые Exchange не отправляет по настройке. Это не ошибка.</td></tr>
+    <tr><td>Нет данных о доставке</td><td><span class="dot grey"></span>Серый</td><td>В журнале доставки есть только приём письма.</td></tr>
+  </table>
+  <table>
+    <tr><th>Левый край</th><th>Письмо</th><th>Получатель</th></tr>
+    <tr><td><span class="edge red"></span>Красный</td><td>Кто-то из получателей не получил письмо</td><td>Ошибка доставки, отклонено группой, отброшено</td></tr>
+    <tr><td><span class="edge yellow"></span>Жёлтый</td><td>Доставка задерживается или ящик пересылает письмо</td><td>Задержано, переслано</td></tr>
+    <tr><td><span class="edge grey"></span>Серый</td><td>Не все доставки завершены</td><td>В пути, группа, не отправлено по настройке, нет данных</td></tr>
+    <tr><td><span class="edge blue"></span>Синий</td><td>Письмо у всех, часть получателей внешние</td><td>Отправлено наружу</td></tr>
+    <tr><td><span class="edge green"></span>Зелёный</td><td>Письмо у всех получателей</td><td>Доставлено</td></tr>
+  </table>
+  <div class="callout tip">
+    <b class="label">Событие DROP — не всегда ошибка</b>
+    <p>Exchange пишет <code>DROP</code> и для обычных шагов, например при развёртывании группы. EMT читает ответ сервера и показывает правильный статус.</p>
+  </div>
+
+  <h3 id="columns">Колонки получателей</h3>
+  <figure><img src="img/ru/recipients-failed.png" alt="Получатель с ошибкой"><figcaption>Адреса не существует (5.1.1). Колонка «Объяснение» называет причину.</figcaption></figure>
+  <table>
+    <tr><th>Колонка</th><th>Содержимое</th></tr>
+    <tr><td>Объяснение</td><td>Причина проблемы по коду ответа сервера. Пусто при обычной доставке.</td></tr>
+    <tr><td>Папка</td><td>Папка доставки, если это не «Входящие». Обычно письмо переложило правило.</td></tr>
+    <tr><td>Ответ сервера</td><td>Текст сервера, например <code>550 5.1.1 RESOLVER.ADR.RecipNotFound</code>.</td></tr>
+  </table>
+  <figure><img src="img/ru/recipients-folder.png" alt="Доставка в папку"><figcaption>Письмо легло в папку «Projects». Группа — «Группа: разослано участникам».</figcaption></figure>
+  <table>
+    <tr><th>Код</th><th>Объяснение</th></tr>
+    <tr><td><code>5.1.1</code>, <code>5.1.10</code></td><td>Такого адреса нет.</td></tr>
+    <tr><td><code>5.2.2</code></td><td>Ящик получателя переполнен.</td></tr>
+    <tr><td><code>5.2.3</code>, <code>5.3.4</code></td><td>Письмо слишком большое.</td></tr>
+    <tr><td><code>4.4.7</code>, <code>5.4.7</code></td><td>Истекло время доставки.</td></tr>
+    <tr><td><code>4.4.x</code></td><td>Нет связи с сервером получателя. Exchange повторит попытку.</td></tr>
+    <tr><td><code>5.7.x</code></td><td>Отклонено: нет прав, ограничение, политика или фильтр.</td></tr>
+  </table>
+
+  <h3 id="events">События</h3>
+  <p>Дважды щёлкните письмо — откроется вкладка <b>События</b>. На ней все события журнала доставки по времени.</p>
+  <figure><img src="img/ru/events.png" alt="События письма"></figure>
+
+  <h3 id="nothing">Ничего не найдено</h3>
+  <p>Если писем нет, лог подскажет, что проверить:</p>
+  <ul>
+    <li>период: письмо могло быть раньше или позже;</li>
+    <li>адреса: письмо могло прийти с другого адреса или на группу;</li>
+    <li>тему;</li>
+    <li>папки «Исходящие» и «Отправленные» отправителя: письмо могло не уйти.</li>
+  </ul>
+  <p>Журнал доставки по умолчанию хранится 30 дней.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="mailbox">
+  <h2>Проверка ящика</h2>
+  <p>Журнал доставки видит письмо только до ящика. Проверка ящика показывает причины внутри ящика. Она только читает данные.</p>
+  <ol class="steps">
+    <li>Выберите письмо.</li>
+    <li>На вкладке <b>Получатели</b> выберите внутреннего получателя.</li>
+    <li>Нажмите <span class="btn">Проверить ящик получателя</span>.</li>
+    <li>Посмотрите вкладку <b>Ящик получателя</b>.</li>
+  </ol>
+  <figure><img src="img/ru/mailbox-check.png" alt="Проверка ящика"><figcaption>Правило для входящих перекладывает письмо в папку «Projects».</figcaption></figure>
+  <table>
+    <tr><th>Область</th><th>Что проверяет EMT</th></tr>
+    <tr><td>Правила</td><td>Правила для входящих: перемещение, удаление, пересылка. EMT говорит, срабатывает ли правило на это письмо.</td></tr>
+    <tr><td>Нежелательная почта</td><td>Фильтр нежелательной почты, заблокированные и надёжные отправители</td></tr>
+    <tr><td>Пересылка</td><td>Пересылка ящика</td></tr>
+    <tr><td>Квота</td><td>Размер ящика и его ограничения</td></tr>
+  </table>
+  <p>Для внешнего адреса кнопка выключена.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="delete">
+  <h2>Удаление</h2>
+  <div class="callout danger">
+    <b class="label">ВНИМАНИЕ</b>
+    <p>Безвозвратное удаление нельзя отменить. Пользователь не сможет восстановить письмо. Проверяйте результат перед каждым удалением.</p>
+  </div>
+
+  <h3 id="delete-from-search">Из поиска писем (рекомендуется)</h3>
+  <ol class="steps">
+    <li>На вкладке <b>Поиск писем</b> выберите письмо.</li>
+    <li>Нажмите <span class="btn danger">Удалить это письмо…</span>.</li>
+    <li>Убедитесь, что зелёная строка говорит «Данные из журнала доставки».</li>
+    <li>Нажмите <span class="btn accent">Найти копии</span>.</li>
+    <li>Посмотрите вкладки результата.</li>
+    <li>Нажмите <span class="btn">Удалить (мягко)</span> или <span class="btn danger">Удалить безвозвратно</span>.</li>
+    <li>Прочитайте окно подтверждения.</li>
+    <li>Подтвердите удаление.</li>
+    <li>Посмотрите вкладку <b>Проверка</b>.</li>
+  </ol>
+  <p>EMT ставит период «за 5 минут до письма — 23:59 того же дня». Тогда поиск копий идёт за один день.</p>
+  <figure><img src="img/ru/delete.png" alt="Вкладка «Удаление» после поиска копий"></figure>
+
+  <h3 id="delete-own">По своим критериям</h3>
+  <figure><img src="img/ru/delete-criteria.png" alt="Критерии вкладки «Удаление»"></figure>
+  <table>
+    <tr><th>Критерий или флажок</th><th>Назначение</th></tr>
+    <tr><td>Имя вложения</td><td>Имя файла в письме</td></tr>
+    <tr><td>Слова в тексте</td><td>Фраза в тексте письма</td></tr>
+    <tr><td>Включать пересылки (FW:)</td><td>Добавляет письма с той же темой от других отправителей</td></tr>
+    <tr><td>Только ящик получателя</td><td>Ищет и удаляет только в ящике из поля <b>Получатель</b></td></tr>
+    <tr><td>Искать во всех ящиках</td><td>Ищет во всех ящиках организации. Это медленно.</td></tr>
+  </table>
+  <p>Строка над результатом показывает источник критериев: зелёный — из журнала доставки, оранжевый — введены вручную.
+  Изменение критерия сбрасывает результат.</p>
+  <table>
+    <tr><th>Ящиков</th><th>Способ</th><th>Время</th></tr>
+    <tr><td>от 1 до 10</td><td>Быстрый поиск (<code>Search-Mailbox</code>)</td><td>Секунды</td></tr>
+    <tr><td>больше 10 или все</td><td>Compliance Search</td><td>1–3 минуты и больше</td></tr>
+  </table>
+
+  <h3 id="delete-warnings">Предупреждения</h3>
+  <table>
+    <tr><th>Предупреждение</th><th>Что значит</th><th>Что делать</th></tr>
+    <tr><td class="t-orange">ПРОВЕРЬТЕ: ящиков, где элементов больше, чем писем в журнале доставки</td>
+        <td>Запрос не может искать по MessageId. Он находит и другие письма с тем же отправителем и темой за эти дни, и копии в «Элементах для восстановления».</td>
+        <td>Посмотрите вкладку <b>Найдено в ящиках</b>. Для любого удаления нужно ввести слово.</td></tr>
+    <tr><td class="t-red">НЕ ПОДТВЕРЖДЕНО ЖУРНАЛОМ ДОСТАВКИ</td><td>Поиск нашёл элементы, а в журнале доставки письма нет.</td><td>Проверьте критерии. Для любого удаления нужно ввести слово.</td></tr>
+    <tr><td class="t-red">Внешние получатели</td><td>У внешнего получателя EMT письмо удалить не может.</td><td>Сообщите службе безопасности о каждом внешнем получателе.</td></tr>
+  </table>
+
+  <h3 id="delete-types">Мягкое и безвозвратное удаление</h3>
+  <table>
+    <tr><th></th><th>Мягкое</th><th>Безвозвратное</th></tr>
+    <tr><td>Кнопка</td><td><span class="btn">Удалить (мягко)</span></td><td><span class="btn danger">Удалить безвозвратно</span></td></tr>
+    <tr><td>Командлет</td><td><code>New-ComplianceSearchAction -Purge -PurgeType SoftDelete</code></td><td><code>Search-Mailbox -SearchDumpster -DeleteContent</code></td></tr>
+    <tr><td>Результат</td><td>Письмо уходит в «Элементы для восстановления». Пользователь может восстановить его в Outlook.</td><td>Письмо удаляется и из «Элементов для восстановления».</td></tr>
+    <tr><td>Подтверждение</td><td>Окно. Слово — только при предупреждении.</td><td>Окно и слово <code>УДАЛИТЬ</code></td></tr>
+  </table>
+  <figure><img src="img/ru/confirm-hard.png" alt="Подтверждение безвозвратного удаления" style="max-width:660px"><figcaption>Подтверждение показывает предупреждения, числа, запрос и ящики.</figcaption></figure>
+  <div class="callout warn">
+    <b class="label">Удержание (hold)</b>
+    <p>Ящик на Litigation Hold или In-Place Hold сохраняет копию после безвозвратного удаления в скрытой папке. Пользователь её не видит.</p>
+  </div>
+
+  <h3 id="verify">Проверка</h3>
+  <p>После каждого удаления EMT снова проверяет каждый ящик. Результат — на вкладке <b>Проверка</b>.</p>
+  <figure><img src="img/ru/verification.png" alt="Проверка после мягкого удаления"></figure>
+  <table>
+    <tr><th>Левый край</th><th>Что значит</th></tr>
+    <tr><td><span class="edge green"></span>Зелёный</td><td>В видимых папках копий нет</td></tr>
+    <tr><td><span class="edge red"></span>Красный</td><td>Письмо ещё в видимых папках</td></tr>
+    <tr><td><span class="edge yellow"></span>Жёлтый</td><td>Проверка не удалась. См. колонку <b>Пометка</b>.</td></tr>
+  </table>
+  <p>После мягкого удаления колонка <b>Всего (с «Элементами для восстановления»)</b> больше 0. Так и должно быть.</p>
+
+  <h3 id="cleanup">Очистка старых поисков</h3>
+  <ol class="steps">
+    <li>Нажмите <span class="btn">Очистить старые поиски</span>.</li>
+    <li>Введите возраст поисков в днях.</li>
+    <li>Посмотрите список поисков.</li>
+    <li>Подтвердите очистку.</li>
+  </ol>
+  <p>EMT удаляет только свои поиски: <code>EMT_*</code> и старые <code>MC_*</code>. Поиск, который ещё выполняется, не удаляется.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="examples">
+  <h2>Примеры</h2>
+
+  <details class="example" open>
+    <summary>Письмо не дошло: адреса не существует</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>В поле <b>Отправители</b> введите адрес отправителя.</li>
+        <li>Нажмите <span class="btn">Сегодня</span>.</li>
+        <li>Нажмите <span class="btn accent">Найти</span>.</li>
+        <li>Найдите письмо с красным краем.</li>
+        <li>Выберите письмо.</li>
+        <li>Прочитайте колонки <b>Объяснение</b> и <b>Ответ сервера</b>.</li>
+      </ol>
+      <figure><img src="img/ru/recipients-failed.png" alt="Ошибка доставки 5.1.1"></figure>
+      <p>Итог: <code>5.1.1</code>, такого адреса нет. Сообщите отправителю правильный адрес.</p>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>Письмо дошло, но пользователь его не видит</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>Найдите письмо.</li>
+        <li>Выберите письмо.</li>
+        <li>Посмотрите колонку <b>Папка</b> у получателя.</li>
+        <li>Выберите получателя.</li>
+        <li>Нажмите <span class="btn">Проверить ящик получателя</span>.</li>
+      </ol>
+      <figure><img src="img/ru/mailbox-check.png" alt="Правило для входящих"></figure>
+      <p>Итог: правило перекладывает письмо в папку «Projects». Сообщите пользователю папку.</p>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>Ящик пересылает письма на другой адрес</summary>
+    <div class="body">
+      <p>Статус — <span class="t-yellow"><span class="dot yellow"></span>Переслано (пересылка ящика)</span>, край строки жёлтый.</p>
+      <figure><img src="img/ru/recipients-forwarded.png" alt="Переслано"></figure>
+      <p>Письмо не попало в ящик. Проверка ящика покажет адрес пересылки.</p>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>Скрытая копия для службы безопасности (правило транспорта)</summary>
+    <div class="body">
+      <p>Правило транспорта добавляет скрытую копию. Exchange отправляет её через коннектор отправки (<code>SENDEXTERNAL</code>).
+      EMT показывает <span class="t-blue"><span class="dot blue"></span>Отправлено наружу</span>.</p>
+      <figure><img src="img/ru/recipients-sendexternal.png" alt="SENDEXTERNAL"></figure>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>Доставка на внешний сервер задерживается</summary>
+    <div class="body">
+      <p>Статус — <span class="t-yellow"><span class="dot yellow"></span>Задержано</span>. Exchange повторяет попытки.
+      Ответ сервера называет причину, например <code>451 4.4.0</code>.</p>
+      <figure><img src="img/ru/recipients-deferred.png" alt="Задержано"></figure>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>Все письма одному получателю за неделю</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>Очистите поля <b>Отправители</b> и <b>Тема содержит</b>.</li>
+        <li>В поле <b>Получатель</b> введите адрес.</li>
+        <li>Нажмите <span class="btn">7 дней</span>.</li>
+        <li>Нажмите <span class="btn accent">Найти</span>.</li>
+        <li>Выберите письмо, чтобы увидеть всех его получателей.</li>
+      </ol>
+      <figure><img src="img/ru/recipient-search.png" alt="Поиск по получателю"></figure>
+    </div>
+  </details>
+
+  <details class="example">
+    <summary>Удалить фишинговое письмо у всех получателей</summary>
+    <div class="body">
+      <ol class="steps">
+        <li>Найдите письмо на вкладке <b>Поиск писем</b>.</li>
+        <li>Выберите письмо.</li>
+        <li>Нажмите <span class="btn danger">Удалить это письмо…</span>.</li>
+        <li>Нажмите <span class="btn accent">Найти копии</span>.</li>
+        <li>Посмотрите вкладку <b>Найдено в ящиках</b>.</li>
+        <li>Посмотрите на вкладке <b>Получатели</b>, есть ли внешние получатели.</li>
+        <li>Нажмите <span class="btn">Удалить (мягко)</span>.</li>
+        <li>Подтвердите удаление.</li>
+        <li>Посмотрите вкладку <b>Проверка</b>.</li>
+      </ol>
+      <p>Если пользователи не должны восстановить письмо, после мягкого удаления выполните безвозвратное.</p>
+      <figure><img src="img/ru/delete.png" alt="Поиск копий"></figure>
+    </div>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section id="files">
+  <h2>Файлы и журнал действий</h2>
+  <table>
+    <tr><th>Файл</th><th>Содержимое</th></tr>
+    <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\audit.csv</code></td><td>Строка на каждый поиск писем, проверку ящика, поиск копий, удаление, проверку и очистку</td></tr>
+    <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\logs\EMT_&lt;дата&gt;.log</code></td><td>Полный лог одного сеанса</td></tr>
+    <tr><td><code>%APPDATA%\ExchangeMessageTrail\settings.json</code></td><td>Последний сервер, язык, тема, флажки, таймаут и размер окна. Отправители и темы не сохраняются.</td></tr>
+  </table>
+  <p>Кнопка <span class="btn">Экспорт в CSV</span> сохраняет данные вкладки в CSV-файлы.</p>
+  <div class="callout warn">
+    <b class="label">Персональные данные</b>
+    <p>Лог, журнал действий и файлы экспорта содержат адреса ящиков. Храните их в защищённом месте.</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section id="language-theme">
+  <h2>Язык и тема</h2>
+  <ul>
+    <li>Язык выбирается в списке <b>Язык</b>. Меняется сразу.</li>
+    <li>Тема выбирается в списке <b>Тема</b>: <b>Тёмная</b> или <b>Светлая</b>. Меняется сразу.</li>
+    <li>EMT запоминает выбор в <code>settings.json</code>.</li>
+  </ul>
+  <p>Языки — это файлы в папке <code>Lang</code>. Чтобы добавить язык, положите в неё новый файл <code>.lng</code>.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="troubleshooting">
+  <h2>Неполадки</h2>
+  <table>
+    <tr><th>Проблема</th><th>Причина</th><th>Что делать</th></tr>
+    <tr><td>Окно «Exchange Message Trail could not start»</td><td>Ошибка при запуске</td><td>Прочитайте причину в окне. Проверьте, что есть папки <code>gui</code>, <code>src</code> и <code>Lang</code>.</td></tr>
+    <tr><td>Ошибка Kerberos при подключении</td><td>Компьютер не в домене или имя — не FQDN</td><td>Укажите FQDN. Работайте с доменного компьютера.</td></tr>
+    <tr><td>Кнопка выключена</td><td>У учётной записи нет роли</td><td>См. <a href="#connect">Подключение и роли</a>.</td></tr>
+    <tr><td>Поиск писем ничего не находит</td><td>Период, адрес или данные журнала устарели</td><td>Прочитайте подсказки в логе. Увеличьте период.</td></tr>
+    <tr><td>Доставлено, но пользователь не видит письмо</td><td>Правило, фильтр нежелательной почты или пересылка</td><td>Используйте <a href="#mailbox">проверку ящика</a>.</td></tr>
+    <tr><td>Найдено 0 копий, а письмо есть</td><td>Письмо не проиндексировано или тема другая</td><td>Включите <b>Искать во всех ящиках</b>. Сократите текст темы.</td></tr>
+    <tr><td>Окно работает неправильно</td><td>Проблема окна</td><td>Запустите <code>EMT-Classic.cmd</code>. Сообщите разработчику о проблеме.</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================== -->
+<section id="exchange2019">
+  <h2>Особенности Exchange 2019</h2>
+  <p>Эти факты получены на Exchange Server 2019. EMT их учитывает.</p>
+  <table>
+    <tr><th>Поведение</th><th>Правило</th></tr>
+    <tr><td>Командлет <code>*-ComplianceSearch*</code> с <code>-ErrorAction Stop</code> падает</td><td>Не используйте <code>-ErrorAction Stop</code> с этими командлетами.</td></tr>
+    <tr><td><code>Remove-ComplianceSearch</code> удаляет поиск в фоне</td><td>Проверяйте поиск ещё до 60 секунд.</td></tr>
+    <tr><td>Выполняющийся поиск удалить нельзя</td><td>Дождитесь статуса <code>Completed</code>.</td></tr>
+    <tr><td>Многие события <code>DROP</code> имеют успешный код <code>250 2.1.5</code></td><td>Смотрите причину в ответе сервера.</td></tr>
+  </table>
+  <footer>
+    <p>Exchange Message Trail 2.0.0 · На снимках выдуманные данные (contoso), а не реальные.</p>
+  </footer>
+</section>
+
+</main>
+</div>
+</body>
+</html>

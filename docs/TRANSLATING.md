@@ -117,7 +117,7 @@ A format in a placeholder, for example `{2:N1}` or `{1:N0}`, must stay the same.
 **Date formats.** The keys `fmt.datetime` and `fmt.date` are .NET date formats
 (for example `dd.MM.yyyy HH:mm`). Use the usual format of your language.
 The date fields of the period use the regional settings of Windows. They do not use a key.
-The names of the months and the week days in the calendar come from the language code of the file (`@code`).
+The calendar uses the names of the months and the week days of the language code (`@code`).
 
 **The window.** The window file `gui/MainWindow.xaml` has only the keys (`Tag="key"`), not the texts.
 Do not change the XAML files. Translate only the `.lng` file.

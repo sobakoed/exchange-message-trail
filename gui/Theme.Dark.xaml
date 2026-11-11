@@ -21,6 +21,7 @@
   <SolidColorBrush x:Key="Accent.Hover"     Color="#FF36B150"/>
   <SolidColorBrush x:Key="Accent.Press"     Color="#FF24863A"/>
   <SolidColorBrush x:Key="Accent.Border"    Color="#FF3FB950"/>
+  <SolidColorBrush x:Key="Accent.Soft"      Color="#FF1E3A26"/>  <!-- the mark of the quick period button -->
   <SolidColorBrush x:Key="Accent.Disabled"  Color="#FF2C3A30"/>
   <SolidColorBrush x:Key="Accent.Fg"        Color="#FFFFFFFF"/>
   <SolidColorBrush x:Key="Accent.FgDisabled" Color="#FF6E8272"/>

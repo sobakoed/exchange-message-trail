@@ -59,6 +59,13 @@ if ($consoleWindow -ne [IntPtr]::Zero -and [EmtConsole]::GetConsoleProcessList((
     [Environment]::CommandLine -match '\s-File\s') {
     [void][EmtConsole]::ShowWindow($consoleWindow, 0)    # 0 = SW_HIDE
 }
+if (-not ('EmtShell' -as [type])) {
+    Add-Type -Namespace '' -Name 'EmtShell' -MemberDefinition @'
+[DllImport("shell32.dll")] public static extern int SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string id);
+'@
+}
+# An own application ID: the taskbar shows EMT as a separate button with the EMT icon, not as PowerShell.
+try { [void][EmtShell]::SetCurrentProcessExplicitAppUserModelID('ExchangeMessageTrail') } catch { }
 
 $CorePath = Join-Path $PSScriptRoot 'src\EMT.Core.ps1'
 . $CorePath
@@ -370,7 +377,8 @@ function New-EmtPeriodPanel($StartPicker, $EndPicker) {
     $today     = New-EmtButton 'crit.today' 72
     $yesterday = New-EmtButton 'crit.yesterday' 64
     $week      = New-EmtButton 'crit.week' 64
-    foreach ($b in $today, $yesterday, $week) {
+    $days14    = New-EmtButton 'crit.days14' 64
+    foreach ($b in $today, $yesterday, $week, $days14) {
         $b.MinimumSize = New-Object System.Drawing.Size($b.MinimumSize.Width, 24); $b.Height = 24; $b.Margin = '0,3,4,3'
     }
     $today.Margin = '8,3,4,3'
@@ -378,8 +386,8 @@ function New-EmtPeriodPanel($StartPicker, $EndPicker) {
     $dash.Text = [string][char]0x2014; $dash.Margin = '0,7,3,3'
     $p = New-Object System.Windows.Forms.FlowLayoutPanel
     $p.AutoSize = $true; $p.WrapContents = $false; $p.Margin = '0,0,0,0'
-    $p.Controls.AddRange(@($StartPicker, $dash, $EndPicker, $today, $yesterday, $week))
-    [pscustomobject]@{ Panel = $p; Today = $today; Yesterday = $yesterday; Week = $week }
+    $p.Controls.AddRange(@($StartPicker, $dash, $EndPicker, $today, $yesterday, $week, $days14))
+    [pscustomobject]@{ Panel = $p; Today = $today; Yesterday = $yesterday; Week = $week; Days14 = $days14 }
 }
 
 function New-EmtCriteriaTable([int] $Rows) {
@@ -630,6 +638,8 @@ $form.Text = T 'app.title'
 $form.Size = '1280,880'
 $form.MinimumSize = '1100,720'
 $form.StartPosition = 'CenterScreen'
+# The EMT icon in the title bar and on the taskbar. A missing file gives the PowerShell icon.
+try { $form.Icon = New-Object System.Drawing.Icon (Join-Path $PSScriptRoot 'gui\emt.ico') } catch { }
 $form.Font = New-Object System.Drawing.Font('Segoe UI', 9)
 
 $tips = New-Object System.Windows.Forms.ToolTip
@@ -921,6 +931,7 @@ Set-EmtTip $tbTrMessageId   'tip.messageId'
 Set-EmtTip $trPeriod.Today     'tip.today'
 Set-EmtTip $trPeriod.Yesterday 'tip.yesterday'
 Set-EmtTip $trPeriod.Week      'tip.week'
+Set-EmtTip $trPeriod.Days14    'tip.days14'
 Set-EmtTip $btnTrCheck      'tip.checkMailbox'
 Set-EmtTip $btnTrDelete     'tip.deleteThis'
 Set-EmtTip $btnTrExport     'tip.export'
@@ -929,6 +940,7 @@ Set-EmtTip $chkAll          'tip.all'
 Set-EmtTip $delPeriod.Today     'tip.today'
 Set-EmtTip $delPeriod.Yesterday 'tip.yesterday'
 Set-EmtTip $delPeriod.Week      'tip.week'
+Set-EmtTip $delPeriod.Days14    'tip.days14'
 Set-EmtTip $nudTimeout      'tip.timeout'
 Set-EmtTip $btnCleanup      'tip.cleanup'
 Set-EmtTip $btnExport       'tip.export'
@@ -1573,6 +1585,7 @@ $mainTabs.Add_SelectedIndexChanged({
 $trPeriod.Today.Add_Click({     $dtTrStart.Value = (Get-Date).Date;            $dtTrEnd.Value = (Get-Date).Date.AddDays(1).AddMinutes(-1) })
 $trPeriod.Yesterday.Add_Click({ $dtTrStart.Value = (Get-Date).Date.AddDays(-1); $dtTrEnd.Value = (Get-Date).Date.AddMinutes(-1) })
 $trPeriod.Week.Add_Click({      $dtTrStart.Value = (Get-Date).Date.AddDays(-6); $dtTrEnd.Value = (Get-Date).Date.AddDays(1).AddMinutes(-1) })
+$trPeriod.Days14.Add_Click({    $dtTrStart.Value = (Get-Date).Date.AddDays(-13); $dtTrEnd.Value = (Get-Date).Date.AddDays(1).AddMinutes(-1) })
 
 $btnTrFind.Add_Click({
     $crit = Get-EmtTraceCriteria
@@ -1636,6 +1649,28 @@ $btnTrExport.Add_Click({
 $delPeriod.Today.Add_Click({     $dtStart.Value = (Get-Date).Date;            $dtEnd.Value = (Get-Date).Date.AddDays(1).AddMinutes(-1) })
 $delPeriod.Yesterday.Add_Click({ $dtStart.Value = (Get-Date).Date.AddDays(-1); $dtEnd.Value = (Get-Date).Date.AddMinutes(-1) })
 $delPeriod.Week.Add_Click({      $dtStart.Value = (Get-Date).Date.AddDays(-6); $dtEnd.Value = (Get-Date).Date.AddDays(1).AddMinutes(-1) })
+$delPeriod.Days14.Add_Click({    $dtStart.Value = (Get-Date).Date.AddDays(-13); $dtEnd.Value = (Get-Date).Date.AddDays(1).AddMinutes(-1) })
+
+# The mark of the quick period: the button of the current period is light green, also after a search.
+# The mark comes from the period fields: a manual change removes it. Midnight changes "today": the timer examines it.
+$script:PeriodSets = @(
+    @{ Start = $dtTrStart; End = $dtTrEnd; Mark = $null; Panel = $trPeriod }
+    @{ Start = $dtStart; End = $dtEnd; Mark = $null; Panel = $delPeriod }
+)
+$script:PeriodMarkDay = (Get-Date).Date
+function Update-EmtPeriodMarks {
+    foreach ($set in $script:PeriodSets) {
+        $k = Get-EmtQuickPeriod -Start $set.Start.Value -End $set.End.Value
+        if ($set.Mark -eq $k) { continue }
+        $set.Mark = $k
+        foreach ($name in 'Today', 'Yesterday', 'Week', 'Days14') {
+            $b = $set.Panel.$name
+            if ($name -eq $k) { $b.UseVisualStyleBackColor = $false; $b.BackColor = [System.Drawing.Color]::FromArgb(221, 243, 226) }
+            else { $b.BackColor = [System.Drawing.SystemColors]::Control; $b.UseVisualStyleBackColor = $true }
+        }
+    }
+}
+foreach ($d in $dtTrStart, $dtTrEnd, $dtStart, $dtEnd) { $d.Add_ValueChanged({ Update-EmtPeriodMarks }) }
 
 $btnSearch.Add_Click({
     $crit = Get-EmtCriteria
@@ -1745,6 +1780,7 @@ $btnCancel.Add_Click({
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 400
 $timer.Add_Tick({
+    if ((Get-Date).Date -ne $script:PeriodMarkDay) { $script:PeriodMarkDay = (Get-Date).Date; Update-EmtPeriodMarks }
     $line = $null
     while ($Sync.Log.TryDequeue([ref]$line)) { Add-EmtLogLine $line }
     if ($script:Job) {
@@ -1854,6 +1890,7 @@ Update-EmtDeleteSource
 $script:Loading = $false
 
 Set-UiState
+Update-EmtPeriodMarks
 $timer.Start()
 try {
     [void]$form.ShowDialog()

@@ -19,12 +19,16 @@ The window has two tabs:
 The user interface is available in English and Russian. You can add a language: see [Languages](#languages).
 The window has a dark and a light theme.
 
+**User guide:** open [help/index.html](help/index.html), or click **?** in the window, or push F1.
+The guide is in English and in Russian, with screenshots and examples.
+
 ## Contents
 
 - [Requirements](#requirements)
 - [Permissions](#permissions)
 - [Install](#install)
 - [Repository structure](#repository-structure)
+- [User guide](#user-guide)
 - [Start](#start)
 - [Window](#window)
 - [Message search](#message-search)
@@ -97,7 +101,9 @@ Get-ChildItem -Recurse | Unblock-File
 |---|---|
 | `ExchangeMessageTrail.ps1` | The program: the window and the event handlers. Start it with `EMT.cmd`. |
 | `EMT.cmd` | The launcher. It starts PowerShell in STA mode with a hidden console. |
-| `gui/` | The window: the layout (`MainWindow.xaml`), the styles (`Styles.xaml`) and the themes (`Theme.Dark.xaml`, `Theme.Light.xaml`). |
+| `gui/` | The window: the layout (`MainWindow.xaml`), the styles (`Styles.xaml`) the themes (`Theme.Dark.xaml`, `Theme.Light.xaml`) and the icon (`emt.ico`). |
+| `help/` | The user guide: `en.html`, `ru.html`, the style, the script and the screenshots (`img/en`, `img/ru`). See [User guide](#user-guide). |
+| `tools/` | `Make-HelpScreenshots.ps1`: makes the screenshots of the user guide again. |
 | `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms) with the same functions. A fallback for one version. See [Troubleshooting](#troubleshooting). |
 | `src/` | The program logic without the window. |
 | `src/EMT.Core.ps1` | The Exchange operations: message search, mailbox check, search of copies, delete, cleanup. |
@@ -106,11 +112,20 @@ Get-ChildItem -Recurse | Unblock-File
 | `tests/` | The Pester unit tests. They do not need Exchange. See [docs/TESTING.md](docs/TESTING.md). |
 | `docs/` | The documents for developers, testers and translators. See [More documents](#more-documents). |
 | `CHANGELOG.md` | The list of changes for each version. |
-| `.gitattributes` | The line ends of the files in Git: CRLF for `.ps1`, `.cmd`, `.lng` and `.xaml`, LF for `.md`. Windows PowerShell 5.1 needs CRLF. |
+| `.gitattributes` | The line ends of the files in Git: CRLF for `.ps1`, `.cmd`, `.lng` and `.xaml`, LF for `.md`, `.html`, `.css` and `.js`. Windows PowerShell 5.1 needs CRLF. |
 | `.gitignore` | The files that Git does not keep: logs, audit files, CSV exports and test results. They contain mailbox addresses. |
 
-To use EMT, you need `ExchangeMessageTrail.ps1`, `EMT.cmd`, `src/`, `Lang/` and `gui/`.
+To use EMT, you need `ExchangeMessageTrail.ps1`, `EMT.cmd`, `src/`, `Lang/`, `gui/` and `help/`.
 The other folders and files are for development.
+
+## User guide
+
+The folder `help` has the user guide in English (`en.html`) and in Russian (`ru.html`).
+
+- To open the guide, click **?** in the top line of the window, or push F1. The guide opens in the interface language.
+- To open the guide without EMT, open `help/index.html` in a browser.
+- The guide operates without the Internet. It has no external files.
+- The screenshots show example data (contoso). `tools/Make-HelpScreenshots.ps1` makes them again.
 
 ## Start
 
@@ -169,7 +184,7 @@ The message search reads only the message tracking log. It does not open the mai
 
 1. Open the tab **Message search**.
 2. Type one or more criteria (see the table below).
-3. Set the period. Use **Today**, **Yesterday** or **7 days**.
+3. Set the period. Use **Today**, **Yesterday**, **7 days** or **14 days**.
 4. Click **Find**.
 5. In the list of messages, select a message.
 6. Examine the tab **Recipients**: the delivery status of each recipient.
@@ -185,13 +200,22 @@ The message search reads only the message tracking log. It does not open the mai
 | Senders | One or more addresses, parts of addresses or names. Separator: comma or semicolon. |
 | Recipient | One address, a part of an address or a name. A recipient alone is permitted: EMT shows all messages to this address. |
 | Subject contains | A part of the subject |
-| Period | Start and end: the date (calendar) and the time (the field next to the date, in the format of Windows, for example 14:30). The end includes its minute: 23:59 is up to 23:59:59. **Today**, **Yesterday** and **7 days** give 0:00 to 23:59. The tracking log uses the exact time. |
+| Period | Start and end: the date (calendar) and the time (the field next to the date, in the format of Windows, for example 14:30). The end includes its minute: 23:59 is up to 23:59:59. **Today**, **Yesterday**, **7 days** and **14 days** give 0:00 to 23:59. The button of the current period is green. The tracking log uses the exact time. |
 | Message ID | The internet message ID |
 
 Set one criterion or more. A period alone is not permitted.
 
+**Search by a recipient:** the search is fast also for many messages.
+
+- The list shows the delivery to this recipient only. The note of a message tells that the other recipients are not loaded.
+- The summary line starts with "Recipient x:". The numbers are for this recipient.
+- When you select a message, EMT loads all its recipients and events. This takes about one second.
+- When you export the result, EMT asks if it must load all messages first. This can take some minutes.
+  The CSV file of the messages has the column `Complete`.
+
 **Partial addresses and names:** EMT finds the full address in the Exchange address book (`Get-Recipient -Anr`).
-ANR compares the text with the alias, the display name, the first name, the last name and the start of the e-mail addresses.
+ANR compares the text with these values: the alias, the display name, the first name and the last name.
+ANR also compares the text with the start of the e-mail addresses.
 
 | Matches | Result |
 |---|---|
@@ -305,7 +329,7 @@ Use the tab **Delete** to find the copies of a message in the mailboxes and to d
    not the full period of the message search. The green line says **Data from the tracking log**.
 4. Click **Find copies**.
 5. Examine the result tabs.
-6. Click **Delete (soft)** or **Delete permanently**.
+6. Click **Delete (soft)** or **Delete (hard)**.
 7. Read the summary in the confirmation window.
 8. Confirm the delete.
 9. Examine the tab **Verification**.
@@ -392,7 +416,7 @@ Tell your security team about each external recipient.
 
 | | Soft delete | Hard delete |
 |---|---|---|
-| Button | **Delete (soft)** | **Delete permanently** |
+| Button | **Delete (soft)** | **Delete (hard)** |
 | Cmdlet | `New-ComplianceSearchAction -Purge -PurgeType SoftDelete` | `Search-Mailbox -SearchDumpster -DeleteContent` |
 | Result | The message moves to Recoverable Items | The message is deleted from all folders and from Recoverable Items |
 | User can recover | Yes, with "Recover Deleted Items" in Outlook | No |

@@ -113,7 +113,7 @@
     </Setter>
   </Style>
 
-  <!-- The small buttons of the period: Today, Yesterday, 7 days. -->
+  <!-- The small buttons of the period: Today, Yesterday, 7 days, 14 days. -->
   <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
     <Setter Property="Height" Value="26"/>
     <Setter Property="MinWidth" Value="60"/>

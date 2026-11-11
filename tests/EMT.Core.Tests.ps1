@@ -1071,6 +1071,23 @@ Describe 'Window files (gui\*.xaml)' {
                   ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
         @($vars | Where-Object { $_ -notin $names }) | Should -BeNullOrEmpty
     }
+    It 'has the EMT icon with the sizes 16 to 256' {
+        $ico = Join-Path $root 'gui\emt.ico'
+        $dec = New-Object System.Windows.Media.Imaging.IconBitmapDecoder((New-Object Uri $ico), 'None', 'OnLoad')
+        $sizes = @($dec.Frames | ForEach-Object { $_.PixelWidth } | Sort-Object)
+        $sizes | Should -Contain 16
+        $sizes | Should -Contain 32
+        $sizes | Should -Contain 256
+        Add-Type -AssemblyName System.Drawing
+        { (New-Object System.Drawing.Icon($ico, 16, 16)).Dispose() } | Should -Not -Throw
+    }
+    It 'gives the EMT icon and the application ID to both windows' {
+        foreach ($f in 'ExchangeMessageTrail.ps1', 'ExchangeMessageTrail.Classic.ps1') {
+            $src = [IO.File]::ReadAllText((Join-Path $root $f), [Text.Encoding]::UTF8)
+            $src | Should -Match 'emt\.ico' -Because $f
+            $src | Should -Match "SetCurrentProcessExplicitAppUserModelID\('ExchangeMessageTrail'\)" -Because $f
+        }
+    }
 }
 
 Describe 'Trace: the causes of a DROP event (tested on Exchange 2019)' {
@@ -1236,6 +1253,32 @@ Describe 'Trace: the folder of a delivery (an inbox rule)' {
     }
 }
 
+Describe 'Get-EmtQuickPeriod: the button of the current period' {
+    BeforeAll { $now = [datetime]'2026-11-11 15:20' }
+    It 'finds each quick period' {
+        Get-EmtQuickPeriod -Start '2026-11-11 00:00' -End '2026-11-11 23:59' -Now $now | Should -Be 'Today'
+        Get-EmtQuickPeriod -Start '2026-11-10 00:00' -End '2026-11-10 23:59' -Now $now | Should -Be 'Yesterday'
+        Get-EmtQuickPeriod -Start '2026-11-05 00:00' -End '2026-11-11 23:59' -Now $now | Should -Be 'Week'
+        Get-EmtQuickPeriod -Start '2026-10-29 00:00' -End '2026-11-11 23:59' -Now $now | Should -Be 'Days14'
+    }
+    It 'ignores the seconds: the fields have minutes only' {
+        Get-EmtQuickPeriod -Start '2026-11-11 00:00:00' -End '2026-11-11 23:59:59.999' -Now $now | Should -Be 'Today'
+    }
+    It 'gives no button for a manual period' {
+        Get-EmtQuickPeriod -Start '2026-11-11 08:00' -End '2026-11-11 23:59' -Now $now | Should -Be ''
+        Get-EmtQuickPeriod -Start '2026-11-11 00:00' -End '2026-11-11 18:00' -Now $now | Should -Be ''
+        Get-EmtQuickPeriod -Start '2026-11-04 00:00' -End '2026-11-11 23:59' -Now $now | Should -Be ''
+    }
+    It 'gives no button after midnight: "today" is a new day' {
+        Get-EmtQuickPeriod -Start '2026-11-11 00:00' -End '2026-11-11 23:59' -Now ([datetime]'2026-11-12 00:01') | Should -Be 'Yesterday'
+        Get-EmtQuickPeriod -Start '2026-11-05 00:00' -End '2026-11-11 23:59' -Now ([datetime]'2026-11-12 00:01') | Should -Be ''
+    }
+    It 'has a button with this key for each quick period, in the two windows' {
+        $keys = @((Get-EmtQuickPeriodDays).Keys)
+        $keys | Should -Be @('Today', 'Yesterday', 'Week', 'Days14')
+    }
+}
+
 Describe 'Get-EmtPeriodEnd: the end of the period includes its minute' {
     It 'gives the last moment of the minute' {
         (Get-EmtPeriodEnd ([datetime]'2026-11-10 23:59')) | Should -Be ([datetime]'2026-11-10 23:59:59.9999999')
@@ -1251,5 +1294,105 @@ Describe 'Get-EmtPeriodEnd: the end of the period includes its minute' {
         $b = Get-EmtKqlDateRange -Start ([datetime]'2026-11-10') -End ([datetime]'2026-11-11') -UtcOffset 0
         $a.From | Should -Be $b.From
         $a.To   | Should -Be $b.To
+    }
+}
+
+Describe 'Message search by a recipient: partial search and the details of a message' {
+    BeforeAll {
+        $t = [datetime]'2026-11-10 10:00'
+        function New-TEv($Id, $Kind, [string[]]$To, $Time) {
+            [pscustomobject]@{ MessageId = $Id; EventId = $Kind; Recipients = $To; RecipientStatus = @($To | ForEach-Object { '' })
+                               Timestamp = $Time; ServerHostname = 'EXCH1'; Source = 'SMTP'; Sender = 'a@x.com'; MessageSubject = 'S' }
+        }
+        Mock Get-EmtCapabilities { [pscustomobject]@{ Tracking = $true } }
+        Mock Get-EmtAcceptedDomains { @('x.com') }
+        Mock Resolve-EmtRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } }) }
+        # The first pass with a recipient filter: the events of the recipient b@x.com only.
+        # RECEIVE has all recipients; the delivery to c@x.com is on another server and is not in the result.
+        Mock Find-EmtTrackingEvents {
+            [pscustomobject]@{ Servers = @('EXCH1', 'EXCH2'); Errors = @()
+                Events = @(
+                    New-TEv '<m1>' 'RECEIVE' @('b@x.com', 'c@x.com') $t
+                    New-TEv '<m1>' 'DELIVER' @('b@x.com') $t.AddSeconds(1)
+                ) }
+        }
+        $crit = @{ Recipient = 'b@x.com'; Start = $t.AddDays(-1); End = $t.AddDays(1) }
+    }
+    It 'makes no second pass and keeps only the rows of the searched recipient' {
+        $r = Invoke-EmtTrace -Criteria $crit -Partial
+        $r.Partial | Should -BeTrue
+        Should -Invoke Find-EmtTrackingEvents -Times 1 -Exactly -ParameterFilter { -not $CompleteRecipients }
+        @($r.Report).Count | Should -Be 1
+        @($r.Report)[0].Recipient | Should -Be 'b@x.com'
+        @($r.Report)[0].Status | Should -Be 'Delivered'
+    }
+    It 'makes the second pass without -Partial (the classic window, the search of copies)' {
+        $r = Invoke-EmtTrace -Criteria $crit
+        $r.Partial | Should -BeFalse
+        Should -Invoke Find-EmtTrackingEvents -Times 1 -Exactly -ParameterFilter { $CompleteRecipients }
+    }
+    It 'is not partial without a recipient: such a search has no second pass' {
+        (Invoke-EmtTrace -Criteria @{ Senders = @('a@x.com'); Start = $t.AddDays(-1); End = $t.AddDays(1) } -Partial).Partial | Should -BeFalse
+    }
+    It 'loads all recipients of a message: one call for each server' {
+        Mock Get-TransportService { @([pscustomobject]@{ Name = 'EXCH1' }, [pscustomobject]@{ Name = 'EXCH2' }) }
+        Mock Get-MessageTrackingLog {
+            if ($Server -eq 'EXCH1') { @(New-TEv '<m1>' 'RECEIVE' @('b@x.com', 'c@x.com') $t; New-TEv '<m1>' 'DELIVER' @('b@x.com') $t.AddSeconds(1)) }
+            else { @(New-TEv '<m1>' 'DELIVER' @('c@x.com') $t.AddSeconds(2)) }
+        }
+        $d = Get-EmtMessageDetail -MessageIds @('<m1>') -Start $t.AddDays(-1) -End $t.AddDays(1)
+        Should -Invoke Get-MessageTrackingLog -Times 2 -Exactly
+        @($d.MessageIds) | Should -Be @('<m1>')
+        @($d.Report).Count | Should -Be 2
+        @($d.Report | Where-Object Status -eq 'Delivered').Count | Should -Be 2
+    }
+    It 'collects the errors of the servers and continues' {
+        Mock Get-MessageTrackingLog { Write-Error 'RPC server is unavailable' }
+        $p = Get-EmtEventsByMessageId -MessageIds @('<m1>', '<m2>') -Start $t -End $t.AddDays(1) -Servers @('EXCH1')
+        @($p.Errors).Count | Should -Be 2
+        @($p.Events).Count | Should -Be 0
+    }
+}
+
+Describe 'User guide (help\*.html)' {
+    BeforeAll {
+        $root = Join-Path $PSScriptRoot '..'
+        $help = Join-Path $root 'help'
+        function Read-Page([string] $Name) { [IO.File]::ReadAllText((Join-Path $help $Name), [Text.Encoding]::UTF8) }
+        # The last version in CHANGELOG.md: the first line "## x.y.z".
+        $changelog = [IO.File]::ReadAllText((Join-Path $root 'CHANGELOG.md'), [Text.Encoding]::UTF8)
+        $version = [regex]::Match($changelog, '(?m)^## (\d+\.\d+\.\d+)').Groups[1].Value
+    }
+    It 'has the version of the last CHANGELOG entry on each page (update the guide with each version)' {
+        $version | Should -Not -BeNullOrEmpty
+        foreach ($p in 'index.html', 'en.html', 'ru.html') {
+            [regex]::Match((Read-Page $p), '<meta name="emt-version" content="([^"]+)"').Groups[1].Value | Should -Be $version -Because $p
+        }
+    }
+    It 'has each image that a page shows' {
+        foreach ($p in 'en.html', 'ru.html') {
+            foreach ($m in [regex]::Matches((Read-Page $p), '<img src="([^"]+)"')) {
+                Test-Path (Join-Path $help $m.Groups[1].Value) | Should -BeTrue -Because "$p shows $($m.Groups[1].Value)"
+            }
+        }
+    }
+    It 'has a section for each link of the table of contents' {
+        foreach ($p in 'en.html', 'ru.html') {
+            $page = Read-Page $p
+            $ids = @([regex]::Matches($page, '\sid="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+            foreach ($m in [regex]::Matches($page, 'href="#([^"]+)"')) {
+                $m.Groups[1].Value | Should -BeIn $ids -Because "$p links to #$($m.Groups[1].Value)"
+            }
+        }
+    }
+    It 'has the same sections in English and in Russian' {
+        $en = @([regex]::Matches((Read-Page 'en.html'), '<(?:section|h3) id="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+        $ru = @([regex]::Matches((Read-Page 'ru.html'), '<(?:section|h3) id="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+        $en | Should -Be $ru
+    }
+    It 'uses no external files: the guide operates without the Internet' {
+        foreach ($p in 'index.html', 'en.html', 'ru.html') {
+            (Read-Page $p) | Should -Not -Match '(src|href)="(https?:)?//' -Because $p
+        }
     }
 }

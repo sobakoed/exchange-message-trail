@@ -118,6 +118,12 @@ The procedure uses the English interface. Select **English** in the language lis
 4. In **Recipient**, type the address of `test3`.
 5. Click **Find**.
 6. Make sure that the table shows all messages to `test3` for the period.
+7. Make sure that the summary line starts with "Recipient" and the address of `test3`.
+8. Select a message with a note about the other recipients.
+9. Make sure that the tab **Recipients** shows all recipients of the message after about one second.
+10. Make sure that the note of the message is empty now.
+11. Click **Export to CSV**.
+12. Make sure that EMT asks to load the data of all messages.
 
 ### Mailbox check
 
@@ -157,7 +163,7 @@ The procedure uses the English interface. Select **English** in the language lis
 6. Make sure that the source line is green and starts with "Data from the tracking log".
 7. Click **Find copies**.
 8. Make sure that the tab **Found in mailboxes** shows `test1`, `test2` and `test3`.
-   If a mailbox has more items than the tracking log has messages, make sure that the summary line shows the orange warning **CHECK**.
+   A mailbox can have more items than the tracking log has messages. Then the summary line shows the orange warning **CHECK**.
 9. Change one letter in **Subject contains**.
 10. Make sure that the result is cleared.
 11. Make sure that the source line is orange and starts with "Data typed by the user".
@@ -165,9 +171,11 @@ The procedure uses the English interface. Select **English** in the language lis
 ### Time of the period
 
 1. On the tab **Message search**, type a time in the start time field, for example `9:30`.
-2. Click **Find**. Make sure that the log shows the period with this time.
-3. Type `25:99` in a time field. Click another field.
-4. Make sure that the log shows the warning about the time, and the field shows the last correct time.
+2. Click **Find**.
+3. Make sure that the log shows the period with this time.
+4. Type `25:99` in a time field.
+5. Click another field.
+6. Make sure that the log shows the warning about the time, and the field shows the last correct time.
 
 ### Search speed
 
@@ -194,7 +202,7 @@ The procedure uses the English interface. Select **English** in the language lis
 ### Hard delete
 
 1. Click **Find copies**.
-2. Click **Delete permanently**.
+2. Click **Delete (hard)**.
 3. Type `DELETE`.
 4. Confirm the delete.
 5. Make sure that the tab **Verification** shows `0` in both columns.
@@ -207,26 +215,38 @@ The procedure uses the English interface. Select **English** in the language lis
 3. If the server has old `MC_*` searches, make sure that the list contains them.
 4. Confirm the cleanup.
 5. Make sure that the log shows "Shadow search … removed" and "Search … removed" for each search.
-6. A removal can take up to 60 seconds. Make sure that the progress line shows the wait.
-7. EMT does not remove a search that still runs. Make sure that the log tells you to remove it later.
+6. A removal can take up to 60 seconds.
+7. Make sure that the progress line shows the wait.
+8. EMT does not remove a search that still runs.
+9. Make sure that the log tells you to remove it later.
 
 ### Window
 
-1. Drag the border of a column in a table. Make sure that the width changes.
-2. Click the column header. Make sure that the sort keeps the width.
-3. On the tab **Delete**, select **Search all mailboxes**.
-4. Select **Recipient mailbox only**. Make sure that **Search all mailboxes** is clear.
-5. Select **Русский** in the language list. Make sure that all texts change, also in the tables.
-6. Select **English** again.
-7. Make the window as small as possible. Make sure that all buttons are fully visible.
-8. Make sure that all text fields of the criteria have the same width.
-9. Open the other tab. Make sure that the fields have the same width and position.
-10. Drag the border of a table row. Make sure that the row height does not change.
-11. Select **Light** in the list **Theme**. Make sure that all colors change at once, also in the tables and in the log.
-12. Select **Dark** again. Make sure that the title bar of the window is dark.
-13. Click the calendar button of a date field. Make sure that the calendar is in the colors of the theme.
-14. Make sure that the date fields use the date format of Windows (**Settings > Time & language > Region**).
-15. Make sure that the first day of the week in the calendar is the first day of the week of Windows.
+1. Drag the border of a column in a table.
+2. Make sure that the width changes.
+3. Click the column header.
+4. Make sure that the sort keeps the width.
+5. On the tab **Delete**, select **Search all mailboxes**.
+6. Select **Recipient mailbox only**.
+7. Make sure that **Search all mailboxes** is clear.
+8. Select **Русский** in the language list.
+9. Make sure that all texts change, also in the tables.
+10. Select **English** again.
+11. Make the window as small as possible.
+12. Make sure that all buttons are fully visible.
+13. Make sure that all text fields of the criteria have the same width.
+14. Open the other tab.
+15. Make sure that the fields have the same width and position.
+16. Drag the border of a table row.
+17. Make sure that the row height does not change.
+18. Select **Light** in the list **Theme**.
+19. Make sure that all colors change at once, also in the tables and in the log.
+20. Select **Dark** again.
+21. Make sure that the title bar of the window is dark.
+22. Click the calendar button of a date field.
+23. Make sure that the calendar is in the colors of the theme.
+24. Make sure that the date fields use the date format of Windows (**Settings > Time & language > Region**).
+25. Make sure that the calendar starts the week on the first day of the week of Windows.
 
 ### Start and close
 
@@ -236,16 +256,36 @@ The procedure uses the English interface. Select **English** in the language lis
 4. Make sure that there is no PowerShell console window and no console button on the taskbar.
 5. Change the size and the position of the EMT window.
 6. Close EMT.
-7. Start EMT again. Make sure that the window has the same size and position.
-8. Maximize the window. Close EMT. Start EMT again. Make sure that the window is maximized.
+7. Start EMT again.
+8. Make sure that the window has the same size and position.
+9. Maximize the window.
+10. Close EMT.
+11. Start EMT again.
+12. Make sure that the window is maximized.
+
+### User guide
+
+1. Click **?** in the top line.
+2. Make sure that the guide opens in the browser in the interface language.
+3. Close the browser.
+4. Push F1 in the window of EMT.
+5. Make sure that the guide opens again.
+6. In the guide, click **Русский**.
+7. Make sure that the Russian guide opens.
+8. Click a screenshot.
+9. Make sure that the screenshot shows in its full size.
+10. Push Esc.
+11. Make sure that the screenshot closes.
 
 ### Classic window
 
 1. Start `EMT-Classic.cmd`.
 2. Make sure that the classic window (Windows Forms) opens.
-3. Connect to the server. Make sure that **Find** on the tab **Message search** operates.
-4. Close the classic window.
-5. Start `EMT.cmd`. Make sure that the theme and the window size are the same as before.
+3. Connect to the server.
+4. Make sure that **Find** on the tab **Message search** operates.
+5. Close the classic window.
+6. Start `EMT.cmd`.
+7. Make sure that the theme and the window size are the same as before.
 
 ### Cancel
 
@@ -281,7 +321,7 @@ Do this test only on a computer with the older version (MailCleaner).
 7. Close EMT.
 8. Start EMT with an account without the Mailbox Import Export role.
 9. Connect to the server.
-10. Make sure that **Delete permanently** is disabled.
+10. Make sure that **Delete (hard)** is disabled.
 11. Make sure that the log shows the warning about the Mailbox Import Export role.
 
 ### Errors
