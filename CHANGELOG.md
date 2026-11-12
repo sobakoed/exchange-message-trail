@@ -3,7 +3,7 @@
 ## 2.0.0 — 2026-11-11
 
 The new window: WPF with a dark and a light theme. The functions and the core are the same.
-The repository is public now, with the GNU GPL v3 license (`LICENSE`). The README has a promo image of the window.
+The repository is public now, with the GNU GPL v3 license (`LICENSE`). The README has a promo image of the window, a contact (Telegram) and a support section (TON).
 
 **Window**
 

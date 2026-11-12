@@ -2,6 +2,11 @@
 
 ![Exchange Message Trail: the message search window in the light and in the dark theme](docs/promo.png)
 
+[![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/sobakoed/exchange-message-trail)](https://github.com/sobakoed/exchange-message-trail/releases/latest)
+[![Telegram](https://img.shields.io/badge/Telegram-%40mnemo__nic-26A5E4?logo=telegram&logoColor=white)](https://t.me/mnemo_nic)
+[![Donate: TON](https://img.shields.io/badge/donate-TON-0098EA)](#support)
+
 Exchange Message Trail is a Windows tool for Exchange Server 2016 and 2019 (on-premises).
 It answers these questions:
 
@@ -41,6 +46,8 @@ The guide is in English and in Russian, with screenshots and examples.
 - [Limits](#limits)
 - [Troubleshooting](#troubleshooting)
 - [More documents](#more-documents)
+- [Contact](#contact)
+- [Support](#support)
 - [License](#license)
 
 ## Requirements
@@ -113,7 +120,7 @@ Get-ChildItem -Recurse | Unblock-File
 | `src/EMT.Strings.ps1` | The language loader and the check of language files. |
 | `Lang/` | The user interface texts. One file for each language: `en.lng`, `ru.lng`. See [Languages](#languages). |
 | `tests/` | The Pester unit tests. They do not need Exchange. See [docs/TESTING.md](docs/TESTING.md). |
-| `docs/` | The documents for developers, testers and translators. See [More documents](#more-documents). Also the promo image of this page (`promo.png`) and the social preview of the repository (`social-preview.png`): `tools/Make-HelpScreenshots.ps1` makes them. |
+| `docs/` | The documents for developers, testers and translators. See [More documents](#more-documents). Also the promo image of this page (`promo.png`) and the social preview of the repository (`social-preview.png`): `tools/Make-HelpScreenshots.ps1` makes them. The QR code of the TON address for the support (`donate-ton.png`). |
 | `CHANGELOG.md` | The list of changes for each version. |
 | `.gitattributes` | The line ends of the files in Git: CRLF for `.ps1`, `.cmd`, `.lng` and `.xaml`, LF for `.md`, `.html`, `.css` and `.js`. Windows PowerShell 5.1 needs CRLF. |
 | `.gitignore` | The files that Git does not keep: logs, audit files, CSV exports and test results. They contain mailbox addresses. |
@@ -563,8 +570,25 @@ These facts come from tests on Exchange Server 2019. EMT obeys them. Obey them a
 - [docs/TODO.md](docs/TODO.md): possible future work.
 - [CHANGELOG.md](CHANGELOG.md): the list of changes.
 
-## License
+## Contact
 
+- Questions and ideas: Telegram [@mnemo_nic](https://t.me/mnemo_nic).
+- Errors: [GitHub Issues](https://github.com/sobakoed/exchange-message-trail/issues). Do not attach logs with real mailbox addresses.
+
+## Support
+
+EMT is free. If EMT helps you, you can support the development.
+Send TON or USDT in the TON network to this address:
+
+```text
+UQDN9J6d6CebRAJZT9N5MnXw7K9rbH_wfM2pb0hSbF7re9-L
+```
+
+<img src="docs/donate-ton.png" width="180" alt="QR code of the TON address">
+
+Make sure that the network is **TON**. A transfer in a different network is lost.
+
+## License
 Copyright (C) 2026 3dfx.
 
 EMT has the GNU General Public License version 3 (GPL v3). See [LICENSE](LICENSE).
