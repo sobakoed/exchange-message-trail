@@ -2,6 +2,7 @@
 <#
 .SYNOPSIS
     Makes the screenshots of the user guide (help\img\<language>\*.png) again.
+    Also makes the promo image of the repository (docs\promo.png, docs\social-preview.png).
 
 .DESCRIPTION
     The script starts the real window of EMT outside the screen, with the dark theme.
@@ -227,7 +228,62 @@ Set-Log $logSearch
 # 1. The window and its parts
 Select-Message 0
 SnapWindow $window 'window'
-Snap $tbServer.Parent.Parent 'top-line' 8
+# 1a. The promo image of the repository (English only): docs/promo.png (2560 x 1280, the top of README.md)
+#     and docs/social-preview.png (1280 x 640, GitHub: Settings > General > Social preview).
+#     The window is a vector render of the live window (a VisualBrush), so the small text stays sharp.
+if (-not $ru) {
+    $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($window)).Handle
+    $cs = [EmtShot]::ClientSize($hwnd); $cw = $cs[0]; $ch = $cs[1]
+    $dispW = 900; $k = $dispW / $cw; $tbH = 31 * $k; $dispH = $tbH + $ch * $k
+    $icoDec = New-Object System.Windows.Media.Imaging.IconBitmapDecoder((New-Object Uri (Join-Path $repo 'gui\emt.ico')), 'None', 'OnLoad')
+    $icon = $icoDec.Frames | Sort-Object PixelWidth -Descending | Select-Object -First 1
+    $bc = New-Object System.Windows.Media.BrushConverter
+    function PText($text, $size, $color, [switch] $Bold) {
+        $x = New-Object System.Windows.Controls.TextBlock; $x.Text = $text; $x.FontSize = $size; $x.FontFamily = 'Segoe UI'
+        $x.Foreground = $bc.ConvertFromString($color); if ($Bold) { $x.FontWeight = 'Bold' }; $x
+    }
+    function PImage($size) { $x = New-Object System.Windows.Controls.Image; $x.Source = $icon; $x.Width = $size; $x.Height = $size; $x }
+    foreach ($f in 2, 1) {
+        $canvas = New-Object System.Windows.Controls.Canvas; $canvas.Width = 1280; $canvas.Height = 640; $canvas.ClipToBounds = $true
+        $canvas.Background = New-Object System.Windows.Media.LinearGradientBrush($bc.ConvertFromString('#0E1512').Color, $bc.ConvertFromString('#1C2B22').Color, (New-Object System.Windows.Point(0, 0)), (New-Object System.Windows.Point(1, 1)))
+        # The window: a drawn title bar and the client area of the live window
+        $win = New-Object System.Windows.Controls.Border; $win.Width = $dispW; $win.Height = $dispH; $win.CornerRadius = 10
+        $win.Effect = New-Object System.Windows.Media.Effects.DropShadowEffect -Property @{ BlurRadius = 40; ShadowDepth = 10; Opacity = 0.55; Color = [System.Windows.Media.Colors]::Black }
+        $inner = New-Object System.Windows.Controls.Grid
+        $inner.Clip = New-Object System.Windows.Media.RectangleGeometry((New-Object System.Windows.Rect(0, 0, $dispW, $dispH)), 10, 10)
+        $bar = New-Object System.Windows.Controls.Grid; $bar.Height = $tbH; $bar.VerticalAlignment = 'Top'; $bar.Background = $bc.ConvertFromString('#202020')
+        $ic = PImage (16 * $k); $ic.HorizontalAlignment = 'Left'; $ic.Margin = "$(8 * $k),0,0,0"; [void]$bar.Children.Add($ic)
+        $tt = PText $window.Title (12 * $k) '#FFFFFF'; $tt.VerticalAlignment = 'Center'; $tt.Margin = "$(30 * $k),0,0,0"; [void]$bar.Children.Add($tt)
+        $btns = New-Object System.Windows.Controls.StackPanel; $btns.Orientation = 'Horizontal'; $btns.HorizontalAlignment = 'Right'
+        foreach ($gl in [char]0xE921, [char]0xE922, [char]0xE8BB) {
+            $b = PText ([string]$gl) (10 * $k) '#FFFFFF'; $b.FontFamily = 'Segoe MDL2 Assets'; $b.Width = 46 * $k; $b.TextAlignment = 'Center'; $b.VerticalAlignment = 'Center'
+            [void]$btns.Children.Add($b)
+        }
+        [void]$bar.Children.Add($btns); [void]$inner.Children.Add($bar)
+        $client = New-Object System.Windows.Controls.Border; $client.Margin = "0,$tbH,0,0"
+        $vb = New-Object System.Windows.Media.VisualBrush($window); $vb.Stretch = 'Fill'; $vb.ViewboxUnits = 'Absolute'; $vb.Viewbox = New-Object System.Windows.Rect(0, 0, $cw, $ch)
+        $client.Background = $vb; [void]$inner.Children.Add($client)
+        $win.Child = $inner; [System.Windows.Controls.Canvas]::SetLeft($win, 560); [System.Windows.Controls.Canvas]::SetTop($win, 110); [void]$canvas.Children.Add($win)
+        # The text on the left: icon, name, one sentence, three functions
+        $sp = New-Object System.Windows.Controls.StackPanel; $sp.Width = 470
+        [System.Windows.Controls.Canvas]::SetLeft($sp, 64); [System.Windows.Controls.Canvas]::SetTop($sp, 96)
+        $bi = PImage 96; $bi.HorizontalAlignment = 'Left'; $bi.Margin = '0,0,0,24'; [void]$sp.Children.Add($bi)
+        $h1 = PText 'Exchange Message Trail' 46 '#FFFFFF' -Bold; $h1.TextWrapping = 'Wrap'; $h1.LineHeight = 52; [void]$sp.Children.Add($h1)
+        $h2 = PText 'Message tracking and message delete for Exchange Server 2016/2019 on-premises' 20 '#9FB3A8'
+        $h2.TextWrapping = 'Wrap'; $h2.Margin = '0,16,0,28'; [void]$sp.Children.Add($h2)
+        foreach ($c in 'Delivery status for each recipient', 'Find and delete copies in mailboxes', ('PowerShell + WPF  ' + [char]0x00B7 + '  dark and light theme')) {
+            $chip = New-Object System.Windows.Controls.Border; $chip.Background = $bc.ConvertFromString('#1AFFFFFF'); $chip.CornerRadius = 14
+            $chip.Padding = '14,6'; $chip.Margin = '0,0,0,10'; $chip.HorizontalAlignment = 'Left'; $chip.Child = PText $c 17 '#E6EDF3'
+            [void]$sp.Children.Add($chip)
+        }
+        [void]$canvas.Children.Add($sp)
+        $canvas.Measure((New-Object System.Windows.Size(1280, 640))); $canvas.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 640))); $canvas.UpdateLayout()
+        $bmp = New-Object System.Windows.Media.Imaging.RenderTargetBitmap((1280 * $f), (640 * $f), (96 * $f), (96 * $f), ([System.Windows.Media.PixelFormats]::Pbgra32)); $bmp.Render($canvas)
+        $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder; $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bmp))
+        $file = Join-Path $repo $(if ($f -eq 2) { 'docs\promo.png' } else { 'docs\social-preview.png' })
+        $fs = [IO.File]::Create($file); $enc.Save($fs); $fs.Close(); Write-Host "  $(Split-Path -Leaf $file) $(1280 * $f)x$(640 * $f)"
+    }
+}Snap $tbServer.Parent.Parent 'top-line' 8
 Snap $lblConn.Parent.Parent 'bottom-line' 8
 Snap $cardTr 'search-criteria' 10
 Snap $gridTrMessages.Parent 'message-list' 6

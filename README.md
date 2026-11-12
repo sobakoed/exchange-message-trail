@@ -1,5 +1,7 @@
 # Exchange Message Trail (EMT)
 
+![Exchange Message Trail: the message search with the delivery status of each recipient](docs/promo.png)
+
 Exchange Message Trail is a Windows tool for Exchange Server 2016 and 2019 (on-premises).
 It answers these questions:
 
@@ -111,7 +113,7 @@ Get-ChildItem -Recurse | Unblock-File
 | `src/EMT.Strings.ps1` | The language loader and the check of language files. |
 | `Lang/` | The user interface texts. One file for each language: `en.lng`, `ru.lng`. See [Languages](#languages). |
 | `tests/` | The Pester unit tests. They do not need Exchange. See [docs/TESTING.md](docs/TESTING.md). |
-| `docs/` | The documents for developers, testers and translators. See [More documents](#more-documents). |
+| `docs/` | The documents for developers, testers and translators. See [More documents](#more-documents). Also the promo image of this page (`promo.png`) and the social preview of the repository (`social-preview.png`): `tools/Make-HelpScreenshots.ps1` makes them. |
 | `CHANGELOG.md` | The list of changes for each version. |
 | `.gitattributes` | The line ends of the files in Git: CRLF for `.ps1`, `.cmd`, `.lng` and `.xaml`, LF for `.md`, `.html`, `.css` and `.js`. Windows PowerShell 5.1 needs CRLF. |
 | `.gitignore` | The files that Git does not keep: logs, audit files, CSV exports and test results. They contain mailbox addresses. |
