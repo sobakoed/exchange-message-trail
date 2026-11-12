@@ -39,6 +39,7 @@ The guide is in English and in Russian, with screenshots and examples.
 - [Limits](#limits)
 - [Troubleshooting](#troubleshooting)
 - [More documents](#more-documents)
+- [License](#license)
 
 ## Requirements
 
@@ -559,3 +560,12 @@ These facts come from tests on Exchange Server 2019. EMT obeys them. Obey them a
 - [docs/TRANSLATING.md](docs/TRANSLATING.md): how to add a language.
 - [docs/TODO.md](docs/TODO.md): possible future work.
 - [CHANGELOG.md](CHANGELOG.md): the list of changes.
+
+## License
+
+Copyright (C) 2026 3dfx.
+
+EMT has the GNU General Public License version 3 (GPL v3). See [LICENSE](LICENSE).
+You can use, copy and change EMT. If you give a changed version to other persons, give its source code under the same license.
+The software is supplied "as is", without a warranty.
+Before you delete messages on a production server, make a test on a test mailbox.
