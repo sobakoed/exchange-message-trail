@@ -577,7 +577,11 @@ These facts come from tests on Exchange Server 2019. EMT obeys them. Obey them a
 
 ## Support
 
-EMT is free. If EMT helps you, you can support the development.
+EMT is free, and I develop it in my free time.
+Did EMT find a lost message for you? Did it save you an hour during an incident?
+Then you can say "thank you" with a small donation. ☕
+Each donation shows me that EMT is useful, and it gives me time for the next version.
+
 Send TON or USDT in the TON network to this address:
 
 ```text
