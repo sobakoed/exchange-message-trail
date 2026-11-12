@@ -1406,8 +1406,21 @@ Describe 'User guide (help\*.html)' {
         $en | Should -Be $ru
     }
     It 'uses no external files: the guide operates without the Internet' {
+        # A link (<a href>) to a web page is allowed: the user clicks it. Images, scripts and styles must be local.
         foreach ($p in 'index.html', 'en.html', 'ru.html') {
-            (Read-Page $p) | Should -Not -Match '(src|href)="(https?:)?//' -Because $p
+            $page = Read-Page $p
+            $page | Should -Not -Match 'src="(https?:)?//' -Because $p
+            $page | Should -Not -Match '<link[^>]+href="(https?:)?//' -Because $p
+            $page | Should -Not -Match 'url\((https?:)?//' -Because $p
+        }
+        (Read-Page 'help.css') | Should -Not -Match '(url\(|@import)\s*["'']?(https?:)?//'
+    }
+    It 'opens each external link in a new tab, without access to the guide' {
+        foreach ($p in 'en.html', 'ru.html') {
+            foreach ($m in [regex]::Matches((Read-Page $p), '<a [^>]*href="https?://[^"]*"[^>]*>')) {
+                $m.Value | Should -Match 'target="_blank"' -Because $m.Value
+                $m.Value | Should -Match 'rel="noopener"' -Because $m.Value
+            }
         }
     }
 }

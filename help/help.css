@@ -174,3 +174,10 @@ footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--border)
   details.example { break-inside: avoid; }
   details.example > .body { display: block; }
 }
+
+/* The last section: the wallet address with a copy button and a QR code. */
+.wallet { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin: 6px 0 16px; }
+.wallet .qr { width: 160px; height: 160px; border-radius: 8px; background: #fff; padding: 6px; border: 1px solid var(--border); }
+.wallet .address { display: block; font-size: 15px; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; word-break: break-all; user-select: all; margin-bottom: 10px; }
+.wallet .copy { font: inherit; font-size: 14px; padding: 5px 14px; border-radius: 4px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+.wallet .copy.done { background: transparent; color: var(--accent); }

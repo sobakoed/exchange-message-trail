@@ -3,6 +3,7 @@
   1. The button "Theme" changes the theme: system, dark, light. The browser keeps the selection.
   2. The table of contents shows the section that is on the screen.
   3. A click on a screenshot shows it in its full size.
+  4. The button "Copy" copies a text, for example the wallet address.
   The browser can block the storage (a local file). The page operates also without it.
 */
 (function () {
@@ -61,5 +62,17 @@
     });
     box.addEventListener('click', closeZoom);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) { closeZoom(); } });
-  });
+
+    // 4. The button "Copy" copies the text of an element. Without the clipboard API, the text is selected (Ctrl+C copies it).
+    Array.prototype.forEach.call(document.querySelectorAll('button.copy'), function (b) {
+      b.addEventListener('click', function () {
+        var el = document.getElementById(b.getAttribute('data-copy'));
+        if (!el) { return; }
+        var text = el.textContent.trim(), label = b.textContent;
+        function done() { b.textContent = b.getAttribute('data-done') || label; b.classList.add('done'); setTimeout(function () { b.textContent = label; b.classList.remove('done'); }, 2000); }
+        function select() { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, select); }
+        else { select(); try { if (document.execCommand('copy')) { done(); } } catch (e) { } }
+      });
+    });  });
 })();
