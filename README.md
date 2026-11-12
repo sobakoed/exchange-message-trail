@@ -1,6 +1,6 @@
 # Exchange Message Trail (EMT)
 
-![Exchange Message Trail: the message search with the delivery status of each recipient](docs/promo.png)
+![Exchange Message Trail: the message search window in the light and in the dark theme](docs/promo.png)
 
 Exchange Message Trail is a Windows tool for Exchange Server 2016 and 2019 (on-premises).
 It answers these questions:
