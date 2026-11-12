@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.0 — 2026-11-13
+
+**Speed**
+
+- A large message search is faster. The delivery report, the message list and the status counts
+  read the events one time. For 5000 messages: the report takes 1.4 s (before: 14 s),
+  the window shows the result in 4 s (before: 12 s).
+- The core loads one time in the background runspace. The next operations start at once (before: about 0.1 s each).
+- The start compiles the Windows functions one time (before: three times).
+- The log in the window keeps the last 2000 lines. The log file keeps all lines.
+- EMT reads the transport servers one time at the connection, not at each search.
+  The connection takes about 1 second more.
+- A Compliance Search: the first 5 status checks are 1 second apart, then 3 seconds apart.
+  A short search completes sooner.
+
 ## 2.0.0 — 2026-11-11
 
 The new window: WPF with a dark and a light theme. The functions and the core are the same.

@@ -56,9 +56,10 @@ function Read-EmtLanguageFile {
 function Get-EmtStringTable {
     <# All languages from the Lang folder: code -> language object. Read once, then cached. #>
     param([switch] $Reload)
-    if (-not $Reload -and (Get-Variable -Name EmtStringTable -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtStringTable) {
-        return $global:EmtStringTable
-    }
+    # PSVariable.GetValue, not Get-Variable: T calls this function for each text, and a cmdlet call is slow.
+    # GetValue gives $null for a missing variable (no StrictMode error).
+    $cached = $ExecutionContext.SessionState.PSVariable.GetValue('global:EmtStringTable')
+    if (-not $Reload -and $cached) { return $cached }
     $table = @{}
     if (Test-Path $global:EmtLangDir) {
         foreach ($f in Get-ChildItem -Path $global:EmtLangDir -Filter '*.lng' -File | Sort-Object Name) {
@@ -81,9 +82,12 @@ function Get-EmtLanguages {
 }
 
 function Get-EmtLanguage {
-    if ((Get-Variable -Name EmtSync -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtSync -and
-        $global:EmtSync.ContainsKey('Lang') -and $global:EmtSync.Lang) { return [string]$global:EmtSync.Lang }
-    if ((Get-Variable -Name EmtLang -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtLang) { return [string]$global:EmtLang }
+    # PSVariable.GetValue: fast, and $null for a missing variable (see Get-EmtStringTable).
+    $vars = $ExecutionContext.SessionState.PSVariable
+    $sync = $vars.GetValue('global:EmtSync')
+    if ($sync -and $sync.ContainsKey('Lang') -and $sync.Lang) { return [string]$sync.Lang }
+    $lang = $vars.GetValue('global:EmtLang')
+    if ($lang) { return [string]$lang }
     'en'
 }
 

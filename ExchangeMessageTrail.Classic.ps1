@@ -47,22 +47,27 @@ trap {
 # Hide the PowerShell console window, but only if it belongs to EMT alone.
 # One process in the console: the console was made for EMT (EMT.cmd, a shortcut, "Run").
 # More processes: the user started EMT from an open console. That console stays visible.
-if (-not ('EmtConsole' -as [type])) {
-    Add-Type -Namespace '' -Name 'EmtConsole' -MemberDefinition @'
-[DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();
+# One Add-Type for all Win32 functions: each Add-Type starts the C# compiler (about 0.1 s).
+# Only the classes that are not loaded yet (the other EMT window can have loaded some in this session).
+$win32 = [ordered]@{
+    EmtConsole = @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
 [DllImport("kernel32.dll")] public static extern uint GetConsoleProcessList(uint[] list, uint count);
-[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int cmd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
 '@
+    EmtShell = @'
+[DllImport("shell32.dll")] public static extern int SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string id);
+'@
+}
+$missing = @($win32.Keys | Where-Object { -not ($_ -as [type]) })
+if ($missing.Count) {
+    Add-Type -TypeDefinition ("using System;`nusing System.Runtime.InteropServices;`n" +
+        (($missing | ForEach-Object { "public static class $_ {`n$($win32[$_])}" }) -join "`n"))
 }
 $consoleWindow = [EmtConsole]::GetConsoleWindow()
 if ($consoleWindow -ne [IntPtr]::Zero -and [EmtConsole]::GetConsoleProcessList((New-Object 'System.UInt32[]' 4), 4) -eq 1 -and
     [Environment]::CommandLine -match '\s-File\s') {
     [void][EmtConsole]::ShowWindow($consoleWindow, 0)    # 0 = SW_HIDE
-}
-if (-not ('EmtShell' -as [type])) {
-    Add-Type -Namespace '' -Name 'EmtShell' -MemberDefinition @'
-[DllImport("shell32.dll")] public static extern int SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string id);
-'@
 }
 # An own application ID: the taskbar shows EMT as a separate button with the EMT icon, not as PowerShell.
 try { [void][EmtShell]::SetCurrentProcessExplicitAppUserModelID('ExchangeMessageTrail') } catch { }
@@ -163,9 +168,10 @@ $Runspace.ThreadOptions = 'ReuseThread'
 $Runspace.Open()
 $Runspace.SessionStateProxy.SetVariable('EmtSync', $Sync)
 
+# The core loads once: the functions stay in the runspace for the next operations (about 0.1 s for each operation).
 $OpScript = @'
 param($CorePath, $Name, $Params)
-. $CorePath
+if (-not (Get-Command Invoke-EmtOperation -ErrorAction SilentlyContinue)) { . $CorePath }
 Invoke-EmtOperation -Name $Name -Params $Params
 '@
 
@@ -511,7 +517,8 @@ function Set-EmtGridData {
     $items = @($Items | Where-Object { $_ -ne $null })
     $dt = New-Object System.Data.DataTable
     foreach ($prop in $Columns.Keys) {
-        $sample = $items | ForEach-Object { Get-EmtProp $_ $prop } | Where-Object { $_ -ne $null } | Select-Object -First 1
+        $sample = $null
+        foreach ($it in $items) { $p = $it.PSObject.Properties[$prop]; if ($p -and $null -ne $p.Value) { $sample = $p.Value; break } }
         $type = [string]
         if ($sample -is [int] -or $sample -is [long]) { $type = [long] }
         elseif ($sample -is [double] -or $sample -is [decimal]) { $type = [double] }
@@ -520,8 +527,11 @@ function Set-EmtGridData {
     }
     foreach ($it in $items) {
         $row = $dt.NewRow()
+        # The property directly, not Get-EmtProp: a function call for each cell is slow for thousands of rows.
+        $props = $it.PSObject.Properties
         foreach ($prop in $Columns.Keys) {
-            $v = Get-EmtProp $it $prop
+            $p = $props[$prop]
+            $v = if ($p) { $p.Value } else { $null }
             if ($null -eq $v) { $row[$prop] = [DBNull]::Value }
             elseif ($dt.Columns[$prop].DataType -eq [string]) {
                 $row[$prop] = if ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) { (@($v) -join '; ') } else { [string]$v }
@@ -1145,7 +1155,9 @@ function Show-EmtTraceViews($t) {
     }) -Hidden 'Problems', 'Pending'
 
     $report = @($t.Report)
-    $count = { param($codes) @($report | Where-Object { $_.Status -in $codes }).Count }
+    # One count of the statuses, then sums: not one pass over the report for each number.
+    $byStatus = Get-EmtStatusCount $report
+    $count = { param($codes) $n = 0; foreach ($c in $codes) { $n += [int]$byStatus[$c] }; $n }
     $failed = & $count @(Get-EmtErrorStatuses)
     if ($msgs.Count) {
         $lblTrSummary.Text = T 'trsum.text' $msgs.Count $report.Count (& $count @('Delivered')) (& $count @('External')) `

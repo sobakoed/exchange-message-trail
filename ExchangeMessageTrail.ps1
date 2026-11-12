@@ -45,23 +45,26 @@ trap {
     break
 }
 
-if (-not ('EmtConsole' -as [type])) {
-    Add-Type -Namespace '' -Name 'EmtConsole' -MemberDefinition @'
-[DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();
+# One Add-Type for all Win32 functions: each Add-Type starts the C# compiler (about 0.1 s).
+# Only the classes that are not loaded yet (the other EMT window can have loaded some in this session).
+$win32 = [ordered]@{
+    EmtConsole = @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
 [DllImport("kernel32.dll")] public static extern uint GetConsoleProcessList(uint[] list, uint count);
-[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int cmd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
 '@
-}
-if (-not ('EmtDwm' -as [type])) {
     # The color of the title bar (Windows 10 1809 and later, Windows Server 2019 and later).
-    Add-Type -Namespace '' -Name 'EmtDwm' -MemberDefinition @'
-[DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(System.IntPtr hwnd, int attr, ref int value, int size);
+    EmtDwm = @'
+[DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 '@
-}
-if (-not ('EmtShell' -as [type])) {
-    Add-Type -Namespace '' -Name 'EmtShell' -MemberDefinition @'
+    EmtShell = @'
 [DllImport("shell32.dll")] public static extern int SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string id);
 '@
+}
+$missing = @($win32.Keys | Where-Object { -not ($_ -as [type]) })
+if ($missing.Count) {
+    Add-Type -TypeDefinition ("using System;`nusing System.Runtime.InteropServices;`n" +
+        (($missing | ForEach-Object { "public static class $_ {`n$($win32[$_])}" }) -join "`n"))
 }
 # An own application ID: the taskbar shows EMT as a separate button with the EMT icon, not as PowerShell.
 # Set it before the first window opens.
@@ -133,6 +136,7 @@ $script:PendingCleanup  = $null      # names confirmed for cleanup; the timer st
 $script:CleanupNames    = $null
 $script:Deleted         = ''         # last delete on the current result: '', 'Soft' or 'Hard'
 $script:ReportByMsg     = @{}        # MessageId -> the report rows of the message
+$script:EventsByMsg     = $null      # MessageId -> the events of the message; $null = make it again from $script:Trace
 $script:DetailLoaded    = @{}        # MessageId -> $true: the message has all recipients (partial message search)
 $script:PendingDetail   = ''         # MessageId: load its recipients when no operation runs
 $script:PcCulture       = [Globalization.CultureInfo]::CurrentCulture   # the regional settings of Windows (Set-EmtDateCulture)
@@ -192,9 +196,10 @@ $Runspace.ThreadOptions = 'ReuseThread'
 $Runspace.Open()
 $Runspace.SessionStateProxy.SetVariable('EmtSync', $Sync)
 
+# The core loads once: the functions stay in the runspace for the next operations (about 0.1 s for each operation).
 $OpScript = @'
 param($CorePath, $Name, $Params)
-. $CorePath
+if (-not (Get-Command Invoke-EmtOperation -ErrorAction SilentlyContinue)) { . $CorePath }
 Invoke-EmtOperation -Name $Name -Params $Params
 '@
 
@@ -670,7 +675,8 @@ function Set-EmtGridData {
     $items = @($Items | Where-Object { $_ -ne $null })
     $dt = New-Object System.Data.DataTable
     foreach ($prop in $Columns.Keys) {
-        $sample = $items | ForEach-Object { Get-EmtProp $_ $prop } | Where-Object { $_ -ne $null } | Select-Object -First 1
+        $sample = $null
+        foreach ($it in $items) { $p = $it.PSObject.Properties[$prop]; if ($p -and $null -ne $p.Value) { $sample = $p.Value; break } }
         $type = [string]
         if ($sample -is [int] -or $sample -is [long]) { $type = [long] }
         elseif ($sample -is [double] -or $sample -is [decimal]) { $type = [double] }
@@ -681,8 +687,11 @@ function Set-EmtGridData {
     [void]$dt.Columns.Add('Parts', [object])
     foreach ($it in $items) {
         $row = $dt.NewRow()
+        # The property directly, not Get-EmtProp: a function call for each cell is slow for thousands of rows.
+        $props = $it.PSObject.Properties
         foreach ($prop in $Columns.Keys) {
-            $v = Get-EmtProp $it $prop
+            $p = $props[$prop]
+            $v = if ($p) { $p.Value } else { $null }
             if ($null -eq $v) { $row[$prop] = [DBNull]::Value }
             elseif ($dt.Columns[$prop].DataType -eq [string]) {
                 $row[$prop] = if ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) { (@($v) -join '; ') } else { [string]$v }
@@ -737,12 +746,20 @@ function Clear-EmtGrid($Grid) {
     $script:GridNeedsSize[$Grid] = $false
 }
 
+$script:Typefaces = @{}
+
 function Measure-EmtText([string] $Text, $Grid, [switch] $Bold) {
     <# The width of a text in the font of a grid, in pixels. #>
     if (-not $Text) { return 0 }
     $weight = if ($Bold) { [System.Windows.FontWeights]::SemiBold } else { $Grid.FontWeight }
-    $face = New-Object System.Windows.Media.Typeface($Grid.FontFamily, $Grid.FontStyle, $weight, $Grid.FontStretch)
-    $ft = New-Object System.Windows.Media.FormattedText($Text, [Globalization.CultureInfo]::CurrentCulture,
+    # One typeface for each font: the column widths measure thousands of texts. ::new() is faster than New-Object.
+    $key = '{0}|{1}|{2}|{3}' -f $Grid.FontFamily, $Grid.FontStyle, $weight, $Grid.FontStretch
+    $face = $script:Typefaces[$key]
+    if (-not $face) {
+        $face = [System.Windows.Media.Typeface]::new($Grid.FontFamily, $Grid.FontStyle, $weight, $Grid.FontStretch)
+        $script:Typefaces[$key] = $face
+    }
+    $ft = [System.Windows.Media.FormattedText]::new($Text, [Globalization.CultureInfo]::CurrentCulture,
               [System.Windows.FlowDirection]::LeftToRight, $face, $Grid.FontSize, [System.Windows.Media.Brushes]::Black)
     $ft.WidthIncludingTrailingWhitespace
 }
@@ -837,21 +854,32 @@ function Update-EmtLogWidth {
     $log.Document.PageWidth = [math]::Max($view, $script:LogTextWidth + 8)
 }
 
-function Add-EmtLogLine([string] $Line) {
-    $run = New-Object System.Windows.Documents.Run($Line)
-    $key = switch -Regex ($Line) {
-        '\[ERROR\]' { 'Text.Red'; break }
-        '\[WARN'    { 'Text.Orange'; break }
-        '\[OK'      { 'Text.Green'; break }
-        default     { 'Fg' }
+# The log window keeps the last lines only: a long log in a RichTextBox makes the window slow.
+# The log file keeps all lines.
+$script:LogMaxLines = 2000
+
+function Add-EmtLogLines([string[]] $Lines) {
+    <# Adds lines to the log window and to the log file. One file write and one scroll for all lines. #>
+    if (-not $Lines -or -not $Lines.Count) { return }
+    $inlines = $script:LogPara.Inlines
+    foreach ($line in $Lines) {
+        $run = New-Object System.Windows.Documents.Run($line)
+        $key = switch -Regex ($line) {
+            '\[ERROR\]' { 'Text.Red'; break }
+            '\[WARN'    { 'Text.Orange'; break }
+            '\[OK'      { 'Text.Green'; break }
+            default     { 'Fg' }
+        }
+        Set-EmtBrush $run $key ([System.Windows.Documents.TextElement]::ForegroundProperty)
+        $inlines.Add($run)
+        $inlines.Add((New-Object System.Windows.Documents.LineBreak))
+        $w = Measure-EmtText $line $log
+        if ($w -gt $script:LogTextWidth) { $script:LogTextWidth = $w; Update-EmtLogWidth }
     }
-    Set-EmtBrush $run $key ([System.Windows.Documents.TextElement]::ForegroundProperty)
-    $script:LogPara.Inlines.Add($run)
-    $script:LogPara.Inlines.Add((New-Object System.Windows.Documents.LineBreak))
-    $w = Measure-EmtText $Line $log
-    if ($w -gt $script:LogTextWidth) { $script:LogTextWidth = $w; Update-EmtLogWidth }
+    # Two inlines for each line: the text and the line break.
+    while ($inlines.Count -gt 2 * $script:LogMaxLines) { [void]$inlines.Remove($inlines.FirstInline) }
     $log.ScrollToEnd()
-    try { Add-Content -Path $LogPath -Value $Line -Encoding UTF8 } catch { }
+    try { Add-Content -Path $LogPath -Value $Lines -Encoding UTF8 } catch { }
 }
 
 #endregion
@@ -1192,9 +1220,9 @@ function Get-EmtStatusTone([string] $Status) {
 
 function Get-EmtStatusParts([object[]] $Rows = @()) {
     <# The parts of the status of one message: one part for each status, in the order of Get-EmtMessageStatusLine. #>
-    $order = Get-EmtStatusOrder
-    $parts = foreach ($s in $order) {
-        $n = @($Rows | Where-Object { $_.Status -eq $s }).Count
+    $count = Get-EmtStatusCount $Rows
+    $parts = foreach ($s in Get-EmtStatusOrder) {
+        $n = [int]$count[$s]
         if ($n) { @{ Text = (T "line.$s" $n); Tone = (Get-EmtStatusTone $s) } }
     }
     if ($parts) { @($parts) } else { @(@{ Text = (T 'line.none'); Tone = 'Grey' }) }
@@ -1208,13 +1236,13 @@ function Get-EmtStatusMark([object[]] $Rows = @()) {
         Blue = all recipients have the message, some recipients are outside. Green = all recipients have the message.
         A group has no own delivery: the members have their own rows.
     #>
-    $codes = @($Rows | ForEach-Object { [string]$_.Status })
-    if (-not $codes.Count) { return 'Grey' }
-    $errors = @(Get-EmtErrorStatuses)
-    if ($codes | Where-Object { $_ -in $errors }) { return 'Red' }
-    if ($codes | Where-Object { $_ -in 'Deferred', 'Forwarded' }) { return 'Yellow' }
-    if ($codes | Where-Object { $_ -in 'InTransit', 'Unknown' }) { return 'Grey' }
-    if ($codes -contains 'External') { return 'Blue' }
+    $count = Get-EmtStatusCount $Rows
+    if (-not $count.Count) { return 'Grey' }
+    $has = { param([string[]] $codes) foreach ($c in $codes) { if ($count.ContainsKey($c)) { return $true } }; $false }
+    if (& $has @(Get-EmtErrorStatuses))     { return 'Red' }
+    if (& $has 'Deferred', 'Forwarded')     { return 'Yellow' }
+    if (& $has 'InTransit', 'Unknown')      { return 'Grey' }
+    if ($count.ContainsKey('External'))     { return 'Blue' }
     'Green'
 }
 
@@ -1257,8 +1285,12 @@ function Merge-EmtDetail($Detail) {
     $t = $script:Trace
     if (-not $t -or -not $Detail) { return }
     $ids = @($Detail.MessageIds)
-    $t.Events = @(@($t.Events | Where-Object { $_.MessageId -notin $ids }) + @($Detail.Events))
-    $t.Report = @(@($t.Report | Where-Object { $_.MessageId -notin $ids }) + @($Detail.Report))
+    # A set and a foreach loop: Where-Object with -notin is slow for 20 000 events.
+    $idSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($id in $ids) { if ($id) { [void]$idSet.Add([string]$id) } }
+    $t.Events = @(@(foreach ($e in @($t.Events)) { if ($e -and -not $idSet.Contains([string]$e.MessageId)) { $e } }) + @($Detail.Events))
+    $t.Report = @(@(foreach ($r in @($t.Report)) { if ($r -and -not $idSet.Contains([string]$r.MessageId)) { $r } }) + @($Detail.Report))
+    $script:EventsByMsg = $null
     $byMsg = @{}
     foreach ($r in @($Detail.Report)) {
         if (-not $byMsg.ContainsKey($r.MessageId)) { $byMsg[$r.MessageId] = New-Object System.Collections.ArrayList }
@@ -1319,6 +1351,7 @@ function Show-EmtTraceViews($t) {
     # The recipients of each message in one pass. A search in the full report for each message is slow:
     # 2000 messages and 6000 recipients take 30 seconds.
     $script:ReportByMsg = @{}
+    $script:EventsByMsg = $null
     foreach ($r in @($t.Report)) {
         if (-not $script:ReportByMsg.ContainsKey($r.MessageId)) { $script:ReportByMsg[$r.MessageId] = New-Object System.Collections.ArrayList }
         [void]$script:ReportByMsg[$r.MessageId].Add($r)
@@ -1342,7 +1375,9 @@ function Show-EmtTraceViews($t) {
     } finally { $script:Loading = $false }
 
     $report = @($t.Report)
-    $count = { param($codes) @($report | Where-Object { $_.Status -in $codes }).Count }
+    # One count of the statuses, then sums: not one pass over the report for each number.
+    $byStatus = Get-EmtStatusCount $report
+    $count = { param($codes) $n = 0; foreach ($c in $codes) { $n += [int]$byStatus[$c] }; $n }
     $failed = & $count @(Get-EmtErrorStatuses)
     $prefix = if (@($t.TrackingErrors).Count) { T 'sum.errors' } else { '' }
     if ($msgs.Count) {
@@ -1400,7 +1435,17 @@ function Show-EmtTraceDetail {
         Hint = 'col.hint'; Folder = 'col.folder'; Detail = 'col.detail'; StatusCode = ''; KindCode = ''
     }) -PartsColumn 'Status' -Parts { param($r) @{ Text = $r.Status; Tone = (Get-EmtStatusTone $r.StatusCode) } } `
        -Mark { param($r) Get-EmtStatusTone $r.StatusCode }
-    $events = @($t.Events | Where-Object { $_.MessageId -eq $msgId })
+    # The events of each message in one pass, once for each result: a click does not read all events.
+    if (-not $script:EventsByMsg) {
+        $script:EventsByMsg = @{}
+        foreach ($e in @($t.Events)) {
+            if (-not $e -or -not $e.MessageId) { continue }
+            $k = [string]$e.MessageId
+            if (-not $script:EventsByMsg.ContainsKey($k)) { $script:EventsByMsg[$k] = New-Object System.Collections.ArrayList }
+            [void]$script:EventsByMsg[$k].Add($e)
+        }
+    }
+    $events = @(if ($script:EventsByMsg.ContainsKey($msgId)) { $script:EventsByMsg[$msgId].ToArray() })
     Set-EmtGridData $gridTrEvents $events ([ordered]@{
         Timestamp = 'col.time'; EventId = 'col.event'; Source = 'col.source'; ServerHostname = 'col.server'
         Recipients = 'col.recipients'; RecipientStatus = 'col.detail'; Sender = 'col.sender'
@@ -1426,6 +1471,7 @@ function Show-EmtMailboxView($mc) {
 
 function Show-EmtTraceResult($t) {
     $script:Trace = $t
+    $script:EventsByMsg = $null
     $script:MailboxCheck = $null
     $script:DetailLoaded = @{}
     $script:PendingDetail = ''
@@ -2120,12 +2166,19 @@ $btnCancel.Add_Click({
     }
 })
 
+function Receive-EmtLog {
+    <# Moves the waiting log lines from the background runspace to the log, all in one step. #>
+    $lines = New-Object System.Collections.Generic.List[string]
+    $line = $null
+    while ($Sync.Log.TryDequeue([ref]$line)) { $lines.Add($line) }
+    if ($lines.Count) { Add-EmtLogLines $lines.ToArray() }
+}
+
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(400)
 $timer.Add_Tick({
     if ((Get-Date).Date -ne $script:PeriodMarkDay) { $script:PeriodMarkDay = (Get-Date).Date; Update-EmtPeriodMarks }
-    $line = $null
-    while ($Sync.Log.TryDequeue([ref]$line)) { Add-EmtLogLine $line }
+    Receive-EmtLog
     if ($script:Job) {
         $progress.Value = [int]$Sync.Progress
         $st = [string]$Sync.Status
@@ -2136,7 +2189,7 @@ $timer.Add_Tick({
             $timer.Stop()
             try {
                 Complete-EmtOperation
-                while ($Sync.Log.TryDequeue([ref]$line)) { Add-EmtLogLine $line }
+                Receive-EmtLog
             } finally { $timer.Start() }
         }
     }

@@ -306,23 +306,54 @@ function Get-EmtMessageSummary {
     <# One row per MessageId: first submit/receive time, sender, subject, recipient count, server-generated flag. #>
     param([object[]] $Events = @(), [string[]] $ServerNames = @())
     # An event without MessageId (for example NOTIFYMAPI) is not a message: no row for it.
-    $Events | Where-Object { $_ -and $_.MessageId } | Group-Object MessageId | ForEach-Object {
-        $g      = @($_.Group | Sort-Object Timestamp)
-        $first  = ($g | Where-Object { $_.EventId -in 'RECEIVE', 'SUBMIT' } | Select-Object -First 1)
-        if (-not $first) { $first = $g[0] }
-        $rcpt   = @($g | ForEach-Object { $_.Recipients } | Where-Object { $_ } |
-                    ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
-        $auto   = Test-EmtServerGeneratedId -MessageId $_.Name -ServerNames $ServerNames
+    # One pass over the events sorted by time, not Group-Object and a sort for each message:
+    # for 5000 messages that takes seconds in PowerShell 5.1.
+    $groups = @{}                                                 # MessageId -> state (no case difference, as Group-Object)
+    $order = New-Object System.Collections.Generic.List[object]
+    foreach ($e in @($Events | Where-Object { $_ -and $_.MessageId } | Sort-Object Timestamp)) {
+        $id = [string]$e.MessageId
+        $g = $groups[$id]
+        if (-not $g) {
+            $g = @{ Id = $id; First = $e; Start = $null
+                    Rcpt = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
+            $groups[$id] = $g
+            $order.Add($g)
+        }
+        if (-not $g.Start -and $e.EventId -in 'RECEIVE', 'SUBMIT') { $g.Start = $e }
+        foreach ($r in @($e.Recipients)) { if ($r) { [void]$g.Rcpt.Add(([string]$r).ToLowerInvariant()) } }
+    }
+    $(foreach ($g in $order) {
+        $first = if ($g.Start) { $g.Start } else { $g.First }
+        $auto  = Test-EmtServerGeneratedId -MessageId $g.Id -ServerNames $ServerNames
         [pscustomobject]@{
             Time       = $first.Timestamp
             Sender     = ([string]$first.Sender).ToLowerInvariant()
             Subject    = $first.MessageSubject
-            Recipients = $rcpt.Count
+            Recipients = $g.Rcpt.Count
             ServerGenerated = [bool]$auto
             Note       = $(if ($auto) { T 'note.serverGenerated' } else { '' })
-            MessageId  = $_.Name
+            MessageId  = $g.Id
         }
-    } | Sort-Object Time
+    }) | Sort-Object Time
+}
+
+function Get-EmtEventAddresses {
+    <#
+        The addresses of the tracking events, in lowercase, sorted, without duplicates.
+        -Property: Recipients (the default) or Sender. One pass with a set: a pipeline is slow for 20 000 events.
+    #>
+    param([object[]] $Events = @(), [string] $Property = 'Recipients')
+    $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($e in $Events) {
+        if ($null -eq $e) { continue }
+        $p = $e.PSObject.Properties[$Property]
+        if (-not $p) { continue }
+        foreach ($a in @($p.Value)) { if ($a) { [void]$set.Add(([string]$a).ToLowerInvariant()) } }
+    }
+    # CopyTo, not @($set): PowerShell 5.1 can fail on @() of a generic collection.
+    $list = New-Object string[] $set.Count
+    $set.CopyTo($list)
+    $list | Sort-Object
 }
 
 function Get-EmtMissingMailboxes {
@@ -408,6 +439,8 @@ function Connect-EmtExchange {
         $global:EmtExSession = $null
     }
     Write-EmtLog (T 'log.connecting' $Server)
+    # The server list of an earlier connection must not stay if this connection fails (another organization).
+    $global:EmtTransportServers = $null
     $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$Server/PowerShell/" `
                    -Authentication Kerberos -ErrorAction Stop
     $module = Import-PSSession $session -CommandName (Get-EmtExchangeCommandNames) -DisableNameChecking `
@@ -426,9 +459,21 @@ function Connect-EmtExchange {
             Write-EmtLog (T 'log.domainsFailed' $_.Exception.Message) 'Warn'
         }
     }
+    # Transport servers: one call at the connection, not one call for each search.
+    $global:EmtTransportServers = $null
+    if (Get-Command Get-TransportService -ErrorAction SilentlyContinue) {
+        try { $global:EmtTransportServers = @(Get-TransportService -ErrorAction Stop | ForEach-Object { [string]$_.Name }) } catch { }
+    }
     $caps = Get-EmtCapabilities
     Write-EmtLog (T 'log.connected' $Server) 'Ok'
     $caps
+}
+
+function Get-EmtTransportServers {
+    <# The names of the transport servers: from the connection, or from Get-TransportService if the connection has no list. #>
+    $known = $ExecutionContext.SessionState.PSVariable.GetValue('global:EmtTransportServers')
+    if ($known) { return @($known) }
+    @(Get-TransportService | ForEach-Object { [string]$_.Name })
 }
 
 function Get-EmtAcceptedDomains {
@@ -467,7 +512,7 @@ function Find-EmtTrackingEvents {
         [Parameter(Mandatory)] [datetime] $Start, [Parameter(Mandatory)] [datetime] $End,
         [switch] $IncludeForwards, [switch] $CompleteRecipients
     )
-    $servers = @(Get-TransportService | ForEach-Object { [string]$_.Name })
+    $servers = @(Get-EmtTransportServers)
     Write-EmtLog (T 'log.trackServers' $servers.Count)
     $common = @{ Start = $Start; End = $End; ResultSize = 'Unlimited' }
     if ($Recipient) { $common.Recipients = $Recipient }
@@ -578,11 +623,19 @@ function Select-EmtUniqueEvents {
         -KeepBlank also keeps the events without MessageId.
     #>
     param([object[]] $Events = @(), [string[]] $MessageIds = @(), [switch] $KeepBlank)
+    # A set, not "-in": "-in" reads the full ID list for each event (20 000 events x 5000 IDs: seconds).
+    $wanted = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($id in $MessageIds) { if ($id) { [void]$wanted.Add($id) } }
     $seen = @{}
-    $Events | Where-Object { $_ -and (($_.MessageId -and $_.MessageId -in $MessageIds) -or ($KeepBlank -and -not $_.MessageId)) } | ForEach-Object {
-        $key = '{0}|{1:o}|{2}|{3}|{4}' -f $_.MessageId, $_.Timestamp, $_.EventId, $_.ServerHostname, (@($_.Recipients) -join ',')
-        if (-not $seen.ContainsKey($key)) { $seen[$key] = $true; $_ }
-    } | Sort-Object Timestamp
+    $out = New-Object System.Collections.Generic.List[object]
+    foreach ($e in $Events) {
+        if (-not $e) { continue }
+        if ($e.MessageId) { if (-not $wanted.Contains([string]$e.MessageId)) { continue } }
+        elseif (-not $KeepBlank) { continue }
+        $key = '{0}|{1:o}|{2}|{3}|{4}' -f $e.MessageId, $e.Timestamp, $e.EventId, $e.ServerHostname, (@($e.Recipients) -join ',')
+        if (-not $seen.ContainsKey($key)) { $seen[$key] = $true; $out.Add($e) }
+    }
+    $out.ToArray() | Sort-Object Timestamp
 }
 
 function Resolve-EmtRecipients {
@@ -671,8 +724,10 @@ function Resolve-EmtAddressInputs {
 function Wait-EmtComplianceSearch {
     param([Parameter(Mandatory)] [string] $Name, [int] $TimeoutMinutes = 60, [int] $ProgressFrom = 40, [int] $ProgressTo = 95)
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+    $poll = 0
     while ($true) {
-        Start-Sleep -Seconds 3
+        # A short search is complete in some seconds: the first 5 checks come each second, then each 3 seconds.
+        Start-Sleep -Seconds $(if (++$poll -le 5) { 1 } else { 3 })
         if ((Get-Variable -Name EmtSync -Scope Global -ErrorAction SilentlyContinue) -and $global:EmtSync -and $global:EmtSync.Cancel) {
             Write-EmtLog (T 'log.csStopping' $Name) 'Warn'
             $stopErr = $null
@@ -736,10 +791,8 @@ function Invoke-EmtSearch {
     foreach ($m in @($summary | Where-Object ServerGenerated)) { Write-EmtLog (T 'log.serverGenerated' $m.MessageId $m.Sender) 'Warn' }
 
     # ---- 2. Recipients ----
-    $addresses = @($events | ForEach-Object { $_.Recipients } | Where-Object { $_ } |
-                   ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
-    $trackSenders = @($events | ForEach-Object { [string]$_.Sender } | Where-Object { $_ } |
-                      ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
+    $addresses = @(Get-EmtEventAddresses $events)
+    $trackSenders = @(Get-EmtEventAddresses $events -Property Sender)
     $recipients = @(Resolve-EmtRecipients -Addresses (@($addresses) + @($trackSenders) | Sort-Object -Unique) `
                         -AcceptedDomains (Get-EmtAcceptedDomains))
     $internal = @($recipients | Where-Object Kind -eq 'Internal' | ForEach-Object Mailbox | Sort-Object -Unique)
@@ -886,6 +939,8 @@ function Invoke-EmtSoftDelete {
     $actionName = "${SearchName}_Purge"
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     do {
+        # Each 3 seconds, also the first check (not the short checks of Wait-EmtComplianceSearch): this is a delete.
+        # If Exchange does not show the new action yet, $a.Status stops the operation (StrictMode).
         Start-Sleep -Seconds 3
         $a = Get-ComplianceSearchAction -Identity $actionName
         Set-EmtProgress 50 (T 'progress.soft' $a.Status)
@@ -1187,9 +1242,17 @@ function Get-EmtProp {
 function Get-EmtStatusRank {
     <# The order of the delivery statuses. A higher status replaces a lower one for the same recipient. #>
     param([string] $Status)
-    switch ($Status) {
-        'Delivered' { 10 } 'External' { 9 } 'Forwarded' { 8 } 'Failed' { 7 } 'GroupBlocked' { 6 } 'Dropped' { 5 }
-        'Suppressed' { 4 } 'Deferred' { 3 } 'InTransit' { 2 } 'Group' { 1 } default { 0 }
+    [int](Get-EmtStatusRanks)[$Status]
+}
+
+function Get-EmtStatusRanks {
+    <#
+        The ranks of Get-EmtStatusRank as a table: status -> rank. A status that is not in the table has the rank 0.
+        A hot loop gets the table once and reads it: no function call for each row.
+    #>
+    @{
+        Delivered = 10; External = 9; Forwarded = 8; Failed = 7; GroupBlocked = 6; Dropped = 5
+        Suppressed = 4; Deferred = 3; InTransit = 2; Group = 1
     }
 }
 
@@ -1318,38 +1381,61 @@ function Get-EmtDeliveryReport {
         Folder: the folder of the delivery (Get-EmtDeliveryFolder). Then Detail is empty: the folder is not a server answer.
     #>
     param([object[]] $Events = @(), [hashtable] $Kinds = @{})
-    $state = [ordered]@{}
+    # The hot loop has no function calls: a function call in PowerShell 5.1 is slow, and the loop runs
+    # for each event and each recipient (5000 messages: 15 000 rows). The status, the folder and the hint
+    # depend only on the event, the kind and the server answer: each combination is examined once.
+    $rank = Get-EmtStatusRanks
+    # Case-sensitive tables: the folder name and the answer text keep their letters.
+    $statusOf = New-Object System.Collections.Hashtable           # "event|kind|answer" -> @(status, folder)
+    $hintOf = New-Object System.Collections.Hashtable             # answer -> hint
+    # A hashtable and a key list, not [ordered]@{}: a new value for a key of an ordered dictionary
+    # searches the key list from the start (5 of 6 seconds for 15 000 rows).
+    $state = @{}
+    $order = New-Object System.Collections.Generic.List[string]
     foreach ($e in @($Events | Where-Object { $_ -and $_.MessageId } | Sort-Object Timestamp)) {
-        $rcpts = @(Get-EmtProp $e 'Recipients')
-        $stats = @(Get-EmtProp $e 'RecipientStatus')
+        $props = $e.PSObject.Properties
+        $p = $props['Recipients'];      $rcpts = @(if ($p) { $p.Value } else { $null })
+        $p = $props['RecipientStatus']; $stats = @(if ($p) { $p.Value } else { $null })
+        $p = $props['ServerHostname'];  $server = if ($p) { [string]$p.Value } else { '' }
+        $eventId = [string]$e.EventId
+        $msgId = [string]$e.MessageId
         for ($i = 0; $i -lt $rcpts.Count; $i++) {
             $a = ([string]$rcpts[$i]).Trim().ToLowerInvariant()
             if (-not $a) { continue }
             $kind = if ($Kinds.ContainsKey($a)) { [string]$Kinds[$a] } else { '' }
             $detail = if ($i -lt $stats.Count) { [string]$stats[$i] } else { '' }
-            $code = Get-EmtEventStatus -EventId ([string]$e.EventId) -Kind $kind -Detail $detail
+            $ck = "$eventId|$kind|$detail"
+            $sf = $statusOf[$ck]
+            if ($null -eq $sf) {
+                $sf = @((Get-EmtEventStatus -EventId $eventId -Kind $kind -Detail $detail),
+                        (Get-EmtDeliveryFolder -EventId $eventId -Detail $detail))
+                $statusOf[$ck] = $sf
+            }
+            $code = $sf[0]
             if (-not $code) { continue }
-            $key = "$($e.MessageId)|$a"
-            $old = if ($state.Contains($key)) { $state[$key] } else { $null }
-            if ($old -and (Get-EmtStatusRank $code) -lt (Get-EmtStatusRank $old.Status)) { continue }
-            $folder = Get-EmtDeliveryFolder -EventId ([string]$e.EventId) -Detail $detail
-            $state[$key] = [pscustomobject]@{
-                MessageId = [string]$e.MessageId
-                Recipient = $a
-                Kind      = $kind
-                Status    = $code
-                Time      = $e.Timestamp
-                Server    = [string](Get-EmtProp $e 'ServerHostname')
-                Event     = [string]$e.EventId
-                Folder    = $folder
-                Detail    = $(if ($folder) { '' } else { $detail })
+            $key = "$msgId|$a"
+            $old = $state[$key]
+            if ($old -and [int]$rank[$code] -lt [int]$rank[$old.Status]) { continue }
+            $folder = $sf[1]
+            if (-not $old) { $order.Add($key) }
+            $state[$key] = @{
+                MessageId = $msgId; Recipient = $a; Kind = $kind; Status = $code; Time = $e.Timestamp
+                Server = $server; Event = $eventId; Folder = $folder; Detail = $(if ($folder) { '' } else { $detail })
             }
         }
     }
-    foreach ($row in $state.Values) {
+    $inTransit = [int]$rank['InTransit']
+    foreach ($k in $order) {
+        $row = $state[$k]
         # A group address has no own delivery: the members get the message.
-        if ($row.Kind -eq 'Group' -and (Get-EmtStatusRank $row.Status) -le (Get-EmtStatusRank 'InTransit')) { $row.Status = 'Group' }
-        $row | Add-Member -NotePropertyName Hint -NotePropertyValue (Get-EmtStatusHint $row.Detail) -PassThru
+        if ($row.Kind -eq 'Group' -and [int]$rank[$row.Status] -le $inTransit) { $row.Status = 'Group' }
+        $d = $row.Detail
+        if (-not $hintOf.ContainsKey($d)) { $hintOf[$d] = Get-EmtStatusHint $d }
+        [pscustomobject]@{
+            MessageId = $row.MessageId; Recipient = $row.Recipient; Kind = $row.Kind; Status = $row.Status
+            Time = $row.Time; Server = $row.Server; Event = $row.Event; Folder = $row.Folder; Detail = $d
+            Hint = $hintOf[$d]
+        }
     }
 }
 
@@ -1361,12 +1447,24 @@ function Get-EmtStatusOrder {
 function Get-EmtMessageStatusLine {
     <# The status line of one message from its report rows: "Delivered: 5, External: 1, Failed: 1". #>
     param([object[]] $Rows = @())
-    $order = Get-EmtStatusOrder
-    $parts = foreach ($s in $order) {
-        $n = @($Rows | Where-Object { $_.Status -eq $s }).Count
+    $count = Get-EmtStatusCount $Rows
+    $parts = foreach ($s in Get-EmtStatusOrder) {
+        $n = [int]$count[$s]
         if ($n) { T "line.$s" $n }
     }
     if ($parts) { @($parts) -join ', ' } else { T 'line.none' }
+}
+
+function Get-EmtStatusCount {
+    <# The number of rows for each status: status -> count. One pass over the rows. #>
+    param([object[]] $Rows = @())
+    $count = @{}
+    foreach ($r in $Rows) {
+        if ($null -eq $r) { continue }
+        $s = [string]$r.Status
+        $count[$s] = 1 + [int]$count[$s]
+    }
+    $count
 }
 
 function Get-EmtNoResultHints {
@@ -1405,8 +1503,7 @@ function Invoke-EmtTrace {
     $events = @($tracking.Events)
     $summary = @(Get-EmtMessageSummary -Events $events -ServerNames $tracking.Servers)
 
-    $addresses = @($events | ForEach-Object { @(Get-EmtProp $_ 'Recipients') } | Where-Object { $_ } |
-                   ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object -Unique)
+    $addresses = @(Get-EmtEventAddresses $events)
     $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains))
     $kinds = @{}
     foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
@@ -1424,13 +1521,15 @@ function Invoke-EmtTrace {
     $messages = @(foreach ($m in $summary) {
         # @( ) keeps an array: PowerShell makes one row of an array a single object, and it has no Count in strict mode.
         $rows = @(if ($byMsg.ContainsKey($m.MessageId)) { $byMsg[$m.MessageId].ToArray() })
+        $count = Get-EmtStatusCount $rows
+        $problems = 0; foreach ($s in $errorStatuses) { $problems += [int]$count[$s] }
         [pscustomobject]@{
             Time            = $m.Time
             Sender          = $m.Sender
             Subject         = $m.Subject
             Recipients      = $rows.Count
-            Problems        = @($rows | Where-Object { $_.Status -in $errorStatuses }).Count
-            Pending         = @($rows | Where-Object { $_.Status -in 'Deferred', 'InTransit', 'Unknown' }).Count
+            Problems        = $problems
+            Pending         = [int]$count['Deferred'] + [int]$count['InTransit'] + [int]$count['Unknown']
             StatusLine      = Get-EmtMessageStatusLine $rows
             ServerGenerated = $m.ServerGenerated
             MessageId       = $m.MessageId
@@ -1461,13 +1560,12 @@ function Get-EmtMessageDetail {
         [Parameter(Mandatory)] [string[]] $MessageIds, [Parameter(Mandatory)] [datetime] $Start,
         [Parameter(Mandatory)] [datetime] $End
     )
-    $servers = @(Get-TransportService | ForEach-Object { [string]$_.Name })
+    $servers = @(Get-EmtTransportServers)
     $pass = Get-EmtEventsByMessageId -MessageIds $MessageIds -Start $Start -End $End -Servers $servers -ProgressFrom 5 -ProgressTo 80
     $errs = @($pass.Errors | Sort-Object -Unique)
     foreach ($t in $errs) { Write-EmtLog (T 'log.trackError' $t) 'Error' }
     $events = @(Select-EmtUniqueEvents -Events $pass.Events -MessageIds $MessageIds)
-    $addresses = @($events | ForEach-Object { @(Get-EmtProp $_ 'Recipients') } | Where-Object { $_ } |
-                   ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object -Unique)
+    $addresses = @(Get-EmtEventAddresses $events)
     $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains))
     $kinds = @{}
     foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
