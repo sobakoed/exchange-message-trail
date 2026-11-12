@@ -7,7 +7,7 @@
 [![Telegram](https://img.shields.io/badge/Telegram-%40mnemo__nic-26A5E4?logo=telegram&logoColor=white)](https://t.me/mnemo_nic)
 [![Donate: TON](https://img.shields.io/badge/donate-TON-0098EA)](#support)
 
-Exchange Message Trail is a Windows tool for Exchange Server 2016 and 2019 (on-premises).
+Exchange Message Trail is a Windows tool for Microsoft Exchange Server 2016 and 2019 (on-premises).
 It can possibly also operate with Exchange Server Subscription Edition (SE). This is not tested.
 It answers these questions:
 
@@ -600,3 +600,5 @@ EMT has the GNU General Public License version 3 (GPL v3). See [LICENSE](LICENSE
 You can use, copy and change EMT. If you give a changed version to other persons, give its source code under the same license.
 The software is supplied "as is", without a warranty.
 Before you delete messages on a production server, make a test on a test mailbox.
+
+Microsoft, Exchange and Windows are trademarks of the Microsoft group of companies. EMT is not affiliated with Microsoft.

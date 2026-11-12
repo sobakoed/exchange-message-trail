@@ -281,7 +281,7 @@ if (-not $ru) {
         $hi = PImage 56; $hi.Margin = '0,0,16,0'; [void]$row.Children.Add($hi)
         $h1 = PText 'Exchange Message Trail' 42 '#FFFFFF' -Bold; $h1.VerticalAlignment = 'Center'; [void]$row.Children.Add($h1)
         [void]$head.Children.Add($row)
-        $h2 = PText 'Message tracking and message delete for Exchange Server 2016/2019 on-premises' 19 '#A9BCC6'
+        $h2 = PText 'Message tracking and message delete for Microsoft Exchange Server 2016/2019 on-premises' 19 '#A9BCC6'
         $h2.HorizontalAlignment = 'Center'; $h2.Margin = '0,10,0,0'; [void]$head.Children.Add($h2)
         [void]$canvas.Children.Add($head)
         [void]$canvas.Children.Add((PWindow $lightBmp $true 120 170))
