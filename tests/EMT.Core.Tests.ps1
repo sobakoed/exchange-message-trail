@@ -1073,6 +1073,28 @@ Describe 'Mailbox check: findings' {
         $a[0].Text | Should -Match 'Archive'
         $a[0].Text | Should -Match 'applies to this message'
     }
+    It 'finds a rule with the sender in the Outlook form [EX:...] (no SMTP address)' {
+        $dn = '/o=Contoso/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=abc123-Ivanov'
+        $rule = [pscustomobject]@{ Name = 'Ivanov'; Enabled = $true; From = @("""Ivanov Ivan"" [EX:$dn]"); MoveToFolder = 'jsmith:\Ivanov'; DeleteMessage = $false }
+        $data = New-Data -Rules @($rule)
+        # Without the DN: as before, the condition does not apply.
+        @(Get-EmtMailboxFindings -Data $data -Sender 'a@x.com')[0].Severity | Should -Be 'Info'
+        $data | Add-Member SenderDn $dn.ToUpperInvariant()
+        @(Get-EmtMailboxFindings -Data $data -Sender 'a@x.com')[0].Severity | Should -Be 'Alert'
+        $data.SenderDn = '/o=Contoso/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=other'
+        @(Get-EmtMailboxFindings -Data $data -Sender 'b@x.com')[0].Severity | Should -Be 'Info'
+    }
+    It 'reads the LegacyExchangeDN of the sender in the mailbox check' {
+        Mock Invoke-EmtReadOnly {
+            if ($Command -eq 'Get-Mailbox' -and $Params.Identity -eq 'a@x.com') {
+                return [pscustomobject]@{ Value = [pscustomobject]@{ LegacyExchangeDN = '/o=C/cn=Recipients/cn=a' }; Error = '' }
+            }
+            [pscustomobject]@{ Value = $null; Error = '' }
+        }
+        (Invoke-EmtMailboxCheck -Mailbox 'j@x.com' -Sender 'a@x.com').Data.SenderDn | Should -Be '/o=C/cn=Recipients/cn=a'
+        (Invoke-EmtMailboxCheck -Mailbox 'j@x.com').Data.SenderDn | Should -Be ''
+        Should -Invoke Invoke-EmtReadOnly -Times 1 -Exactly -ParameterFilter { $Command -eq 'Get-Mailbox' -and $Params.Identity -eq 'a@x.com' }
+    }
     It 'gives Info for a rule that does not apply, and ignores a disabled rule' {
         $r1 = [pscustomobject]@{ Name = 'Other'; Enabled = $true; SubjectContainsWords = @('invoice'); DeleteMessage = $true }
         $r2 = [pscustomobject]@{ Name = 'Off'; Enabled = $false; DeleteMessage = $true }

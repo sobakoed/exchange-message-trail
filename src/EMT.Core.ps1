@@ -1681,9 +1681,12 @@ function Get-EmtRuleMatch {
     <#
         Does an inbox rule apply to the message? Returns All (no conditions), Yes, No or Unknown
         (only conditions that EMT cannot examine, for example words in the body).
+        -SenderDn: the LegacyExchangeDN of an internal sender. A rule made in Outlook keeps the sender
+        as "Name" [EX:/o=.../cn=Recipients/cn=...], without the SMTP address.
     #>
-    param($Rule, [string] $Sender, [string] $Subject)
+    param($Rule, [string] $Sender, [string] $Subject, [string] $SenderDn)
     $s = ([string]$Sender).ToLowerInvariant()
+    $ex = if ($SenderDn) { '[ex:' + $SenderDn.ToLowerInvariant() + ']' } else { '' }
     $subj = ([string]$Subject).ToLowerInvariant()
     $from      = @(@(Get-EmtProp $Rule 'From') | Where-Object { $_ })
     $fromWords = @(@(Get-EmtProp $Rule 'FromAddressContainsWords') | Where-Object { $_ })
@@ -1691,7 +1694,10 @@ function Get-EmtRuleMatch {
     $bodyWords = @(@(Get-EmtProp $Rule 'BodyContainsWords') | Where-Object { $_ })
     $known = $from.Count + $fromWords.Count + $subWords.Count
     if (-not $known -and -not $bodyWords.Count) { return 'All' }
-    foreach ($f in $from)      { if ($s -and ([string]$f).ToLowerInvariant().Contains($s)) { return 'Yes' } }
+    foreach ($f in $from) {
+        $fl = ([string]$f).ToLowerInvariant()
+        if (($s -and $fl.Contains($s)) -or ($ex -and $fl.Contains($ex))) { return 'Yes' }
+    }
     foreach ($w in $fromWords) { if ($s -and $s.Contains(([string]$w).ToLowerInvariant())) { return 'Yes' } }
     foreach ($w in $subWords)  { if ($subj -and $subj.Contains(([string]$w).ToLowerInvariant())) { return 'Yes' } }
     if (-not $known) { return 'Unknown' }
@@ -1717,7 +1723,7 @@ function Get-EmtMailboxFindings {
         $fwd  = @(@(@(Get-EmtProp $r 'ForwardTo') + @(Get-EmtProp $r 'RedirectTo') + @(Get-EmtProp $r 'ForwardAsAttachmentTo')) |
                   Where-Object { $_ } | ForEach-Object { [string]$_ })
         if (-not $move -and -not $del -and -not $fwd.Count) { continue }
-        $match = Get-EmtRuleMatch -Rule $r -Sender $Sender -Subject $Subject
+        $match = Get-EmtRuleMatch -Rule $r -Sender $Sender -Subject $Subject -SenderDn ([string](Get-EmtProp $Data 'SenderDn'))
         $sev = if ($match -in 'All', 'Yes') { 'Alert' } elseif ($match -eq 'Unknown') { 'Warn' } else { 'Info' }
         $suffix = T "find.match$match"
         if ($del)       { & $add $sev 'Rules' ((T 'find.ruleDelete' $name) + ' ' + $suffix) }
@@ -1781,7 +1787,16 @@ function Invoke-EmtMailboxCheck {
     $box   = Invoke-EmtReadOnly 'Get-Mailbox' @{ Identity = $Mailbox }
     Set-EmtProgress 75 (T 'progress.checkMailbox' $Mailbox)
     $stats = Invoke-EmtReadOnly 'Get-MailboxStatistics' @{ Identity = $Mailbox }
+    # The internal address of the sender for the rule condition "From". An external sender is not found: no DN.
+    # Get-Mailbox, not Get-Recipient: the Get-Recipient result has no LegacyExchangeDN.
+    $senderDn = ''
+    if ($Sender) {
+        $who = Invoke-EmtReadOnly 'Get-Mailbox' @{ Identity = $Sender }
+        $first = @($who.Value)[0]
+        if ($first) { $senderDn = [string](Get-EmtProp $first 'LegacyExchangeDN') }
+    }
     $data = [pscustomobject]@{
+        SenderDn = $senderDn
         Rules = @($rules.Value); RulesError = $rules.Error
         Junk  = @($junk.Value)[0]; JunkError = $junk.Error
         Box   = @($box.Value)[0];  BoxError = $box.Error

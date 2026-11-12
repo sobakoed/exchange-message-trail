@@ -35,6 +35,12 @@
 - A search by the address of a group does not find the `EXPAND` event (it has the members, not the group).
   Such a message has the note "Message to a group: select the message to load the recipients".
 
+**Mailbox check**
+
+- An inbox rule made in Outlook for an internal sender keeps the sender as `"Name" [EX:/o=.../cn=Recipients/cn=...]`,
+  without the SMTP address. Before, EMT said "The rule condition does not apply" for such a rule.
+  Now EMT reads the `LegacyExchangeDN` of the sender (`Get-Mailbox`, one call) and compares it.
+
 ## 2.0.0 — 2026-11-11
 
 The new window: WPF with a dark and a light theme. The functions and the core are the same.
