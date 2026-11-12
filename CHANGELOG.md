@@ -20,6 +20,16 @@
 - An operation that takes more than 5 seconds writes its time to the log, for example
   "Operation "TraceDetail" took 7.3 s." The time has one decimal.
 
+**Recipients**
+
+- A message to a large group loads much faster. An address with a delivery event (`DELIVER`) is a mailbox:
+  EMT does not look it up with `Get-Recipient`. Exchange delivers only to mailboxes,
+  and the event has the primary address of the mailbox (tested on Exchange 2019: 658 of 658 addresses).
+  Before, a group of 670 members took about 34 `Get-Recipient` calls. Now it takes one call.
+- Exception: a mail-enabled public folder. EMT reads the list of these folders one time for each connection
+  (`Get-Recipient -RecipientType PublicFolder`). If the list is not available, EMT looks up all addresses
+  as before. The log shows one warning.
+
 ## 2.0.0 — 2026-11-11
 
 The new window: WPF with a dark and a light theme. The functions and the core are the same.

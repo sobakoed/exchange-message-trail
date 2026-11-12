@@ -17,7 +17,7 @@ BeforeAll {
         [CmdletBinding()]
         param($Server, $Sender, $MessageSubject, $MessageId, $Recipients, $Start, $End, $ResultSize)
     }
-    function Get-Recipient { [CmdletBinding()] param($Identity, $Filter, $Anr, $ResultSize) }
+    function Get-Recipient { [CmdletBinding()] param($Identity, $Filter, $Anr, $ResultSize, $RecipientType) }
     function Get-ComplianceSearch { [CmdletBinding()] param($Identity) }
     function Remove-ComplianceSearch { [CmdletBinding(SupportsShouldProcess)] param($Identity) }
     function Get-ComplianceSearchAction { [CmdletBinding()] param($Identity) }
@@ -263,6 +263,76 @@ Describe 'Resolve-EmtRecipients' {
         $r = @(Resolve-EmtRecipients -Addresses 'u@x.com', 'z@ext.org' -AcceptedDomains 'x.com')
         Should -Invoke Get-Recipient -Times 1 -Exactly
         ($r | Where-Object Address -eq 'z@ext.org').Kind | Should -Be 'External'
+    }
+}
+
+Describe 'Resolve-EmtRecipients with DELIVER addresses' {
+    BeforeEach {
+        $global:EmtPublicFolders = $null
+        $script:Directory = @(
+            New-Rcpt 'UserMailbox' 'u@x.com' @('SMTP:u@x.com')
+            New-Rcpt 'UserMailbox' 'v@x.com' @('SMTP:v@x.com')
+            New-Rcpt 'PublicFolder' 'pf@x.com' @('SMTP:pf@x.com', 'smtp:pf2@x.com')
+            New-Rcpt 'MailUniversalDistributionGroup' 'all@x.com' @('SMTP:all@x.com')
+        )
+        Mock Get-Recipient {
+            if ($RecipientType -eq 'PublicFolder') { return @($script:Directory | Where-Object RecipientType -eq 'PublicFolder') }
+            $wanted = @([regex]::Matches($Filter, "smtp:([^']+)") | ForEach-Object { $_.Groups[1].Value.ToLowerInvariant() })
+            $script:Directory | Where-Object {
+                $p = @($_.EmailAddresses | ForEach-Object { ($_ -replace '^smtp:', '').ToLowerInvariant() })
+                @($wanted | Where-Object { $_ -in $p }).Count
+            }
+        }
+    }
+    AfterAll { $global:EmtPublicFolders = $null }
+    It 'takes a delivered address as a mailbox without a lookup' {
+        $r = @(Resolve-EmtRecipients -Addresses 'u@x.com', 'v@x.com', 'all@x.com' -AcceptedDomains 'x.com' -Delivered 'U@x.com', 'v@x.com')
+        ($r | Where-Object Address -eq 'u@x.com').Kind    | Should -Be 'Internal'
+        ($r | Where-Object Address -eq 'u@x.com').Mailbox | Should -Be 'u@x.com'
+        ($r | Where-Object Address -eq 'v@x.com').Type    | Should -Be 'UserMailbox'
+        ($r | Where-Object Address -eq 'all@x.com').Kind  | Should -Be 'Group'
+        # One call for the public folders, one call for the group: no call for the two mailboxes.
+        Should -Invoke Get-Recipient -Times 1 -Exactly -ParameterFilter { $RecipientType -eq 'PublicFolder' }
+        Should -Invoke Get-Recipient -Times 1 -Exactly -ParameterFilter { $Filter -and $Filter -notmatch 'u@x\.com|v@x\.com' }
+        Should -Invoke Get-Recipient -Times 2 -Exactly
+    }
+    It 'looks up a delivered address of a public folder' {
+        $r = @(Resolve-EmtRecipients -Addresses 'u@x.com', 'pf2@x.com' -AcceptedDomains 'x.com' -Delivered 'u@x.com', 'pf2@x.com')
+        ($r | Where-Object Address -eq 'pf2@x.com').Kind    | Should -Be 'Other'
+        ($r | Where-Object Address -eq 'pf2@x.com').Mailbox | Should -Be ''
+        Should -Invoke Get-Recipient -Times 1 -Exactly -ParameterFilter { $Filter -match 'pf2@x\.com' -and $Filter -notmatch 'u@x\.com' }
+    }
+    It 'gets the public folder list one time for each connection' {
+        $null = Resolve-EmtRecipients -Addresses 'u@x.com' -Delivered 'u@x.com'
+        $null = Resolve-EmtRecipients -Addresses 'v@x.com' -Delivered 'v@x.com'
+        Should -Invoke Get-Recipient -Times 1 -Exactly -ParameterFilter { $RecipientType -eq 'PublicFolder' }
+    }
+    It 'looks up all addresses if the public folder list is not available' {
+        Mock Get-Recipient { throw 'access denied' } -ParameterFilter { $RecipientType -eq 'PublicFolder' }
+        $r = @(Resolve-EmtRecipients -Addresses 'u@x.com', 'v@x.com' -AcceptedDomains 'x.com' -Delivered 'u@x.com', 'v@x.com')
+        ($r | Where-Object Address -eq 'u@x.com').Kind | Should -Be 'Internal'
+        Should -Invoke Get-Recipient -Times 1 -Exactly -ParameterFilter { $Filter -match 'u@x\.com' -and $Filter -match 'v@x\.com' }
+        # The failure stays until the next connection: no second try.
+        $null = Resolve-EmtRecipients -Addresses 'u@x.com' -Delivered 'u@x.com'
+        Should -Invoke Get-Recipient -Times 1 -Exactly -ParameterFilter { $RecipientType -eq 'PublicFolder' }
+    }
+    It 'does not change an address outside the accepted domains' {
+        $r = @(Resolve-EmtRecipients -Addresses 'z@ext.org' -AcceptedDomains 'x.com' -Delivered 'z@ext.org')
+        ($r | Where-Object Address -eq 'z@ext.org').Kind | Should -Be 'External'
+        Should -Invoke Get-Recipient -Times 0 -Exactly
+    }
+}
+
+Describe 'Get-EmtEventAddresses -EventId' {
+    It 'takes the addresses of one event type only' {
+        $t = [datetime]'2026-11-10'
+        $ev = @(
+            New-Ev 'm1' 'a@x.com' 's' 'RECEIVE' @('B@x.com', 'c@x.com') $t
+            New-Ev 'm1' 'a@x.com' 's' 'DELIVER' @('B@x.com') $t
+            [pscustomobject]@{ MessageId = 'm1'; Recipients = @('d@x.com') }
+        )
+        @(Get-EmtEventAddresses $ev -EventId 'DELIVER') | Should -Be @('b@x.com')
+        @(Get-EmtEventAddresses $ev).Count | Should -Be 3
     }
 }
 

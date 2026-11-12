@@ -341,11 +341,16 @@ function Get-EmtEventAddresses {
     <#
         The addresses of the tracking events, in lowercase, sorted, without duplicates.
         -Property: Recipients (the default) or Sender. One pass with a set: a pipeline is slow for 20 000 events.
+        -EventId: only the events of this type (for example DELIVER).
     #>
-    param([object[]] $Events = @(), [string] $Property = 'Recipients')
+    param([object[]] $Events = @(), [string] $Property = 'Recipients', [string] $EventId = '')
     $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     foreach ($e in $Events) {
         if ($null -eq $e) { continue }
+        if ($EventId) {
+            $k = $e.PSObject.Properties['EventId']
+            if (-not $k -or [string]$k.Value -ne $EventId) { continue }
+        }
         $p = $e.PSObject.Properties[$Property]
         if (-not $p) { continue }
         foreach ($a in @($p.Value)) { if ($a) { [void]$set.Add(([string]$a).ToLowerInvariant()) } }
@@ -441,6 +446,7 @@ function Connect-EmtExchange {
     Write-EmtLog (T 'log.connecting' $Server)
     # The server list of an earlier connection must not stay if this connection fails (another organization).
     $global:EmtTransportServers = $null
+    $global:EmtPublicFolders = $null
     $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$Server/PowerShell/" `
                    -Authentication Kerberos -ErrorAction Stop
     $module = Import-PSSession $session -CommandName (Get-EmtExchangeCommandNames) -DisableNameChecking `
@@ -474,6 +480,30 @@ function Get-EmtTransportServers {
     $known = $ExecutionContext.SessionState.PSVariable.GetValue('global:EmtTransportServers')
     if ($known) { return @($known) }
     @(Get-TransportService | ForEach-Object { [string]$_.Name })
+}
+
+function Get-EmtPublicFolderAddresses {
+    <#
+        The SMTP addresses of all mail-enabled public folders, in lowercase (a set), or $null if the list is not available.
+        One Get-Recipient call for each connection. Connect-EmtExchange clears the list.
+    #>
+    $known = $ExecutionContext.SessionState.PSVariable.GetValue('global:EmtPublicFolders')
+    if ($known) { return , $known.Set }
+    $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    try {
+        foreach ($r in @(Get-Recipient -RecipientType PublicFolder -ResultSize Unlimited -ErrorAction Stop)) {
+            foreach ($p in @($r.EmailAddresses)) {
+                $s = [string]$p
+                if ($s -match '^smtp:') { [void]$set.Add($s.Substring(5).ToLowerInvariant()) }
+            }
+        }
+    } catch {
+        Write-EmtLog (T 'log.publicFoldersFailed' $_.Exception.Message) 'Warn'
+        $set = $null
+    }
+    # Also a failure stays until the next connection: one warning, not one warning for each message.
+    $global:EmtPublicFolders = [pscustomobject]@{ Set = $set }
+    , $set
 }
 
 function Get-EmtAcceptedDomains {
@@ -644,11 +674,28 @@ function Resolve-EmtRecipients {
         Addresses outside the accepted domains are external without a call.
         The other addresses are resolved in batches of 20 (one Get-Recipient -Filter call per batch).
         If a batch call fails, the batch is resolved address by address.
+        -Delivered: the addresses of DELIVER events. Exchange delivers only to mailboxes, and a DELIVER event
+        has the primary address of the mailbox. Thus these addresses are mailboxes without a Get-Recipient call
+        (a message to a large group: hundreds of calls less). Exception: the addresses of mail-enabled public folders.
+        If the public folder list is not available, all addresses are looked up.
     #>
-    param([string[]] $Addresses = @(), [string[]] $AcceptedDomains = @(), [int] $BatchSize = 20)
+    param([string[]] $Addresses = @(), [string[]] $AcceptedDomains = @(), [int] $BatchSize = 20, [string[]] $Delivered = @())
     $list = @($Addresses | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
     $lookup = @($list | Where-Object { -not $AcceptedDomains.Count -or (Test-EmtInternalDomain $_ $AcceptedDomains) })
     $byAddress = @{}
+    $direct = @{}                                                 # address -> $true: a mailbox from a DELIVER event
+    if (@($Delivered).Count -and $lookup.Count) {
+        $folders = Get-EmtPublicFolderAddresses
+        if ($null -ne $folders) {
+            $deliveredSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+            foreach ($a in $Delivered) { if ($a) { [void]$deliveredSet.Add([string]$a) } }
+            $rest = New-Object System.Collections.Generic.List[string]
+            foreach ($a in $lookup) {
+                if ($deliveredSet.Contains($a) -and -not $folders.Contains($a)) { $direct[$a] = $true } else { $rest.Add($a) }
+            }
+            $lookup = $rest.ToArray()
+        }
+    }
 
     for ($b = 0; $b -lt $lookup.Count; $b += $BatchSize) {
         Test-EmtCancel
@@ -670,6 +717,10 @@ function Resolve-EmtRecipients {
     }
 
     foreach ($a in $list) {
+        if ($direct.ContainsKey($a)) {
+            [pscustomobject]@{ Address = $a; Kind = 'Internal'; Mailbox = $a; Type = 'UserMailbox' }
+            continue
+        }
         $r = $byAddress[$a]
         $type = if ($r) { [string]$r.RecipientType } else { '' }
         $kind = if (-not $r) { 'External' }
@@ -1504,7 +1555,8 @@ function Invoke-EmtTrace {
     $summary = @(Get-EmtMessageSummary -Events $events -ServerNames $tracking.Servers)
 
     $addresses = @(Get-EmtEventAddresses $events)
-    $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains))
+    $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains) `
+                        -Delivered @(Get-EmtEventAddresses $events -EventId 'DELIVER'))
     $kinds = @{}
     foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
     $report = @(Get-EmtDeliveryReport -Events $events -Kinds $kinds)
@@ -1566,7 +1618,8 @@ function Get-EmtMessageDetail {
     foreach ($t in $errs) { Write-EmtLog (T 'log.trackError' $t) 'Error' }
     $events = @(Select-EmtUniqueEvents -Events $pass.Events -MessageIds $MessageIds)
     $addresses = @(Get-EmtEventAddresses $events)
-    $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains))
+    $recipients = @(Resolve-EmtRecipients -Addresses $addresses -AcceptedDomains (Get-EmtAcceptedDomains) `
+                        -Delivered @(Get-EmtEventAddresses $events -EventId 'DELIVER'))
     $kinds = @{}
     foreach ($x in $recipients) { $kinds[$x.Address] = $x.Kind }
     $report = @(Get-EmtDeliveryReport -Events $events -Kinds $kinds)
