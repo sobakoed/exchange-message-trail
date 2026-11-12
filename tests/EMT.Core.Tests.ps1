@@ -197,6 +197,19 @@ Describe 'Get-EmtMessageSummary' {
         $s[0].Recipients | Should -Be 2
         $s[0].Note       | Should -BeNullOrEmpty
         $s[1].Note       | Should -Not -BeNullOrEmpty
+        $s[0].Expanded   | Should -Be 0
+    }
+    It 'adds the RecipientCount of the EXPAND events (a message to a group)' {
+        $t = [datetime]'2026-11-09 16:53'
+        $exp1 = New-Ev 'm1' 'a@x.com' 'News' 'EXPAND' @('b@x.com') $t.AddSeconds(1)
+        $exp1 | Add-Member RecipientCount 670
+        $exp2 = New-Ev 'm1' 'a@x.com' 'News' 'EXPAND' @('b@x.com') $t.AddSeconds(2)
+        $exp2 | Add-Member RecipientCount 12
+        $agent = New-Ev 'm1' 'a@x.com' 'News' 'AGENTINFO' @('b@x.com') $t.AddSeconds(3)
+        $agent | Add-Member RecipientCount 673
+        $ev = @((New-Ev 'm1' 'a@x.com' 'News' 'RECEIVE' @('all@x.com') $t), $exp1, $exp2, $agent)
+        $s = @(Get-EmtMessageSummary -Events $ev)
+        $s[0].Expanded | Should -Be 682
     }
 }
 
@@ -1410,6 +1423,27 @@ Describe 'Message search by a recipient: partial search and the details of a mes
         @($r.Report).Count | Should -Be 1
         @($r.Report)[0].Recipient | Should -Be 'b@x.com'
         @($r.Report)[0].Status | Should -Be 'Delivered'
+    }
+    It 'gives the group size from the EXPAND event in the message rows' {
+        $exp = New-TEv '<m1>' 'EXPAND' @('b@x.com') $t.AddSeconds(1)
+        $exp | Add-Member RecipientCount 670
+        Mock Find-EmtTrackingEvents {
+            [pscustomobject]@{ Servers = @('EXCH1'); Errors = @()
+                Events = @((New-TEv '<m1>' 'RECEIVE' @('all@x.com') $t), $exp, (New-TEv '<m1>' 'DELIVER' @('b@x.com') $t.AddSeconds(2))) }
+        }
+        $r = Invoke-EmtTrace -Criteria $crit -Partial
+        @($r.Messages)[0].Expanded | Should -Be 670
+        @($r.Messages)[0].ToGroup  | Should -BeFalse
+    }
+    It 'marks a message of a search by a group address' {
+        Mock Find-EmtTrackingEvents {
+            [pscustomobject]@{ Servers = @('EXCH1'); Errors = @()
+                Events = @(New-TEv '<m1>' 'RECEIVE' @('all@x.com') $t) }
+        }
+        Mock Resolve-EmtRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Group'; Mailbox = ''; Type = 'MailUniversalDistributionGroup' } }) }
+        $r = Invoke-EmtTrace -Criteria @{ Recipient = 'All@x.com'; Start = $t.AddDays(-1); End = $t.AddDays(1) } -Partial
+        @($r.Messages)[0].ToGroup | Should -BeTrue
+        (Invoke-EmtTrace -Criteria @{ Recipient = 'All@x.com'; Start = $t.AddDays(-1); End = $t.AddDays(1) }).Messages[0].ToGroup | Should -BeFalse
     }
     It 'makes the second pass without -Partial (the classic window, the search of copies)' {
         $r = Invoke-EmtTrace -Criteria $crit

@@ -1265,7 +1265,13 @@ function Test-EmtDetailLoaded([string] $MessageId) {
 function Get-EmtMessageNote($Message) {
     <# The note of a message: made by Exchange, or the other recipients are not loaded yet. #>
     if ($Message.ServerGenerated) { T 'note.serverGenerated' }
-    elseif (-not (Test-EmtDetailLoaded $Message.MessageId)) { T 'note.partial' }
+    elseif (-not (Test-EmtDetailLoaded $Message.MessageId)) {
+        # A message to a group: the user sees the group size before the load (a large group takes time).
+        $n = [int](Get-EmtProp $Message 'Expanded')
+        if ($n -gt 0) { T 'note.partialGroup' $n }
+        elseif (Get-EmtProp $Message 'ToGroup') { T 'note.partialToGroup' }
+        else { T 'note.partial' }
+    }
     else { '' }
 }
 

@@ -303,7 +303,11 @@ function Test-EmtServerGeneratedId {
 }
 
 function Get-EmtMessageSummary {
-    <# One row per MessageId: first submit/receive time, sender, subject, recipient count, server-generated flag. #>
+    <#
+        One row per MessageId: first submit/receive time, sender, subject, recipient count, server-generated flag.
+        Expanded: the sum of RecipientCount of the EXPAND events (group expansion). A search by one recipient
+        also finds the EXPAND event: thus the window can show the group size before it loads all recipients.
+    #>
     param([object[]] $Events = @(), [string[]] $ServerNames = @())
     # An event without MessageId (for example NOTIFYMAPI) is not a message: no row for it.
     # One pass over the events sorted by time, not Group-Object and a sort for each message:
@@ -314,12 +318,16 @@ function Get-EmtMessageSummary {
         $id = [string]$e.MessageId
         $g = $groups[$id]
         if (-not $g) {
-            $g = @{ Id = $id; First = $e; Start = $null
+            $g = @{ Id = $id; First = $e; Start = $null; Expanded = 0
                     Rcpt = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
             $groups[$id] = $g
             $order.Add($g)
         }
         if (-not $g.Start -and $e.EventId -in 'RECEIVE', 'SUBMIT') { $g.Start = $e }
+        if ($e.EventId -eq 'EXPAND') {
+            $n = $e.PSObject.Properties['RecipientCount']
+            if ($n) { $g.Expanded += [int]$n.Value }
+        }
         foreach ($r in @($e.Recipients)) { if ($r) { [void]$g.Rcpt.Add(([string]$r).ToLowerInvariant()) } }
     }
     $(foreach ($g in $order) {
@@ -330,6 +338,7 @@ function Get-EmtMessageSummary {
             Sender     = ([string]$first.Sender).ToLowerInvariant()
             Subject    = $first.MessageSubject
             Recipients = $g.Rcpt.Count
+            Expanded   = $g.Expanded
             ServerGenerated = [bool]$auto
             Note       = $(if ($auto) { T 'note.serverGenerated' } else { '' })
             MessageId  = $g.Id
@@ -1575,11 +1584,17 @@ function Invoke-EmtTrace {
         $rows = @(if ($byMsg.ContainsKey($m.MessageId)) { $byMsg[$m.MessageId].ToArray() })
         $count = Get-EmtStatusCount $rows
         $problems = 0; foreach ($s in $errorStatuses) { $problems += [int]$count[$s] }
+        # A partial search by a group address: the row of the searched recipient is a group.
+        # Such a search does not find the EXPAND event (it has the group members, not the group): no group size.
+        $toGroup = $false
+        if ($partialSearch) { foreach ($r in $rows) { if ($r.Kind -eq 'Group') { $toGroup = $true; break } } }
         [pscustomobject]@{
             Time            = $m.Time
             Sender          = $m.Sender
             Subject         = $m.Subject
             Recipients      = $rows.Count
+            Expanded        = $m.Expanded
+            ToGroup         = $toGroup
             Problems        = $problems
             Pending         = [int]$count['Deferred'] + [int]$count['InTransit'] + [int]$count['Unknown']
             StatusLine      = Get-EmtMessageStatusLine $rows

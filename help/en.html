@@ -256,8 +256,10 @@
   <ul>
     <li>The list shows the delivery to this recipient only.</li>
     <li>The column <b>Note</b> shows "Other recipients: select the message".</li>
+    <li>A message to a group: the column <b>Note</b> shows "Message to a group, about N recipients". N is the approximate number of recipients after the group expansion.</li>
+    <li>A search by the address of the group shows no number: "Message to a group: select the message to load the recipients".</li>
     <li>The summary line starts with "Recipient x:". The numbers are for this recipient.</li>
-    <li>When you select a message, EMT loads all its recipients and events. This takes about one second.</li>
+    <li>When you select a message, EMT loads all its recipients and events. This takes about one second. A message to a large group takes more time.</li>
     <li>When you export the result, EMT asks if it must load all messages first.</li>
   </ul>
   <figure><img src="img/en/recipient-search.png" alt="A search by a recipient"><figcaption>The first message has all recipients. The other messages show the note.</figcaption></figure>

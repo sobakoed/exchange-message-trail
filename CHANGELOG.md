@@ -29,6 +29,11 @@
 - Exception: a mail-enabled public folder. EMT reads the list of these folders one time for each connection
   (`Get-Recipient -RecipientType PublicFolder`). If the list is not available, EMT looks up all addresses
   as before. The log shows one warning.
+- A search by a recipient: a message to a group has the note
+  "Message to a group, about N recipients: select the message to load them". N is the sum of `RecipientCount`
+  of the `EXPAND` events. The search finds these events without more calls.
+- A search by the address of a group does not find the `EXPAND` event (it has the members, not the group).
+  Such a message has the note "Message to a group: select the message to load the recipients".
 
 ## 2.0.0 — 2026-11-11
 

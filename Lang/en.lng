@@ -429,6 +429,8 @@ crit.timeBad = The time is not correct. Type the time in the format of Windows, 
 log.tracePartial = Search by the recipient {0}: the list shows the delivery to this recipient. The other recipients of a message load when you select the message.
 status.detail = Loading the recipients of the message...
 note.partial = Other recipients: select the message
+note.partialGroup = Message to a group, about {0} recipients: select the message to load them
+note.partialToGroup = Message to a group: select the message to load the recipients
 trsum.partial = Recipient {0}:
 dlg.exportPartial = The data is complete for {0} of {1} messages. Load the data of all messages before the export? This can take some minutes. No: export the data as it is.
 
