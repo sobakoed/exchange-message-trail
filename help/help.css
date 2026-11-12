@@ -84,8 +84,6 @@ p { margin: 0 0 12px; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; box-shadow: var(--shadow); }
 .card h3 { margin: 0 0 6px; font-size: 16px; }
 .card p { margin: 0; color: var(--dim); font-size: 14px; }
-.card .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; margin-top: 8px;
-  border: 1px solid var(--border); color: var(--dim); }
 
 /* ---------- Figures ---------- */
 figure { margin: 16px 0 22px; }
