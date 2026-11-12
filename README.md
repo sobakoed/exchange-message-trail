@@ -8,6 +8,7 @@
 [![Donate: TON](https://img.shields.io/badge/donate-TON-0098EA)](#support)
 
 Exchange Message Trail is a Windows tool for Exchange Server 2016 and 2019 (on-premises).
+It can possibly also operate with Exchange Server Subscription Edition (SE). This is not tested.
 It answers these questions:
 
 - Did a user send a message?
@@ -54,7 +55,7 @@ The guide is in English and in Russian, with screenshots and examples.
 
 | Item | Requirement |
 |---|---|
-| Exchange | Exchange Server 2016 or 2019, on-premises |
+| Exchange | Exchange Server 2016 or 2019, on-premises. Exchange Server SE: possibly, not tested. |
 | Computer | The Exchange server, or a Windows computer in the same domain |
 | PowerShell | Windows PowerShell 5.1 |
 | .NET | .NET Framework 4.5 or later |
