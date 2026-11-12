@@ -221,6 +221,7 @@ log.started = Exchange Message Trail started. Log: {0}
 log.auditFile = Audit file: {0}
 log.opCancelled = Operation "{0}" cancelled.
 log.opFailed = Operation "{0}" failed: {1}
+log.opSlow = Operation "{0}" took {1:N1} s.
 log.auditFailed = The audit row was not written: {0}
 log.handlerFailed = Result processing error: {0}
 log.invalidated = The criteria changed. The result is cleared. Do the search again.

@@ -203,6 +203,9 @@ if (-not (Get-Command Invoke-EmtOperation -ErrorAction SilentlyContinue)) { . $C
 Invoke-EmtOperation -Name $Name -Params $Params
 '@
 
+# An operation that runs longer than this number of seconds writes its time to the log.
+$script:SlowOpSeconds = 5
+
 function Start-EmtOperation {
     param(
         [Parameter(Mandatory)] [string] $Name,
@@ -219,6 +222,7 @@ function Start-EmtOperation {
     [void]$ps.AddScript($OpScript).AddArgument($CorePath).AddArgument($Name).AddArgument($Params)
     $script:Job = [pscustomobject]@{
         PS = $ps; Handle = $ps.BeginInvoke(); Name = $Name; Params = $Params; OnSuccess = $OnSuccess
+        Timer = [System.Diagnostics.Stopwatch]::StartNew()
     }
     Set-UiState
 }
@@ -241,6 +245,8 @@ function Complete-EmtOperation {
             $err = $err.ErrorRecord.Exception
         }
     }
+    $seconds = $job.Timer.Elapsed.TotalSeconds
+    if ($seconds -gt $script:SlowOpSeconds) { Write-EmtLog (T 'log.opSlow' $job.Name $seconds) }
     foreach ($e in $job.PS.Streams.Error) { Write-EmtLog ([string]$e) 'Warn' }
     $job.PS.Dispose()
     $progress.Value = 0

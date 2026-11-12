@@ -15,6 +15,11 @@
 - A Compliance Search: the first 5 status checks are 1 second apart, then 3 seconds apart.
   A short search completes sooner.
 
+**Log**
+
+- An operation that takes more than 5 seconds writes its time to the log, for example
+  "Operation "TraceDetail" took 7.3 s." The time has one decimal.
+
 ## 2.0.0 — 2026-11-11
 
 The new window: WPF with a dark and a light theme. The functions and the core are the same.
