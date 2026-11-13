@@ -1495,6 +1495,16 @@ Describe 'Message search by a recipient: partial search and the details of a mes
     }
 }
 
+Describe 'Invoke-EmtOperation' {
+    It 'Trace: the classic window does not send Partial, and the search runs (not partial)' {
+        # The core runs in strict mode. A missing key of the parameters must not stop the operation.
+        Mock Invoke-EmtTrace { [bool]$Partial }
+        Set-StrictMode -Version 2.0
+        Invoke-EmtOperation -Name 'Trace' -Params @{ Criteria = @{} } | Should -BeFalse
+        Invoke-EmtOperation -Name 'Trace' -Params @{ Criteria = @{}; Partial = $true } | Should -BeTrue
+    }
+}
+
 Describe 'User guide (help\*.html)' {
     BeforeAll {
         $root = Join-Path $PSScriptRoot '..'

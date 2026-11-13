@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.1 — 2026-11-13
+
+**Fixed**
+
+- The classic window (`EMT-Classic.cmd`): the message search stopped with the error
+  "The property "Partial" cannot be found on this object". The error was present since 2.0.0.
+  The classic window does not send the parameter of the partial search. Now the core reads a missing parameter as "no".
+
+**Install**
+
+- Each release has the ZIP file `ExchangeMessageTrail-<version>.zip`. It contains only the files that EMT needs to run.
+- README and the user guide: download the ZIP file from Releases, unblock it before you extract it.
+- `tools/Make-Release.ps1` makes the ZIP file of a release.
+
 ## 2.1.0 — 2026-11-13
 
 **Speed**

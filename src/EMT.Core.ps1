@@ -1819,7 +1819,7 @@ function Invoke-EmtOperation {
     param([Parameter(Mandatory)] [string] $Name, [hashtable] $Params = @{})
     switch ($Name) {
         'Connect'      { Connect-EmtExchange -Server $Params.Server }
-        'Trace'        { Invoke-EmtTrace -Criteria $Params.Criteria -Partial:([bool]$Params.Partial) }
+        'Trace'        { Invoke-EmtTrace -Criteria $Params.Criteria -Partial:([bool]$Params['Partial']) }
         'TraceDetail'  { Get-EmtMessageDetail -MessageIds $Params.MessageIds -Start $Params.Start -End $Params.End }
         'CheckMailbox' { Invoke-EmtMailboxCheck -Mailbox $Params.Mailbox -Sender $Params.Sender -Subject $Params.Subject }
         'Resolve'      { @(Resolve-EmtAddressInputs -Inputs $Params.Inputs) }
