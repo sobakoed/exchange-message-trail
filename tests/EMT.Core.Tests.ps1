@@ -1505,6 +1505,78 @@ Describe 'Invoke-EmtOperation' {
     }
 }
 
+Describe 'Parameters of the operations: the windows and the core' {
+    # The core runs in strict mode: $Params.Key with a missing key stops the operation.
+    # The test reads the code (AST), it does not run the windows.
+    BeforeAll {
+        $root = Join-Path $PSScriptRoot '..'
+        function Get-EmtAst([string] $File) {
+            $tokens = $null; $errors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root $File), [ref]$tokens, [ref]$errors)
+            if ($errors.Count) { throw "$File has parse errors: $($errors[0].Message)" }
+            $ast
+        }
+
+        # The core: for each operation, the keys that it reads as $Params.Key (required keys).
+        # A key read as $Params['Key'] is optional: it gives $null when it is missing.
+        $op = (Get-EmtAst 'src\EMT.Core.ps1').Find({ param($a)
+            $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -eq 'Invoke-EmtOperation' }, $true)
+        $switch = $op.Find({ param($a) $a -is [System.Management.Automation.Language.SwitchStatementAst] }, $true)
+        $script:Required = @{}
+        foreach ($clause in $switch.Clauses) {
+            $keys = @($clause.Item2.FindAll({ param($a)
+                $a -is [System.Management.Automation.Language.MemberExpressionAst] -and
+                $a.Expression -is [System.Management.Automation.Language.VariableExpressionAst] -and
+                $a.Expression.VariablePath.UserPath -eq 'Params' -and
+                $a.Member -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true) |
+                ForEach-Object { $_.Member.Value } | Sort-Object -Unique)
+            $script:Required[[string]$clause.Item1.Value] = $keys
+        }
+
+        # A window: each call "Start-EmtOperation -Name '...' -Params @{...}" and its keys.
+        function Get-EmtOperationCalls([string] $File) {
+            $calls = (Get-EmtAst $File).FindAll({ param($a)
+                $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -eq 'Start-EmtOperation' }, $true)
+            foreach ($c in $calls) {
+                $name = $null; $keys = @()
+                $el = $c.CommandElements
+                for ($i = 1; $i -lt $el.Count - 1; $i++) {
+                    if ($el[$i] -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+                    switch ($el[$i].ParameterName) {
+                        'Name'   { $name = [string]$el[$i + 1].Value }
+                        'Params' {
+                            $h = $el[$i + 1]
+                            if ($h -isnot [System.Management.Automation.Language.HashtableAst]) { throw "${File}:$($c.Extent.StartLineNumber): -Params is not @{...}." }
+                            $keys = @($h.KeyValuePairs | ForEach-Object { [string]$_.Item1.Value })
+                        }
+                    }
+                }
+                [pscustomobject]@{ Line = $c.Extent.StartLineNumber; Name = $name; Keys = $keys }
+            }
+        }
+    }
+
+    It 'the core has the switch of the operations' {
+        $script:Required.Count | Should -BeGreaterOrEqual 10
+        $script:Required['Trace'] | Should -Be @('Criteria')
+    }
+
+    It '<File>: each operation exists in the core and gets all required keys' -ForEach @(
+        @{ File = 'ExchangeMessageTrail.ps1' }, @{ File = 'ExchangeMessageTrail.Classic.ps1' }
+    ) {
+        $calls = @(Get-EmtOperationCalls $File)
+        # The parse must find the calls. Without them, the test passes without a check.
+        $calls.Count | Should -BeGreaterOrEqual 10
+        $problems = @(foreach ($c in $calls) {
+            if (-not $c.Name -or -not $script:Required.ContainsKey($c.Name)) { "line $($c.Line): the core has no operation '$($c.Name)'"; continue }
+            foreach ($k in $script:Required[$c.Name]) {
+                if ($k -notin $c.Keys) { "line $($c.Line): operation '$($c.Name)' does not get the key '$k'" }
+            }
+        })
+        $problems | Should -BeNullOrEmpty -Because ($problems -join '; ')
+    }
+}
+
 Describe 'User guide (help\*.html)' {
     BeforeAll {
         $root = Join-Path $PSScriptRoot '..'
