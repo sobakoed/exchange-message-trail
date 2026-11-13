@@ -18,6 +18,19 @@ Set-StrictMode -Version 2.0
 # New searches use EMT_. The older version (MailCleaner) used MC_: the cleanup accepts both.
 function Get-EmtSearchPrefix { 'EMT_' }
 
+# The version of EMT. A unit test compares it with the first section of CHANGELOG.md.
+function Get-EmtVersion { '2.3.0' }
+
+# The links of the window "About". A unit test compares the TON address with README.md.
+function Get-EmtLinks {
+    [ordered]@{
+        GitHub   = 'https://github.com/sobakoed/exchange-message-trail'
+        Releases = 'https://github.com/sobakoed/exchange-message-trail/releases/latest'
+        Telegram = 'https://t.me/mnemo_nic'
+        Ton      = 'UQDN9J6d6CebRAJZT9N5MnXw7K9rbH_wfM2pb0hSbF7re9-L'
+    }
+}
+
 # Up to this number of mailboxes, the search uses Search-Mailbox (seconds) instead of Compliance Search (minutes).
 function Get-EmtQuickSearchLimit { 10 }
 

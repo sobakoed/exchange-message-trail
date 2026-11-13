@@ -1710,3 +1710,42 @@ Describe 'Tables and defaults of the windows (2.2.2)' {
         [regex]::Matches($core, '\[int\] \$TimeoutMinutes = (\d+)') | ForEach-Object { $_.Groups[1].Value | Should -Be '30' }
     }
 }
+
+Describe 'The window "About" (2.3.0)' {
+    BeforeAll {
+        $root = Split-Path -Parent $PSScriptRoot
+        $readme = [IO.File]::ReadAllText((Join-Path $root 'README.md'), [Text.Encoding]::UTF8)
+        $changelog = [IO.File]::ReadAllText((Join-Path $root 'CHANGELOG.md'), [Text.Encoding]::UTF8)
+    }
+    It 'Get-EmtVersion is the first version in CHANGELOG.md' {
+        Get-EmtVersion | Should -Be ([regex]::Match($changelog, '(?m)^## (\d+\.\d+\.\d+)').Groups[1].Value)
+    }
+    It 'the links are https pages of GitHub and Telegram' {
+        $l = Get-EmtLinks
+        $l.GitHub | Should -Be 'https://github.com/sobakoed/exchange-message-trail'
+        $l.Releases | Should -Be 'https://github.com/sobakoed/exchange-message-trail/releases/latest'
+        $l.Telegram | Should -Match '^https://t\.me/[A-Za-z0-9_]+$'
+    }
+    It 'the TON address is the address of README.md and of the user guide' {
+        $ton = (Get-EmtLinks).Ton
+        $ton | Should -Match '^[A-Za-z0-9_-]{48}$'
+        $readme | Should -Match ([regex]::Escape($ton))
+        foreach ($p in 'ru.html', 'en.html') {
+            [IO.File]::ReadAllText((Join-Path $root "help\$p"), [Text.Encoding]::UTF8) | Should -Match ([regex]::Escape($ton)) -Because $p
+        }
+    }
+    It 'the QR code and the screenshots of the window are in the folder help' {
+        Join-Path $root 'help\img\donate-ton.png' | Should -Exist
+        Join-Path $root 'help\img\ru\about.png' | Should -Exist
+        Join-Path $root 'help\img\en\about.png' | Should -Exist
+    }
+    It 'both windows have the menu of the button "?" and the key F1' {
+        foreach ($n in 'ExchangeMessageTrail.ps1', 'ExchangeMessageTrail.Classic.ps1') {
+            $src = [IO.File]::ReadAllText((Join-Path $root $n), [Text.Encoding]::UTF8)
+            $src | Should -Match '\$btnHelp\.Add_Click\(\{ Show-EmtHelpMenu \}\)' -Because $n
+            $src | Should -Match 'function Show-EmtAbout' -Because $n
+            $src | Should -Match "T 'menu\.about'" -Because $n
+            $src | Should -Match 'F1' -Because $n
+        }
+    }
+}

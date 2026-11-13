@@ -684,6 +684,10 @@ $pnlConn.Controls.AddRange(@(
     (New-EmtLabel 'conn.server'), $tbServer, $btnConnect,
     (New-EmtLabel 'conn.timeout'), $nudTimeout,
     (New-EmtLabel 'conn.language'), $cmbLanguage))
+# The button "?": a menu with the user guide (F1) and the window "About".
+$btnHelp = New-EmtButton '' 30
+$btnHelp.Text = '?'; $btnHelp.MinimumSize = New-Object System.Drawing.Size(30, 28)
+$pnlConn.Controls.Add($btnHelp)
 
 # --- Main tabs ---
 $mainTabs = New-Object System.Windows.Forms.TabControl
@@ -968,6 +972,7 @@ Set-EmtTip $btnSoft         'tip.soft'
 Set-EmtTip $btnHard         'tip.hard'
 Set-EmtTip $btnVerify       'tip.verify'
 Set-EmtTip $cmbLanguage     'tip.language'
+Set-EmtTip $btnHelp         'tip.help'
 
 # Dock order: the control added last docks first (top-most).
 $form.Controls.Add($split)
@@ -1409,6 +1414,127 @@ function Get-EmtDeleteText {
 
 #endregion
 
+#region ---------- Help and the window "About" ----------
+
+function Open-EmtHelp {
+    <# Opens the user guide in the interface language. If the guide has no page for this language, the English page opens. #>
+    $dir = Join-Path $PSScriptRoot 'help'
+    $page = Join-Path $dir "$($Sync.Lang).html"
+    if (-not (Test-Path $page)) { $page = Join-Path $dir 'en.html' }
+    if (-not (Test-Path $page)) { [void][System.Windows.Forms.MessageBox]::Show($form, (T 'help.missing' $page), (T 'app.short')); return }
+    Start-Process -FilePath $page
+}
+
+function New-EmtAboutLabel([string] $Text, [System.Drawing.Color] $Color = [System.Drawing.SystemColors]::ControlText, [string] $Margin = '3,2,3,2') {
+    <# A label that wraps at the width of the window "About". #>
+    $l = New-Object System.Windows.Forms.Label
+    $l.AutoSize = $true; $l.MaximumSize = New-Object System.Drawing.Size(460, 0)
+    $l.Text = $Text; $l.ForeColor = $Color; $l.Margin = $Margin
+    $l
+}
+
+function Show-EmtAbout {
+    <#
+        The window "About": the version, the links (GitHub, updates, Telegram, user guide),
+        the support of the project (TON address, QR code, copy button), the license.
+    #>
+    $links = Get-EmtLinks
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = T 'about.title'; $dlg.StartPosition = 'CenterParent'; $dlg.FormBorderStyle = 'FixedDialog'
+    $dlg.MinimizeBox = $false; $dlg.MaximizeBox = $false; $dlg.Font = $form.Font; $dlg.ShowIcon = $false; $dlg.ShowInTaskbar = $false
+    $dlg.AutoSize = $true; $dlg.AutoSizeMode = 'GrowAndShrink'; $dlg.Padding = '12,12,12,12'
+
+    $flow = New-Object System.Windows.Forms.FlowLayoutPanel
+    $flow.FlowDirection = 'TopDown'; $flow.WrapContents = $false; $flow.AutoSize = $true; $flow.Dock = 'Fill'
+
+    $name = New-EmtAboutLabel (T 'app.short')
+    $name.Font = New-Object System.Drawing.Font('Segoe UI', 13, [System.Drawing.FontStyle]::Bold)
+    $flow.Controls.Add($name)
+    $flow.Controls.Add((New-EmtAboutLabel (T 'about.version' (Get-EmtVersion)) ([System.Drawing.SystemColors]::GrayText)))
+    $flow.Controls.Add((New-EmtAboutLabel (T 'about.description') ([System.Drawing.SystemColors]::ControlText) '3,6,3,8'))
+
+    # The links. Tag: the address of the page, or "help" for the user guide.
+    foreach ($l in @(@('about.github', $links.GitHub), @('about.releases', $links.Releases),
+                     @('about.telegram', $links.Telegram), @('about.guide', 'help'))) {
+        $link = New-Object System.Windows.Forms.LinkLabel
+        $link.AutoSize = $true; $link.Margin = '3,3,3,3'; $link.Text = T $l[0]; $link.Tag = $l[1]
+        $link.Add_LinkClicked({
+            param($s, $e)
+            if ($s.Tag -eq 'help') { Open-EmtHelp; return }
+            try { Start-Process -FilePath ([string]$s.Tag) } catch { [void][System.Windows.Forms.MessageBox]::Show($_.Exception.Message) }
+        })
+        $flow.Controls.Add($link)
+    }
+
+    # The support of the project: the QR code, the TON address and the copy button.
+    $box = New-Object System.Windows.Forms.GroupBox
+    $box.Text = T 'about.donateTitle'; $box.AutoSize = $true; $box.Margin = '3,12,3,6'; $box.Padding = '10,8,10,10'
+    $inner = New-Object System.Windows.Forms.FlowLayoutPanel
+    $inner.FlowDirection = 'TopDown'; $inner.WrapContents = $false; $inner.AutoSize = $true; $inner.Dock = 'Fill'
+    $inner.Controls.Add((New-EmtAboutLabel (T 'about.donateText') ([System.Drawing.SystemColors]::ControlText) '3,2,3,8'))
+    $row = New-Object System.Windows.Forms.FlowLayoutPanel
+    $row.AutoSize = $true; $row.WrapContents = $false
+    $qrPath = Join-Path $PSScriptRoot 'help\img\donate-ton.png'
+    $qrImage = $null
+    if (Test-Path -LiteralPath $qrPath) {
+        try {
+            # A copy of the image: the file stays free.
+            $file = [System.Drawing.Image]::FromFile($qrPath); $qrImage = New-Object System.Drawing.Bitmap($file); $file.Dispose()
+            $qr = New-Object System.Windows.Forms.PictureBox
+            $qr.Image = $qrImage; $qr.SizeMode = 'Zoom'; $qr.Size = '112,112'; $qr.Margin = '3,3,12,3'
+            $row.Controls.Add($qr)
+        } catch { }
+    }
+    $right = New-Object System.Windows.Forms.FlowLayoutPanel
+    $right.FlowDirection = 'TopDown'; $right.WrapContents = $false; $right.AutoSize = $true
+    $address = New-Object System.Windows.Forms.TextBox
+    $address.Text = $links.Ton; $address.ReadOnly = $true; $address.Multiline = $true; $address.WordWrap = $true
+    $address.Font = New-Object System.Drawing.Font('Consolas', 9); $address.Size = '290,40'; $address.Margin = '3,3,3,3'
+    $right.Controls.Add($address)
+    $copy = New-EmtButton '' 110
+    $copy.Text = T 'about.copy'; $copy.Tag = $links.Ton
+    $copy.Add_Click({
+        param($s, $e)
+        try { [System.Windows.Forms.Clipboard]::SetText([string]$s.Tag); $s.Text = T 'about.copied' } catch { }
+    })
+    $right.Controls.Add($copy)
+    $warn = New-EmtAboutLabel (T 'about.network') ([System.Drawing.Color]::DarkOrange) '3,6,3,2'
+    $warn.MaximumSize = New-Object System.Drawing.Size(290, 0)
+    $right.Controls.Add($warn)
+    $row.Controls.Add($right)
+    $inner.Controls.Add($row)
+    $box.Controls.Add($inner)
+    $flow.Controls.Add($box)
+
+    # The license and the trademarks.
+    $flow.Controls.Add((New-EmtAboutLabel (T 'about.license') ([System.Drawing.SystemColors]::GrayText) '3,8,3,2'))
+    $flow.Controls.Add((New-EmtAboutLabel (T 'about.trademark') ([System.Drawing.SystemColors]::GrayText)))
+
+    $close = New-EmtButton '' 110
+    $close.Text = T 'about.close'; $close.DialogResult = 'OK'; $close.Anchor = 'Right'; $close.Margin = '3,12,3,3'
+    $flow.Controls.Add($close)
+    $dlg.AcceptButton = $close; $dlg.CancelButton = $close
+
+    $dlg.Controls.Add($flow)
+    [void]$dlg.ShowDialog($form)
+    $dlg.Dispose()
+    if ($qrImage) { $qrImage.Dispose() }
+}
+
+function Show-EmtHelpMenu {
+    <# The menu of the button "?": the user guide (F1) and the window "About". #>
+    $menu = New-Object System.Windows.Forms.ContextMenuStrip
+    $guide = New-Object System.Windows.Forms.ToolStripMenuItem (T 'menu.help')
+    $guide.ShortcutKeyDisplayString = 'F1'
+    $guide.Add_Click({ Open-EmtHelp })
+    $about = New-Object System.Windows.Forms.ToolStripMenuItem (T 'menu.about')
+    $about.Add_Click({ Show-EmtAbout })
+    [void]$menu.Items.Add($guide); [void]$menu.Items.Add($about)
+    $menu.Show($btnHelp, 0, $btnHelp.Height)
+}
+
+#endregion
+
 #region ---------- Address book search (partial addresses) ----------
 
 function Show-EmtPick {
@@ -1592,6 +1718,11 @@ $cmbLanguage.Add_SelectedIndexChanged({
     Save-EmtSettings
     Write-EmtLog (T 'log.language')
 })
+
+# Help: the button "?" opens a menu: the user guide and the window "About". The key F1 opens the user guide.
+$btnHelp.Add_Click({ Show-EmtHelpMenu })
+$form.KeyPreview = $true
+$form.Add_KeyDown({ param($s, $e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::F1) { $e.Handled = $true; Open-EmtHelp } })
 
 # Enter starts the search of the open tab.
 $mainTabs.Add_SelectedIndexChanged({

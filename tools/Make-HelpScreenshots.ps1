@@ -406,7 +406,14 @@ $pw.Window.Show(); Pump
 SnapWindow $pw.Window 'pick-address'
 $pw.Window.Close()
 
-# 11. The top line at the minimum width: all controls must be visible
+# 11. The window "About" (made, not shown as a modal window)
+$ab = New-EmtAboutWindow
+$ab.Owner = $null; $ab.WindowStartupLocation = 'Manual'; $ab.Left = -20000; $ab.Top = 0; $ab.ShowActivated = $false
+$ab.Show(); Pump
+SnapWindow $ab 'about'
+$ab.Close()
+
+# 12. The top line at the minimum width: all controls must be visible
 $window.Width = $window.MinWidth; Pump
 Snap $tbServer.Parent.Parent 'top-line-min' 8
 
