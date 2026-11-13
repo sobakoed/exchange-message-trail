@@ -101,9 +101,12 @@
 
   <h3>Install</h3>
   <ol class="steps">
-    <li>Copy the EMT folder to the computer.</li>
-    <li>Keep the folder structure. EMT needs the folders <code>src</code>, <code>Lang</code>, <code>gui</code> and <code>help</code>.</li>
-    <li>If you downloaded a ZIP file, unblock the files:
+    <li>Download <code>ExchangeMessageTrail-&lt;version&gt;.zip</code> from the <a href="https://github.com/sobakoed/exchange-message-trail/releases/latest" target="_blank" rel="noopener">Releases</a> page.</li>
+    <li>Unblock the ZIP file before you extract it. Right-click the file, then select <b>Properties</b>. Select <b>Unblock</b>, then select <b>OK</b>.
+      Or do this step in PowerShell:
+      <pre><code>Unblock-File .\ExchangeMessageTrail-&lt;version&gt;.zip</code></pre></li>
+    <li>Extract the ZIP file. Keep the folder structure. EMT needs the folders <code>src</code>, <code>Lang</code>, <code>gui</code> and <code>help</code>.</li>
+    <li>If you extracted the files before you unblocked the ZIP file, unblock the files in the folder:
       <pre><code>Get-ChildItem -Recurse | Unblock-File</code></pre></li>
   </ol>
 

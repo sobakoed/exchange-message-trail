@@ -98,13 +98,23 @@ Close EMT and start it again after a role change.
 
 ## Install
 
-1. Copy the repository folder to the computer.
-2. Keep the folder structure. `ExchangeMessageTrail.ps1` needs the folders `src`, `Lang` and `gui`.
-3. If you downloaded a ZIP file, unblock the files:
+1. Download `ExchangeMessageTrail-<version>.zip` from the [Releases](https://github.com/sobakoed/exchange-message-trail/releases/latest) page.
+   The ZIP file contains only the files that EMT needs to run.
+2. Unblock the ZIP file before you extract it. Right-click the file, then select **Properties**. Select **Unblock**, then select **OK**.
+   Or do this step in PowerShell:
+
+```powershell
+Unblock-File .\ExchangeMessageTrail-<version>.zip
+```
+
+3. Extract the ZIP file. Keep the folder structure. `ExchangeMessageTrail.ps1` needs the folders `src`, `Lang` and `gui`.
+4. If you extracted the files before you unblocked the ZIP file, unblock the files in the folder:
 
 ```powershell
 Get-ChildItem -Recurse | Unblock-File
 ```
+
+You can also copy the repository folder (`git clone`) to the computer.
 
 ## Repository structure
 
@@ -114,7 +124,7 @@ Get-ChildItem -Recurse | Unblock-File
 | `EMT.cmd` | The launcher. It starts PowerShell in STA mode with a hidden console. |
 | `gui/` | The window: the layout (`MainWindow.xaml`), the styles (`Styles.xaml`) the themes (`Theme.Dark.xaml`, `Theme.Light.xaml`) and the icon (`emt.ico`). |
 | `help/` | The user guide: `en.html`, `ru.html`, the style, the script and the screenshots (`img/en`, `img/ru`). See [User guide](#user-guide). |
-| `tools/` | Only for the development: `Make-HelpScreenshots.ps1` makes the screenshots of the user guide again. A server does not need this folder. |
+| `tools/` | Only for the development: `Make-HelpScreenshots.ps1` makes the screenshots of the user guide again. `Make-Release.ps1` makes the ZIP file of a release. A server does not need this folder. |
 | `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms) with the same functions. A fallback for one version. See [Troubleshooting](#troubleshooting). |
 | `src/` | The program logic without the window (`EMT.Core.ps1`). `New-EmtShortcut.ps1` makes a shortcut with the EMT icon. |
 | `src/EMT.Core.ps1` | The Exchange operations: message search, mailbox check, search of copies, delete, cleanup. |

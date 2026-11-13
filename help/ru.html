@@ -101,9 +101,12 @@
 
   <h3>Установка</h3>
   <ol class="steps">
-    <li>Скопируйте папку EMT на компьютер.</li>
-    <li>Сохраните структуру папок. EMT нужны папки <code>src</code>, <code>Lang</code>, <code>gui</code> и <code>help</code>.</li>
-    <li>Если вы скачали ZIP-архив, разблокируйте файлы:
+    <li>Скачайте <code>ExchangeMessageTrail-&lt;версия&gt;.zip</code> со страницы <a href="https://github.com/sobakoed/exchange-message-trail/releases/latest" target="_blank" rel="noopener">Releases</a>.</li>
+    <li>Разблокируйте архив до распаковки. Щёлкните файл правой кнопкой и выберите <b>Свойства</b>. Отметьте <b>Разблокировать</b> и нажмите <b>OK</b>.
+      Или выполните в PowerShell:
+      <pre><code>Unblock-File .\ExchangeMessageTrail-&lt;версия&gt;.zip</code></pre></li>
+    <li>Распакуйте архив. Сохраните структуру папок. EMT нужны папки <code>src</code>, <code>Lang</code>, <code>gui</code> и <code>help</code>.</li>
+    <li>Если вы распаковали архив до разблокировки, разблокируйте файлы в папке:
       <pre><code>Get-ChildItem -Recurse | Unblock-File</code></pre></li>
   </ol>
 
