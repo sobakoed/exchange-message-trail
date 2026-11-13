@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.2 — 2026-11-14
+
+**Tables (main window)**
+
+- A drag of a column border changes only that column. Before, the last column got the free space,
+  and a drag changed the last column too. Now the free space stays empty on the right.
+  If the columns do not fit, the table scrolls.
+- A double-click on a header border of the table "Messages" only fits the column width.
+  Before, it also opened the tab "Events".
+
+**Fields**
+
+- The tooltip of the field "Sender" is shorter. It tells that a partial match does not work for external addresses.
+- The default timeout is 30 minutes, not 60. A timeout in the saved settings does not change.
+
 ## 2.2.1 — 2026-11-13
 
 **Message search**

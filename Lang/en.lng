@@ -147,7 +147,7 @@ fmt.datetime = yyyy-MM-dd HH:mm:ss
 fmt.date = yyyy-MM-dd HH:mm
 
 # ---- Window: tooltips ----
-tip.senders = Full addresses, a part of an address or a name. Separator: comma or semicolon. EMT finds a partial address in the address book.
+tip.senders = An address, or a name or a part of an address of an employee. Separate more than one with "," or ";". A partial match does not work for external addresses: type the full address.
 tip.all = Search all mailboxes of the organization. Slow. Use it when the tracking log is incomplete.
 tip.today = Period: today 0:00 to 23:59.
 tip.yesterday = Period: yesterday 0:00 to 23:59.

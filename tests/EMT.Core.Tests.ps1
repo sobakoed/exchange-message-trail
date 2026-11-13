@@ -1684,3 +1684,29 @@ Describe 'User guide (help\*.html)' {
         }
     }
 }
+
+Describe 'Tables and defaults of the windows (2.2.2)' {
+    BeforeAll {
+        $root = Split-Path -Parent $PSScriptRoot
+        $main = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8)
+        $classic = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.Classic.ps1'), [Text.Encoding]::UTF8)
+        $core = [IO.File]::ReadAllText((Join-Path $root 'src\EMT.Core.ps1'), [Text.Encoding]::UTF8)
+    }
+    It 'a double-click on the table "Messages" opens the events only from a row, not from the header' {
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($main, [ref]$null, [ref]$null)
+        $calls = @($ast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+            $n.Member.Value -eq 'Add_MouseDoubleClick' -and $n.Expression.Extent.Text -eq '$gridTrMessages' }, $true))
+        $calls.Count | Should -Be 1
+        $calls[0].Arguments[0].Extent.Text | Should -Match 'DataGridRow'
+    }
+    It 'the main window has no star column: a drag changes only one column' {
+        $main | Should -Not -Match 'DataGridLengthUnitType\]::Star'
+    }
+    It 'the default timeout is 30 minutes in both windows and in the core' {
+        $main | Should -Match '\$script:LastTimeout = 30\b'
+        $main | Should -Match '\{ \$n \} else \{ 30 \}'
+        $classic | Should -Match '\$nudTimeout\.Value = 30;'
+        [regex]::Matches($core, '\[int\] \$TimeoutMinutes = (\d+)') | ForEach-Object { $_.Groups[1].Value | Should -Be '30' }
+    }
+}

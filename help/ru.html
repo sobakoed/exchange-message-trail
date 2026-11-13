@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.2.1">
+<meta name="emt-version" content="2.2.2">
 <title>Exchange Message Trail — Руководство пользователя</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Версия 2.2.1 · Руководство пользователя</span>
+  <span class="version">Версия 2.2.2 · Руководство пользователя</span>
   <span class="spacer"></span>
   <div class="switch">
     <a href="en.html">English</a>
@@ -171,7 +171,8 @@
   </table>
   <h3>Таблицы</h3>
   <ul>
-    <li>Чтобы изменить ширину колонки, перетащите границу заголовка.</li>
+    <li>Чтобы изменить ширину колонки, перетащите границу заголовка. Остальные колонки не меняются.</li>
+    <li>Чтобы подогнать ширину колонки по содержимому, дважды щёлкните границу заголовка.</li>
     <li>Чтобы отсортировать строки, щёлкните заголовок колонки.</li>
     <li>Чтобы переставить колонку, перетащите её заголовок.</li>
     <li>Чтобы скопировать выбранные строки с заголовками, нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>.</li>
@@ -245,7 +246,9 @@
 
   <h3 id="addresses">Неполные адреса</h3>
   <p>Можно ввести часть адреса или имени, например <code>kim</code>.
-  EMT найдёт полный адрес в адресной книге Exchange (<code>Get-Recipient -Anr</code>).</p>
+  EMT найдёт полный адрес в адресной книге Exchange (<code>Get-Recipient -Anr</code>).
+  В адресной книге есть только сотрудники и контакты организации.
+  Для внешних адресов частичное совпадение не поддерживается: укажите адрес полностью.</p>
   <table>
     <tr><th>Найдено</th><th>Что будет</th></tr>
     <tr><td>Один адрес</td><td>EMT подставит полный адрес в поле. Лог покажет замену.</td></tr>
@@ -625,7 +628,7 @@
     <p>Проверьте, что сеть — <b>TON</b>. Перевод в другой сети пропадёт.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.2.1 · На снимках выдуманные данные (contoso), а не реальные.</p>
+    <p>Exchange Message Trail 2.2.2 · На снимках выдуманные данные (contoso), а не реальные.</p>
     <p>Microsoft, Exchange и Windows — товарные знаки группы компаний Microsoft. Проект EMT не связан с Microsoft.</p>
   </footer>
 </section>
