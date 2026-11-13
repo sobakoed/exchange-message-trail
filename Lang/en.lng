@@ -200,7 +200,7 @@ kind.External = External
 kind.Group = Group
 kind.Other = Other
 note.serverGenerated = made by Exchange — possibly an inbox rule or forwarding
-note.shadow = shadow copy (Shadow Redundancy) on a second server — the original message has the delivery: the row with the same time, sender and subject
+note.shadow = shadow copy — another server delivers the message
 missing.reason = The user deleted or moved the message, or the message is not indexed.
 
 # ---- Window: actions and run area ----
