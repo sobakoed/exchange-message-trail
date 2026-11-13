@@ -35,6 +35,53 @@
     </Setter>
   </Style>
 
+  <!-- ===== Menu of the button "?" ===== -->
+  <Style TargetType="ContextMenu">
+    <Setter Property="Background" Value="{DynamicResource Bg.Panel}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+    <Setter Property="HasDropShadow" Value="False"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContextMenu">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="0,4">
+            <StackPanel IsItemsHost="True"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style TargetType="MenuItem">
+    <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="MenuItem">
+          <Border x:Name="bd" Background="Transparent" Padding="14,6,18,6" MinWidth="200">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Text="{TemplateBinding InputGestureText}" Foreground="{DynamicResource Fg.Dim}" Margin="24,0,0,0"/>
+              <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+            </DockPanel>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+              <Setter TargetName="bd" Property="Background" Value="{DynamicResource Bg.Hover}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style TargetType="Hyperlink">
+    <Setter Property="Foreground" Value="{DynamicResource Text.Blue}"/>
+    <Setter Property="TextDecorations" Value="None"/>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="TextDecorations" Value="Underline"/>
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
   <!-- ===== Buttons ===== -->
   <Style TargetType="Button">
     <Setter Property="Background" Value="{DynamicResource Bg.Input}"/>

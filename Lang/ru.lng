@@ -438,8 +438,25 @@ trsum.partial = Получатель {0}:
 dlg.exportPartial = Полные данные загружены для {0} из {1} писем. Загрузить данные всех писем перед экспортом? Это может занять несколько минут. «Нет» — экспорт как есть.
 
 # ---- Help ----
-tip.help = Справка (F1): руководство открывается в браузере.
+tip.help = Справка (F1) и сведения о программе.
 help.missing = Файл справки не найден: {0}
+menu.help = Справка
+menu.about = О программе
+about.title = О программе
+about.version = Версия {0}
+about.description = Поиск, отслеживание доставки и удаление писем в Exchange Server 2016/2019.
+about.github = Исходный код на GitHub
+about.releases = Проверить обновления
+about.telegram = Вопросы и идеи: Telegram @mnemo_nic
+about.guide = Руководство пользователя
+about.donateTitle = Поддержать проект
+about.donateText = EMT бесплатный. Если программа сэкономила вам время, скажите «спасибо» небольшим переводом TON или USDT в сети TON.
+about.copy = Копировать
+about.copied = Скопировано
+about.network = Только сеть TON: перевод в другой сети пропадёт.
+about.license = Лицензия GPL v3. Copyright (C) 2026 3dfx.
+about.trademark = Microsoft и Exchange — товарные знаки группы компаний Microsoft. EMT не связан с Microsoft.
+about.close = Закрыть
 
 # ---- Ярлык ----
 log.shortcutMade = Ярлык со значком EMT: {0}. При необходимости скопируйте его на рабочий стол или в меню «Пуск».

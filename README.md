@@ -27,7 +27,7 @@ The window has two tabs:
 The user interface is available in English and Russian. You can add a language: see [Languages](#languages).
 The window has a dark and a light theme.
 
-**User guide:** open [help/index.html](help/index.html), or click **?** in the window, or push F1.
+**User guide:** open [help/index.html](help/index.html), or click **?** → **User guide** in the window, or push F1.
 The guide is in English and in Russian, with screenshots and examples.
 
 ## Contents
@@ -143,7 +143,8 @@ The other folders and files are for development.
 
 The folder `help` has the user guide in English (`en.html`) and in Russian (`ru.html`).
 
-- To open the guide, click **?** in the top line of the window, or push F1. The guide opens in the interface language.
+- To open the guide, click **?** → **User guide** in the top line of the window, or push F1. The guide opens in the interface language.
+- To see the version, the links and the support address, click **?** → **About**.
 - To open the guide without EMT, open `help/index.html` in a browser.
 - The guide operates without the Internet. It has no external files.
 - The screenshots show example data (contoso). `tools/Make-HelpScreenshots.ps1` makes them again.

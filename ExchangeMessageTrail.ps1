@@ -642,6 +642,140 @@ function Open-EmtHelp {
     Start-Process -FilePath $page
 }
 
+function New-EmtText([string] $Text, [string] $Brush = 'Fg', [double] $Size = 0, [string] $Margin = '0') {
+    <# A text block with a theme color. The text wraps. #>
+    $t = New-Object System.Windows.Controls.TextBlock
+    $t.Text = $Text; $t.TextWrapping = 'Wrap'; $t.Margin = $Margin
+    if ($Size) { $t.FontSize = $Size }
+    Set-EmtBrush $t $Brush
+    $t
+}
+
+function New-EmtAboutWindow {
+    <#
+        Makes the window "About": the version, the links (GitHub, updates, Telegram, user guide),
+        the support of the project (TON address, QR code, copy button), the license.
+        A click on a link opens it in the browser. Esc closes the window.
+    #>
+    $links = Get-EmtLinks
+    $w = New-EmtDialog -Title (T 'about.title') -Width 530
+    $root = New-Object System.Windows.Controls.StackPanel
+    $root.Margin = '24,20,24,18'
+
+    # The icon, the name, the version and the description.
+    $head = New-Object System.Windows.Controls.DockPanel
+    if ($script:EmtIcon) {
+        $img = New-Object System.Windows.Controls.Image
+        $img.Source = $script:EmtIcon; $img.Width = 48; $img.Height = 48
+        $img.Margin = '0,2,16,0'; $img.VerticalAlignment = 'Top'
+        [System.Windows.Controls.DockPanel]::SetDock($img, 'Left')
+        [void]$head.Children.Add($img)
+    }
+    $names = New-Object System.Windows.Controls.StackPanel
+    $name = New-EmtText (T 'app.short') 'Fg' 18
+    $name.FontWeight = 'SemiBold'
+    [void]$names.Children.Add($name)
+    [void]$names.Children.Add((New-EmtText (T 'about.version' (Get-EmtVersion)) 'Fg.Dim' 0 '0,2,0,0'))
+    [void]$names.Children.Add((New-EmtText (T 'about.description') 'Fg' 0 '0,8,0,0'))
+    [void]$head.Children.Add($names)
+    [void]$root.Children.Add($head)
+
+    # The links. Tag: the address of the page, or "help" for the user guide.
+    $list = New-Object System.Windows.Controls.StackPanel
+    $list.Margin = '64,14,0,0'
+    foreach ($l in @(@('about.github', $links.GitHub), @('about.releases', $links.Releases),
+                     @('about.telegram', $links.Telegram), @('about.guide', 'help'))) {
+        $line = New-Object System.Windows.Controls.TextBlock
+        $line.Margin = '0,3,0,3'
+        $h = New-Object System.Windows.Documents.Hyperlink
+        [void]$h.Inlines.Add((New-Object System.Windows.Documents.Run (T $l[0])))
+        $h.Tag = $l[1]
+        if ($l[1] -ne 'help') { $h.ToolTip = $l[1] }
+        $h.Add_Click({
+            param($s, $e)
+            if ($s.Tag -eq 'help') { Open-EmtHelp; return }
+            try { Start-Process -FilePath ([string]$s.Tag) } catch { [void](Show-EmtMessage -Text $_.Exception.Message -Kind Warn) }
+        })
+        [void]$line.Inlines.Add($h)
+        [void]$list.Children.Add($line)
+    }
+    [void]$root.Children.Add($list)
+
+    # The support of the project: a card with the QR code and the TON address.
+    $card = New-Object System.Windows.Controls.Border
+    $card.Margin = '0,18,0,0'; $card.Padding = '16,14,16,14'; $card.CornerRadius = 6; $card.BorderThickness = 1
+    Set-EmtBrush $card 'Bg.Panel' ([System.Windows.Controls.Border]::BackgroundProperty)
+    Set-EmtBrush $card 'Border' ([System.Windows.Controls.Border]::BorderBrushProperty)
+    $donateBody = New-Object System.Windows.Controls.StackPanel
+    $title = New-EmtText (T 'about.donateTitle')
+    $title.FontWeight = 'SemiBold'
+    [void]$donateBody.Children.Add($title)
+    [void]$donateBody.Children.Add((New-EmtText (T 'about.donateText') 'Fg' 0 '0,4,0,12'))
+    $row = New-Object System.Windows.Controls.DockPanel
+    $qrPath = Join-Path $PSScriptRoot 'help\img\donate-ton.png'
+    if (Test-Path -LiteralPath $qrPath) {
+        try {
+            $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
+            $bmp.BeginInit(); $bmp.CacheOption = 'OnLoad'; $bmp.UriSource = New-Object Uri $qrPath; $bmp.EndInit()
+            $qr = New-Object System.Windows.Controls.Image
+            $qr.Source = $bmp; $qr.Width = 112; $qr.Height = 112; $qr.Margin = '0,0,16,0'
+            [System.Windows.Media.RenderOptions]::SetBitmapScalingMode($qr, 'HighQuality')
+            [System.Windows.Controls.DockPanel]::SetDock($qr, 'Left')
+            [void]$row.Children.Add($qr)
+        } catch { }
+    }
+    $right = New-Object System.Windows.Controls.StackPanel
+    $right.VerticalAlignment = 'Center'
+    $address = New-Object System.Windows.Controls.TextBox
+    $address.Text = $links.Ton; $address.IsReadOnly = $true; $address.TextWrapping = 'Wrap'
+    $address.FontFamily = 'Consolas'; $address.Height = [double]::NaN; $address.Padding = '6,5'
+    [void]$right.Children.Add($address)
+    $copy = New-Object System.Windows.Controls.Button
+    $copy.Content = T 'about.copy'; $copy.Tag = $links.Ton
+    $copy.HorizontalAlignment = 'Left'; $copy.Margin = '0,8,0,0'; $copy.MinWidth = 110
+    $copy.Add_Click({
+        param($s, $e)
+        try { [System.Windows.Clipboard]::SetText([string]$s.Tag); $s.Content = T 'about.copied' } catch { }
+    })
+    [void]$right.Children.Add($copy)
+    [void]$right.Children.Add((New-EmtText (T 'about.network') 'Text.Orange' 11 '0,8,0,0'))
+    [void]$row.Children.Add($right)
+    [void]$donateBody.Children.Add($row)
+    $card.Child = $donateBody
+    [void]$root.Children.Add($card)
+
+    # The license and the trademarks.
+    [void]$root.Children.Add((New-EmtText (T 'about.license') 'Fg.Dim' 11 '0,16,0,0'))
+    [void]$root.Children.Add((New-EmtText (T 'about.trademark') 'Fg.Dim' 11 '0,2,0,0'))
+
+    $close = New-Object System.Windows.Controls.Button
+    $close.Content = T 'about.close'; $close.IsCancel = $true; $close.IsDefault = $true; $close.MinWidth = 96
+    $close.HorizontalAlignment = 'Right'; $close.Margin = '0,16,0,0'
+    [void]$root.Children.Add($close)
+
+    $w.Content = $root
+    $w.Add_ContentRendered({ [void]$close.Focus() }.GetNewClosure())
+    $w
+}
+
+function Show-EmtAbout { [void](New-EmtAboutWindow).ShowDialog() }
+
+function Show-EmtHelpMenu {
+    <# The menu of the button "?": the user guide (F1) and the window "About". #>
+    $m = New-Object System.Windows.Controls.ContextMenu
+    $guide = New-Object System.Windows.Controls.MenuItem
+    $guide.Header = T 'menu.help'; $guide.InputGestureText = 'F1'
+    $guide.Add_Click({ Open-EmtHelp })
+    $about = New-Object System.Windows.Controls.MenuItem
+    $about.Header = T 'menu.about'
+    $about.Add_Click({ Show-EmtAbout })
+    [void]$m.Items.Add($guide); [void]$m.Items.Add($about)
+    # The menu belongs to the button: it gets the styles and the theme colors of the window.
+    $btnHelp.ContextMenu = $m
+    $m.PlacementTarget = $btnHelp; $m.Placement = 'Bottom'
+    $m.IsOpen = $true
+}
+
 function Export-EmtSets([string] $Stem, [System.Collections.Specialized.OrderedDictionary] $Sets) {
     <# Saves each set as <folder>\<stem>-<name>.csv. The user selects the folder (the standard Windows dialog). #>
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -1816,8 +1950,8 @@ $cmbLanguage.Add_SelectionChanged({
     Write-EmtLog (T 'log.language')
 })
 
-# Help: the button "?" and the key F1 open the user guide (help\<language>.html) in the browser.
-$btnHelp.Add_Click({ Open-EmtHelp })
+# Help: the button "?" opens a menu: the user guide and the window "About". The key F1 opens the user guide.
+$btnHelp.Add_Click({ Show-EmtHelpMenu })
 $window.Add_PreviewKeyDown({ param($s, $e) if ($e.Key -eq [System.Windows.Input.Key]::F1) { $e.Handled = $true; Open-EmtHelp } })
 
 $cmbTheme.Add_SelectionChanged({

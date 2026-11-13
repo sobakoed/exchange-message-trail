@@ -438,8 +438,25 @@ trsum.partial = Recipient {0}:
 dlg.exportPartial = The data is complete for {0} of {1} messages. Load the data of all messages before the export? This can take some minutes. No: export the data as it is.
 
 # ---- Help ----
-tip.help = Help (F1): the user guide opens in the browser.
+tip.help = The user guide (F1) and information about EMT.
 help.missing = The help file is not found: {0}
+menu.help = User guide
+menu.about = About
+about.title = About EMT
+about.version = Version {0}
+about.description = Search, delivery tracking and deletion of messages in Exchange Server 2016/2019.
+about.github = Source code on GitHub
+about.releases = Check for updates
+about.telegram = Questions and ideas: Telegram @mnemo_nic
+about.guide = User guide
+about.donateTitle = Support the project
+about.donateText = EMT is free. If EMT saved time for you, say "thank you" with a small transfer of TON or USDT in the TON network.
+about.copy = Copy
+about.copied = Copied
+about.network = Only the TON network: a transfer in a different network is lost.
+about.license = License GPL v3. Copyright (C) 2026 3dfx.
+about.trademark = Microsoft and Exchange are trademarks of the Microsoft group of companies. EMT is not affiliated with Microsoft.
+about.close = Close
 
 # ---- Shortcut ----
 log.shortcutMade = The shortcut with the EMT icon: {0}. Copy it to the desktop or to the Start menu if necessary.
