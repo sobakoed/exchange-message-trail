@@ -145,8 +145,6 @@ $script:LanguageCodes   = @()
 $script:ThemeCodes      = @('Dark', 'Light')
 $script:GridHeaders     = @{}        # grid -> ordered map "property" -> "text key" of the column header
 $script:GridNeedsSize   = @{}        # grid -> true: set the column widths when the grid is visible
-$script:GridLastWidth   = @{}        # grid -> the width of the last column from its content
-$script:GridResizeHooked = @{}       # grid -> true: the grid has the SizeChanged handler
 $script:Tips            = New-Object System.Collections.Generic.List[object]   # control + tooltip key
 $script:XamlText        = @{}        # file name -> text (the dialogs load the theme again)
 $script:LastTime        = @{}        # time field -> the last good time text
@@ -736,11 +734,6 @@ function Set-EmtGridData {
     }
     $script:GridHeaders[$Grid] = $Columns
     $script:GridNeedsSize[$Grid] = $true
-    $script:GridLastWidth.Remove($Grid)
-    if (-not $script:GridResizeHooked.ContainsKey($Grid)) {
-        $script:GridResizeHooked[$Grid] = $true
-        $Grid.Add_SizeChanged({ param($s, $e) if ($e.WidthChanged) { Update-EmtLastColumn $s } })
-    }
     $Grid.ItemsSource = $dt.DefaultView
     # The widths come from the content after the layout. The dispatcher calls the function after the layout.
     [void]$window.Dispatcher.BeginInvoke([Action]{ Resize-EmtGrids }, [System.Windows.Threading.DispatcherPriority]::ContextIdle)
@@ -798,7 +791,8 @@ function Get-EmtColumnWidth($Grid, $Column) {
 function Resize-EmtGrids {
     <#
         Initial column width from the content: 60-450 px. Then the width is fixed:
-        a sort and a scroll keep the widths that the user set. The last column gets the free space.
+        a sort and a scroll keep the widths that the user set. A drag changes only that column.
+        The free space stays empty on the right. If the columns do not fit, the grid scrolls.
         A grid on a hidden tab gets the widths when the tab opens.
     #>
     foreach ($g in @($script:GridNeedsSize.Keys)) {
@@ -806,38 +800,10 @@ function Resize-EmtGrids {
         $script:GridNeedsSize[$g] = $false
         # The mark column has a fixed width: it cannot change.
         $cols = @($g.Columns | Where-Object { $_.Visibility -eq 'Visible' -and $_.CanUserResize })
-        $sum = 0
         foreach ($c in $cols) {
             $w = [math]::Max(60, [math]::Min(450, (Get-EmtColumnWidth $g $c)))
             $c.Width = New-Object System.Windows.Controls.DataGridLength($w)
-            $sum += $w
         }
-        # The last column gets the free space only if all columns fit. A star column with too little space
-        # makes the grid narrow the other columns: then the texts are cut. Without free space, the grid scrolls.
-        $script:GridLastWidth[$g] = $cols[-1].Width.Value
-        Update-EmtLastColumn $g
-    }
-}
-
-function Update-EmtLastColumn($Grid) {
-    <#
-        The last column gets the free space only if all columns fit. A star column with too little space
-        makes the grid narrow the other columns: then the texts are cut. Without free space, the grid scrolls.
-        The grid calls this function also when its width changes (the window size).
-    #>
-    if (-not $script:GridLastWidth.ContainsKey($Grid) -or $script:GridNeedsSize[$Grid]) { return }
-    $cols = @($Grid.Columns | Where-Object { $_.Visibility -eq 'Visible' -and $_.CanUserResize })
-    if (-not $cols.Count) { return }
-    $last = $cols[-1]; $natural = $script:GridLastWidth[$Grid]
-    $sum = $natural
-    for ($i = 0; $i -lt $cols.Count - 1; $i++) { $sum += $cols[$i].ActualWidth }
-    $fits = ($Grid.ActualWidth - 30 - $sum) -gt 0
-    if ($fits -and -not $last.Width.IsStar) {
-        $last.MinWidth = $natural
-        $last.Width = New-Object System.Windows.Controls.DataGridLength(1, [System.Windows.Controls.DataGridLengthUnitType]::Star)
-    } elseif (-not $fits -and $last.Width.IsStar) {
-        $last.MinWidth = 20
-        $last.Width = New-Object System.Windows.Controls.DataGridLength($natural)
     }
 }
 
@@ -995,9 +961,9 @@ function Get-EmtSelectedRecipient {
 }
 
 function Get-EmtTimeout {
-    <# The timeout of the operations in minutes: 5-240. A wrong value gives 60. #>
+    <# The timeout of the operations in minutes: 5-240. A wrong value gives 30. #>
     $n = 0
-    if ([int]::TryParse($tbTimeout.Text.Trim(), [ref]$n) -and $n -ge 5 -and $n -le 240) { $n } else { 60 }
+    if ([int]::TryParse($tbTimeout.Text.Trim(), [ref]$n) -and $n -ge 5 -and $n -le 240) { $n } else { 30 }
 }
 
 function Set-UiState {
@@ -1889,7 +1855,12 @@ $btnTrFind.Add_Click({
 })
 
 $gridTrMessages.Add_SelectionChanged({ if (-not $script:Loading) { Show-EmtTraceDetail } })
-$gridTrMessages.Add_MouseDoubleClick({ if ($gridTrMessages.SelectedItem) { $trDetail.SelectedItem = $tabTrEvents } })
+# A double-click on a row opens the events. A double-click on a header border only fits the column width.
+$gridTrMessages.Add_MouseDoubleClick({
+    param($s, $e)
+    $row = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource)
+    if ($row -is [System.Windows.Controls.DataGridRow] -and $gridTrMessages.SelectedItem) { $trDetail.SelectedItem = $tabTrEvents }
+})
 $gridTrRecipients.Add_SelectionChanged({ Set-UiState })
 # A grid on a hidden tab gets the column widths when it becomes visible.
 foreach ($g in $script:AllGrids) {
@@ -2298,7 +2269,7 @@ $defaultServer = if ($Server) { $Server }
 $tbServer.Text = $defaultServer
 if ($settings.ContainsKey('IncludeForwards')) { $chkForwards.IsChecked = [bool]$settings.IncludeForwards }
 if ($settings.ContainsKey('AllMailboxes'))    { $chkAll.IsChecked = [bool]$settings.AllMailboxes }
-$script:LastTimeout = 60
+$script:LastTimeout = 30
 if ($settings.ContainsKey('TimeoutMinutes')) {
     $script:LastTimeout = [math]::Max(5, [math]::Min(240, [int]$settings.TimeoutMinutes))
 }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.2.1">
+<meta name="emt-version" content="2.2.2">
 <title>Exchange Message Trail — User guide</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Version 2.2.1 · User guide</span>
+  <span class="version">Version 2.2.2 · User guide</span>
   <span class="spacer"></span>
   <div class="switch">
     <a class="active" href="en.html">English</a>
@@ -171,7 +171,8 @@
   </table>
   <h3>Tables</h3>
   <ul>
-    <li>Drag the border of a column header to change the width.</li>
+    <li>Drag the border of a column header to change the width. The other columns do not change.</li>
+    <li>Double-click the border of a column header to fit the width to the content.</li>
     <li>Click a column header to sort the rows.</li>
     <li>Drag a column header to move the column.</li>
     <li>Push <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy the selected rows with the headers.</li>
@@ -245,7 +246,9 @@
 
   <h3 id="addresses">Partial addresses</h3>
   <p>You can type a part of an address or a name, for example <code>kim</code>.
-  EMT finds the full address in the Exchange address book (<code>Get-Recipient -Anr</code>).</p>
+  EMT finds the full address in the Exchange address book (<code>Get-Recipient -Anr</code>).
+  The address book contains only the employees and the contacts of the organization.
+  A partial match does not work for external addresses: type the full address.</p>
   <table>
     <tr><th>Matches</th><th>Result</th></tr>
     <tr><td>One</td><td>EMT puts the full address in the field. The log shows the change.</td></tr>
@@ -625,7 +628,7 @@
     <p>Make sure that the network is <b>TON</b>. A transfer in a different network is lost.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.2.1 · The screenshots show example data (contoso), not real data.</p>
+    <p>Exchange Message Trail 2.2.2 · The screenshots show example data (contoso), not real data.</p>
     <p>Microsoft, Exchange and Windows are trademarks of the Microsoft group of companies. EMT is not affiliated with Microsoft.</p>
   </footer>
 </section>

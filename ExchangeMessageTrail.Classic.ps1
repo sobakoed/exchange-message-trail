@@ -676,7 +676,7 @@ $tbServer = New-Object System.Windows.Forms.TextBox
 $tbServer.Width = 240; $tbServer.Margin = '3,4,6,3'
 $btnConnect = New-EmtButton 'conn.connect' 140
 $nudTimeout = New-Object System.Windows.Forms.NumericUpDown
-$nudTimeout.Minimum = 5; $nudTimeout.Maximum = 240; $nudTimeout.Value = 60; $nudTimeout.Width = 60; $nudTimeout.Margin = '3,4,12,3'
+$nudTimeout.Minimum = 5; $nudTimeout.Maximum = 240; $nudTimeout.Value = 30; $nudTimeout.Width = 60; $nudTimeout.Margin = '3,4,12,3'
 $cmbLanguage = New-Object System.Windows.Forms.ComboBox
 $cmbLanguage.DropDownStyle = 'DropDownList'; $cmbLanguage.Width = 120; $cmbLanguage.Margin = '3,4,12,3'
 foreach ($l in $available) { [void]$cmbLanguage.Items.Add($l.Name) }

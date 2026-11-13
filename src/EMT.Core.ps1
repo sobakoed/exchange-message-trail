@@ -789,7 +789,7 @@ function Resolve-EmtAddressInputs {
 }
 
 function Wait-EmtComplianceSearch {
-    param([Parameter(Mandatory)] [string] $Name, [int] $TimeoutMinutes = 60, [int] $ProgressFrom = 40, [int] $ProgressTo = 95)
+    param([Parameter(Mandatory)] [string] $Name, [int] $TimeoutMinutes = 30, [int] $ProgressFrom = 40, [int] $ProgressTo = 95)
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     $poll = 0
     while ($true) {
@@ -816,7 +816,7 @@ function Wait-EmtComplianceSearch {
 
 function Invoke-EmtSearch {
     <# Full pipeline: tracking -> recipients -> KQL -> Compliance Search -> hits. #>
-    param([Parameter(Mandatory)] [hashtable] $Criteria, [int] $TimeoutMinutes = 60)
+    param([Parameter(Mandatory)] [hashtable] $Criteria, [int] $TimeoutMinutes = 30)
 
     $Criteria = Complete-EmtCriteria $Criteria
     $problems = @(Test-EmtCriteria $Criteria)
@@ -969,7 +969,7 @@ function New-EmtComplianceSearchRun {
     <# Makes, starts and waits for one Compliance Search. Returns the search object. #>
     param(
         [Parameter(Mandatory)] [string] $Name, [Parameter(Mandatory)] [string[]] $Locations,
-        [Parameter(Mandatory)] [string] $Query, [int] $TimeoutMinutes = 60
+        [Parameter(Mandatory)] [string] $Query, [int] $TimeoutMinutes = 30
     )
     New-ComplianceSearch -Name $Name -ExchangeLocation $Locations -ContentMatchQuery $Query | Out-Null
     Start-ComplianceSearch -Identity $Name
@@ -1002,7 +1002,7 @@ function Invoke-EmtQuickSearch {
 
 function Invoke-EmtSoftDelete {
     <# Purge (SoftDelete) of an existing Compliance Search: items go to Recoverable Items. #>
-    param([Parameter(Mandatory)] [string] $SearchName, [int] $TimeoutMinutes = 60)
+    param([Parameter(Mandatory)] [string] $SearchName, [int] $TimeoutMinutes = 30)
     Write-EmtLog (T 'log.softStart' $SearchName)
     New-ComplianceSearchAction -SearchName $SearchName -Purge -PurgeType SoftDelete -Confirm:$false | Out-Null
     $actionName = "${SearchName}_Purge"
