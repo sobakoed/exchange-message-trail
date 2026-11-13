@@ -1148,10 +1148,11 @@ function Show-EmtTraceViews($t) {
         [void]$script:ReportByMsg[$r.MessageId].Add($r)
     }
     $msgs = @($t.Messages | ForEach-Object {
+        $shadow = [bool]($_.PSObject.Properties['Shadow'] -and $_.Shadow)
         [pscustomobject]@{
             Time = $_.Time; Sender = $_.Sender; Subject = $_.Subject; Recipients = $_.Recipients
-            StatusLine = (Get-EmtMessageStatusLine @(Get-EmtReportOf $_.MessageId))
-            Note = $(if ($_.ServerGenerated) { T 'note.serverGenerated' } else { '' })
+            StatusLine = (Get-EmtMessageStatusLine @(Get-EmtReportOf $_.MessageId) -Shadow:$shadow)
+            Note = $(if ($shadow) { T 'note.shadow' } elseif ($_.ServerGenerated) { T 'note.serverGenerated' } else { '' })
             MessageId = $_.MessageId; Problems = $_.Problems; Pending = $_.Pending
         }
     })
@@ -1166,7 +1167,7 @@ function Show-EmtTraceViews($t) {
     $count = { param($codes) $n = 0; foreach ($c in $codes) { $n += [int]$byStatus[$c] }; $n }
     $failed = & $count @(Get-EmtErrorStatuses)
     if ($msgs.Count) {
-        $lblTrSummary.Text = T 'trsum.text' $msgs.Count $report.Count (& $count @('Delivered')) (& $count @('External')) `
+        $lblTrSummary.Text = T 'trsum.text' (Get-EmtMessageCountText $t.Messages) $report.Count (& $count @('Delivered')) (& $count @('External')) `
                                             $failed (& $count @('Deferred', 'InTransit', 'Unknown')) $t.Seconds
         $lblTrSummary.ForeColor = $(if ($failed) { [System.Drawing.Color]::Firebrick } else { [System.Drawing.SystemColors]::ControlText })
         $tips.SetToolTip($lblTrSummary, $lblTrSummary.Text)

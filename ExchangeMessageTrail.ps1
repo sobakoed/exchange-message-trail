@@ -1224,8 +1224,9 @@ function Get-EmtStatusTone([string] $Status) {
     }
 }
 
-function Get-EmtStatusParts([object[]] $Rows = @()) {
+function Get-EmtStatusParts([object[]] $Rows = @(), [switch] $Shadow) {
     <# The parts of the status of one message: one part for each status, in the order of Get-EmtMessageStatusLine. #>
+    if ($Shadow) { return @(@{ Text = (T 'line.shadow'); Tone = 'Grey' }) }
     $count = Get-EmtStatusCount $Rows
     $parts = foreach ($s in Get-EmtStatusOrder) {
         $n = [int]$count[$s]
@@ -1263,8 +1264,9 @@ function Test-EmtDetailLoaded([string] $MessageId) {
 }
 
 function Get-EmtMessageNote($Message) {
-    <# The note of a message: made by Exchange, or the other recipients are not loaded yet. #>
-    if ($Message.ServerGenerated) { T 'note.serverGenerated' }
+    <# The note of a message: a shadow copy, made by Exchange, or the other recipients are not loaded yet. #>
+    if (Get-EmtProp $Message 'Shadow') { T 'note.shadow' }
+    elseif ($Message.ServerGenerated) { T 'note.serverGenerated' }
     elseif (-not (Test-EmtDetailLoaded $Message.MessageId)) {
         # A message to a group: the user sees the group size before the load (a large group takes time).
         $n = [int](Get-EmtProp $Message 'Expanded')
@@ -1319,17 +1321,18 @@ function Merge-EmtDetail($Detail) {
         $script:DetailLoaded[$id] = $true
         $rows = @($list.ToArray())
         $m = $messages[$id]
+        $shadow = [bool]($m -and (Get-EmtProp $m 'Shadow'))
         if ($m) {
             $m.Recipients = $rows.Count
             $m.Problems   = @($rows | Where-Object { $_.Status -in (Get-EmtErrorStatuses) }).Count
-            $m.StatusLine = Get-EmtMessageStatusLine $rows
+            $m.StatusLine = Get-EmtMessageStatusLine $rows -Shadow:$shadow
         }
         # The row changes in place: the grid keeps its scroll position and the selection.
         $v = $views[$id]
         if ($v) {
             $v.Row['Recipients'] = $rows.Count
-            $v.Row['StatusLine'] = Get-EmtMessageStatusLine $rows
-            $v.Row['Parts']      = [object[]]@(Get-EmtStatusParts $rows)
+            $v.Row['StatusLine'] = Get-EmtMessageStatusLine $rows -Shadow:$shadow
+            $v.Row['Parts']      = [object[]]@(Get-EmtStatusParts $rows -Shadow:$shadow)
             $v.Row['Mark']       = [string](Get-EmtStatusMark $rows)
             $v.Row['Note']       = $(if ($m) { Get-EmtMessageNote $m } else { '' })
         }
@@ -1370,11 +1373,12 @@ function Show-EmtTraceViews($t) {
     }
     $msgs = @($t.Messages | ForEach-Object {
         $rcpt = @(Get-EmtReportOf $_.MessageId)
+        $shadow = [bool](Get-EmtProp $_ 'Shadow')
         [pscustomobject]@{
             Time = $_.Time; Sender = $_.Sender; Subject = $_.Subject; Recipients = $_.Recipients
-            StatusLine = (Get-EmtMessageStatusLine $rcpt)
+            StatusLine = (Get-EmtMessageStatusLine $rcpt -Shadow:$shadow)
             Note = (Get-EmtMessageNote $_)
-            MessageId = $_.MessageId; Rows = $rcpt
+            MessageId = $_.MessageId; Rows = $rcpt; Shadow = $shadow
         }
     })
     # A message can have more statuses: each status has its color. The mark: red = an error, yellow = a delay.
@@ -1383,7 +1387,7 @@ function Show-EmtTraceViews($t) {
         Set-EmtGridData $gridTrMessages $msgs ([ordered]@{
             Time = 'col.time'; Sender = 'col.sender'; Subject = 'col.subject'; Recipients = 'col.recipientCount'
             StatusLine = 'col.statusLine'; Note = 'col.note'; MessageId = 'col.messageId'
-        }) -PartsColumn 'StatusLine' -Parts { param($m) Get-EmtStatusParts $m.Rows } -Mark { param($m) Get-EmtStatusMark $m.Rows }
+        }) -PartsColumn 'StatusLine' -Parts { param($m) Get-EmtStatusParts $m.Rows -Shadow:$m.Shadow } -Mark { param($m) Get-EmtStatusMark $m.Rows }
     } finally { $script:Loading = $false }
 
     $report = @($t.Report)
@@ -1394,7 +1398,7 @@ function Show-EmtTraceViews($t) {
     $prefix = if (@($t.TrackingErrors).Count) { T 'sum.errors' } else { '' }
     if ($msgs.Count) {
         # Only the number of errors is red. The other parts have the usual text color.
-        $values = @($msgs.Count, $report.Count, (& $count @('Delivered')), (& $count @('External')),
+        $values = @((Get-EmtMessageCountText $t.Messages), $report.Count, (& $count @('Delivered')), (& $count @('External')),
                     $failed, (& $count @('Deferred', 'InTransit', 'Unknown')), $t.Seconds)
         # A partial search counts the searched recipient only: the line starts with "Recipient x:".
         $lead = if (Get-EmtProp $t 'Partial') { T 'trsum.partial' $t.Criteria.Recipient } else { '' }

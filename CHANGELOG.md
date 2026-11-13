@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.2.0 — 2026-11-13
+
+**Message search**
+
+- A shadow copy (Shadow Redundancy) has its own row, but it is not a different message.
+  A second transport server keeps a copy of the message until the first server delivers it (`HARECEIVE`),
+  then discards the copy (`HADISCARD`). If the original message has no Message-ID header (for example,
+  a script sends it), each server gives its own MessageId. Before, EMT showed the copy as a message
+  with "no recipients in the tracking log" and "made by Exchange — possibly an inbox rule or forwarding".
+- Now a message with only `HARECEIVE` and `HADISCARD` events has the status "shadow copy" and a note:
+  the original message is the row with the same time, sender and subject (tested on Exchange 2019).
+- The summary line and the log do not count shadow copies as messages: "Messages: 36 (+ shadow copies: 1)".
+- Delete: shadow copies are not counted as messages. Thus the warning "more items than messages" stays correct.
+
+**Tests**
+
+- A unit test compares the parameters of each operation in both windows with the keys that the core reads.
+  It finds an error such as the error of 2.1.1 in the classic window.
+
 ## 2.1.1 — 2026-11-13
 
 **Fixed**

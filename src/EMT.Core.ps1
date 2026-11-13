@@ -307,6 +307,9 @@ function Get-EmtMessageSummary {
         One row per MessageId: first submit/receive time, sender, subject, recipient count, server-generated flag.
         Expanded: the sum of RecipientCount of the EXPAND events (group expansion). A search by one recipient
         also finds the EXPAND event: thus the window can show the group size before it loads all recipients.
+        Shadow: the message has only HARECEIVE and HADISCARD events. This is a shadow copy (Shadow Redundancy)
+        on a second server, not a different message. If the original message has no Message-ID header,
+        each server gives its own MessageId. The original message has the delivery events.
     #>
     param([object[]] $Events = @(), [string[]] $ServerNames = @())
     # An event without MessageId (for example NOTIFYMAPI) is not a message: no row for it.
@@ -318,12 +321,13 @@ function Get-EmtMessageSummary {
         $id = [string]$e.MessageId
         $g = $groups[$id]
         if (-not $g) {
-            $g = @{ Id = $id; First = $e; Start = $null; Expanded = 0
+            $g = @{ Id = $id; First = $e; Start = $null; Expanded = 0; Real = $false
                     Rcpt = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
             $groups[$id] = $g
             $order.Add($g)
         }
         if (-not $g.Start -and $e.EventId -in 'RECEIVE', 'SUBMIT') { $g.Start = $e }
+        if ($e.EventId -notin 'HARECEIVE', 'HADISCARD') { $g.Real = $true }
         if ($e.EventId -eq 'EXPAND') {
             $n = $e.PSObject.Properties['RecipientCount']
             if ($n) { $g.Expanded += [int]$n.Value }
@@ -332,7 +336,9 @@ function Get-EmtMessageSummary {
     }
     $(foreach ($g in $order) {
         $first = if ($g.Start) { $g.Start } else { $g.First }
-        $auto  = Test-EmtServerGeneratedId -MessageId $g.Id -ServerNames $ServerNames
+        $shadow = -not $g.Real
+        # A shadow copy has a MessageId from the server, but it is not a message from a rule.
+        $auto  = (-not $shadow) -and (Test-EmtServerGeneratedId -MessageId $g.Id -ServerNames $ServerNames)
         [pscustomobject]@{
             Time       = $first.Timestamp
             Sender     = ([string]$first.Sender).ToLowerInvariant()
@@ -340,7 +346,8 @@ function Get-EmtMessageSummary {
             Recipients = $g.Rcpt.Count
             Expanded   = $g.Expanded
             ServerGenerated = [bool]$auto
-            Note       = $(if ($auto) { T 'note.serverGenerated' } else { '' })
+            Shadow     = $shadow
+            Note       = $(if ($shadow) { T 'note.shadow' } elseif ($auto) { T 'note.serverGenerated' } else { '' })
             MessageId  = $g.Id
         }
     }) | Sort-Object Time
@@ -846,7 +853,9 @@ function Invoke-EmtSearch {
     }
     $events  = @($tracking.Events)
     $trackErrors = @($tracking.Errors)
-    $summary = @(Get-EmtMessageSummary -Events $events -ServerNames $tracking.Servers)
+    # A shadow copy is not a different message: it must not increase the number of messages.
+    # This number finds the mailboxes with more items than messages (a warning before a delete).
+    $summary = @(Get-EmtMessageSummary -Events $events -ServerNames $tracking.Servers | Where-Object { -not $_.Shadow })
     if (-not $events.Count) { Write-EmtLog (T 'log.trackEmpty') 'Warn' }
     foreach ($m in @($summary | Where-Object ServerGenerated)) { Write-EmtLog (T 'log.serverGenerated' $m.MessageId $m.Sender) 'Warn' }
 
@@ -1505,14 +1514,30 @@ function Get-EmtStatusOrder {
 }
 
 function Get-EmtMessageStatusLine {
-    <# The status line of one message from its report rows: "Delivered: 5, External: 1, Failed: 1". #>
-    param([object[]] $Rows = @())
+    <#
+        The status line of one message from its report rows: "Delivered: 5, External: 1, Failed: 1".
+        -Shadow: a shadow copy has no recipients of its own. The line says "shadow copy".
+    #>
+    param([object[]] $Rows = @(), [switch] $Shadow)
+    if ($Shadow) { return (T 'line.shadow') }
     $count = Get-EmtStatusCount $Rows
     $parts = foreach ($s in Get-EmtStatusOrder) {
         $n = [int]$count[$s]
         if ($n) { T "line.$s" $n }
     }
     if ($parts) { @($parts) -join ', ' } else { T 'line.none' }
+}
+
+function Get-EmtMessageCountText {
+    <#
+        The number of messages for the summary line. A shadow copy is not a different message:
+        "36", or "36 (+ shadow copies: 1)" if the search found shadow copies.
+    #>
+    param([object[]] $Messages = @())
+    $shadow = 0
+    foreach ($m in $Messages) { if ($m -and $m.PSObject.Properties['Shadow'] -and $m.Shadow) { $shadow++ } }
+    $real = @($Messages | Where-Object { $_ }).Count - $shadow
+    if ($shadow) { T 'trsum.shadowCount' $real $shadow } else { [string]$real }
 }
 
 function Get-EmtStatusCount {
@@ -1597,13 +1622,16 @@ function Invoke-EmtTrace {
             ToGroup         = $toGroup
             Problems        = $problems
             Pending         = [int]$count['Deferred'] + [int]$count['InTransit'] + [int]$count['Unknown']
-            StatusLine      = Get-EmtMessageStatusLine $rows
+            StatusLine      = Get-EmtMessageStatusLine $rows -Shadow:$m.Shadow
             ServerGenerated = $m.ServerGenerated
+            Shadow          = $m.Shadow
             MessageId       = $m.MessageId
         }
     })
     $failed = @($report | Where-Object { $_.Status -in $errorStatuses }).Count
-    Write-EmtLog (T 'log.traceDone' $messages.Count $report.Count $failed ([int]$timer.Elapsed.TotalSeconds)) 'Ok'
+    # A shadow copy is not a different message: the log counts only the messages.
+    $real = @($messages | Where-Object { -not $_.Shadow }).Count
+    Write-EmtLog (T 'log.traceDone' $real $report.Count $failed ([int]$timer.Elapsed.TotalSeconds)) 'Ok'
     Set-EmtProgress 100 (T 'progress.done')
     [pscustomobject]@{
         Criteria       = $Criteria

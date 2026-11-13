@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.1.1">
+<meta name="emt-version" content="2.2.0">
 <title>Exchange Message Trail — Руководство пользователя</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Версия 2.1.1 · Руководство пользователя</span>
+  <span class="version">Версия 2.2.0 · Руководство пользователя</span>
   <span class="spacer"></span>
   <div class="switch">
     <a href="en.html">English</a>
@@ -290,6 +290,7 @@
     <tr><td>Группа: разослано участникам</td><td><span class="dot grey"></span>Серый</td><td>Адрес — группа. Письмо получают участники.</td></tr>
     <tr><td>Не отправлено по настройке Exchange</td><td><span class="dot grey"></span>Серый</td><td>Автоответ, автопересылка или отчёт, которые Exchange не отправляет по настройке. Это не ошибка.</td></tr>
     <tr><td>Нет данных о доставке</td><td><span class="dot grey"></span>Серый</td><td>В журнале доставки есть только приём письма.</td></tr>
+    <tr><td>Теневая копия</td><td><span class="dot grey"></span>Серый</td><td>Копия письма на втором сервере Exchange (Shadow Redundancy). Сервер хранит её, пока первый сервер не доставит письмо, затем удаляет. Это не отдельное письмо: смотрите строку с тем же временем, отправителем и темой. Теневые копии не входят в число писем в итоговой строке.</td></tr>
   </table>
   <table>
     <tr><th>Левый край</th><th>Письмо</th><th>Получатель</th></tr>
@@ -624,7 +625,7 @@
     <p>Проверьте, что сеть — <b>TON</b>. Перевод в другой сети пропадёт.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.1.1 · На снимках выдуманные данные (contoso), а не реальные.</p>
+    <p>Exchange Message Trail 2.2.0 · На снимках выдуманные данные (contoso), а не реальные.</p>
     <p>Microsoft, Exchange и Windows — товарные знаки группы компаний Microsoft. Проект EMT не связан с Microsoft.</p>
   </footer>
 </section>

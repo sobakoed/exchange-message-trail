@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.1.1">
+<meta name="emt-version" content="2.2.0">
 <title>Exchange Message Trail — User guide</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Version 2.1.1 · User guide</span>
+  <span class="version">Version 2.2.0 · User guide</span>
   <span class="spacer"></span>
   <div class="switch">
     <a class="active" href="en.html">English</a>
@@ -290,6 +290,7 @@
     <tr><td>Group: sent to the members</td><td><span class="dot grey"></span>Grey</td><td>The address is a group. The members get the message.</td></tr>
     <tr><td>Not sent by an Exchange setting</td><td><span class="dot grey"></span>Grey</td><td>An automatic reply, an automatic forward or a report that Exchange does not send. This is not an error.</td></tr>
     <tr><td>No delivery data</td><td><span class="dot grey"></span>Grey</td><td>The tracking log has only the receive event.</td></tr>
+    <tr><td>Shadow copy</td><td><span class="dot grey"></span>Grey</td><td>A copy of a message on a second Exchange server (Shadow Redundancy). The server keeps it until the first server delivers the message, then discards it. This is not a different message: see the row with the same time, sender and subject. The number of messages in the summary line does not include shadow copies.</td></tr>
   </table>
   <table>
     <tr><th>Left edge</th><th>Message</th><th>Recipient</th></tr>
@@ -624,7 +625,7 @@
     <p>Make sure that the network is <b>TON</b>. A transfer in a different network is lost.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.1.1 · The screenshots show example data (contoso), not real data.</p>
+    <p>Exchange Message Trail 2.2.0 · The screenshots show example data (contoso), not real data.</p>
     <p>Microsoft, Exchange and Windows are trademarks of the Microsoft group of companies. EMT is not affiliated with Microsoft.</p>
   </footer>
 </section>

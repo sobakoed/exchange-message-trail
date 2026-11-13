@@ -200,6 +200,7 @@ kind.External = External
 kind.Group = Group
 kind.Other = Other
 note.serverGenerated = made by Exchange — possibly an inbox rule or forwarding
+note.shadow = shadow copy (Shadow Redundancy) on a second server — the original message has the delivery: the row with the same time, sender and subject
 missing.reason = The user deleted or moved the message, or the message is not indexed.
 
 # ---- Window: actions and run area ----
@@ -301,6 +302,7 @@ log.traceDone = Message search complete: {0} messages, {1} recipients, {2} deliv
 log.traceEmpty = No messages found. Examine:
 trsum.none = Set the criteria and click "Find".
 trsum.text = Messages: {0}.   Recipients: {1}.   Delivered: {2}.   External: {3}.   Errors: {4}.   In transit: {5}.   {6} s.
+trsum.shadowCount = {0} (+ shadow copies: {1})
 trsum.empty = No messages found. What to examine: see the log below and the tooltip.
 trtab.recipients = Recipients
 trtab.events = Events
@@ -333,6 +335,7 @@ line.InTransit = in transit: {0}
 line.Group = groups: {0}
 line.Unknown = no data: {0}
 line.none = no recipients in the tracking log
+line.shadow = shadow copy
 hint.noAddress = {0}: the address does not exist. Examine the address.
 hint.badSender = {0}: the sender address is not accepted.
 hint.full = {0}: the recipient mailbox is full.

@@ -1495,6 +1495,58 @@ Describe 'Message search by a recipient: partial search and the details of a mes
     }
 }
 
+Describe 'Shadow copy (Shadow Redundancy, tested on Exchange 2019)' {
+    # A script sends a message without Message-ID. Server 1 gives one MessageId and delivers the message.
+    # Server 2 keeps a shadow copy with its own MessageId: only HARECEIVE and HADISCARD.
+    BeforeAll {
+        $t = [datetime]'2026-11-13 10:03:19'
+        function New-SEv($Id, $Kind, [string[]]$To, $Time, $Server) {
+            [pscustomobject]@{ MessageId = $Id; EventId = $Kind; Recipients = $To; RecipientStatus = @($To | ForEach-Object { '' })
+                               Timestamp = $Time; ServerHostname = $Server; Source = 'SMTP'; Sender = 'script@x.com'; MessageSubject = 'Sync' }
+        }
+        $script:ShadowEvents = @(
+            New-SEv '<s1@EXCH02.x.local>' 'HARECEIVE' @('b@x.com', 'c@x.com') $t 'EXCH02'
+            New-SEv '<m1@EXCH01.x.local>' 'HAREDIRECT' @('b@x.com', 'c@x.com') $t 'EXCH01'
+            New-SEv '<m1@EXCH01.x.local>' 'RECEIVE' @('b@x.com', 'c@x.com') $t 'EXCH01'
+            New-SEv '<m1@EXCH01.x.local>' 'DELIVER' @('b@x.com', 'c@x.com') $t.AddSeconds(1) 'EXCH01'
+            New-SEv '<s1@EXCH02.x.local>' 'HADISCARD' @('b@x.com', 'c@x.com') $t.AddSeconds(24) 'EXCH02'
+        )
+    }
+    It 'Get-EmtMessageSummary: the copy with only HARECEIVE and HADISCARD is a shadow copy, not a message from a rule' {
+        $s = @(Get-EmtMessageSummary -Events $script:ShadowEvents -ServerNames @('EXCH01', 'EXCH02'))
+        $copy = $s | Where-Object MessageId -eq '<s1@EXCH02.x.local>'
+        $copy.Shadow | Should -BeTrue
+        $copy.ServerGenerated | Should -BeFalse
+        $copy.Note | Should -Be (T 'note.shadow')
+        # HAREDIRECT on the first server does not make the original message a shadow copy.
+        ($s | Where-Object MessageId -eq '<m1@EXCH01.x.local>').Shadow | Should -BeFalse
+    }
+    It 'Get-EmtMessageStatusLine -Shadow: "shadow copy", not "no recipients"' {
+        Get-EmtMessageStatusLine @() -Shadow | Should -Be 'теневая копия'
+        Get-EmtMessageStatusLine @() | Should -Be (T 'line.none')
+    }
+    It 'Get-EmtMessageCountText: a shadow copy is not counted as a message' {
+        $m = { param($shadow) [pscustomobject]@{ Shadow = $shadow } }
+        Get-EmtMessageCountText @((& $m $false), (& $m $true), (& $m $false)) | Should -Be '2 (+ теневых копий: 1)'
+        Get-EmtMessageCountText @((& $m $false), (& $m $false)) | Should -Be '2'
+        Get-EmtMessageCountText @([pscustomobject]@{ MessageId = 'x' }) | Should -Be '1'
+        Get-EmtMessageCountText @() | Should -Be '0'
+    }
+    It 'Invoke-EmtTrace: the shadow copy has the status "shadow copy", and the log counts one message' {
+        Mock Get-EmtCapabilities { [pscustomobject]@{ Tracking = $true } }
+        Mock Get-EmtAcceptedDomains { @('x.com') }
+        Mock Resolve-EmtRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } }) }
+        Mock Find-EmtTrackingEvents { [pscustomobject]@{ Servers = @('EXCH01', 'EXCH02'); Errors = @(); Events = $script:ShadowEvents } }
+        Mock Write-EmtLog { }
+        $r = Invoke-EmtTrace -Criteria @{ Senders = @('script@x.com'); Start = $t.AddDays(-1); End = $t.AddDays(1) }
+        $copy = @($r.Messages) | Where-Object MessageId -eq '<s1@EXCH02.x.local>'
+        $copy.Shadow | Should -BeTrue
+        $copy.StatusLine | Should -Be 'теневая копия'
+        (@($r.Messages) | Where-Object MessageId -eq '<m1@EXCH01.x.local>').StatusLine | Should -Not -Be 'теневая копия'
+        Should -Invoke Write-EmtLog -ParameterFilter { $Message -eq (T 'log.traceDone' 1 2 0 0) }
+    }
+}
+
 Describe 'Invoke-EmtOperation' {
     It 'Trace: the classic window does not send Partial, and the search runs (not partial)' {
         # The core runs in strict mode. A missing key of the parameters must not stop the operation.
