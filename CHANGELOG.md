@@ -8,7 +8,6 @@
 - The window "About" shows the version, the links (GitHub, updates, Telegram, user guide),
   the support of the project (QR code, TON address, copy button) and the license.
 - The classic window has the same button "?", the same menu and the key F1.
-- The user guide shows the window "About" in the section "Contact and support".
 
 ## 2.2.2 — 2026-11-14
 
