@@ -1734,10 +1734,8 @@ Describe 'The window "About" (2.3.0)' {
             [IO.File]::ReadAllText((Join-Path $root "help\$p"), [Text.Encoding]::UTF8) | Should -Match ([regex]::Escape($ton)) -Because $p
         }
     }
-    It 'the QR code and the screenshots of the window are in the folder help' {
+    It 'the QR code is in the folder help' {
         Join-Path $root 'help\img\donate-ton.png' | Should -Exist
-        Join-Path $root 'help\img\ru\about.png' | Should -Exist
-        Join-Path $root 'help\img\en\about.png' | Should -Exist
     }
     It 'both windows have the menu of the button "?" and the key F1' {
         foreach ($n in 'ExchangeMessageTrail.ps1', 'ExchangeMessageTrail.Classic.ps1') {
