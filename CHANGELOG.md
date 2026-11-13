@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1 — 2026-11-13
+
+**Message search**
+
+- The note of a shadow copy is shorter: "shadow copy — another server delivers the message".
+
 ## 2.2.0 — 2026-11-13
 
 **Message search**
