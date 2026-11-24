@@ -22,11 +22,15 @@
 .PARAMETER Theme
     Dark or Light. If you do not set it, the tool uses the last value, or Dark.
 
+.PARAMETER UpdateSource
+    Only for a test of the update. A local folder with release.json (the answer of the GitHub API "releases/latest")
+    and the ZIP file of the release. EMT uses this folder instead of GitHub. The checks of the package are the same.
+
 .EXAMPLE
     .\ExchangeMessageTrail.ps1 -Server exch01.contoso.local -Language en -Theme Dark
 #>
 [CmdletBinding()]
-param([string] $Server, [string] $Language, [ValidateSet('', 'Dark', 'Light')] [string] $Theme = '')
+param([string] $Server, [string] $Language, [ValidateSet('', 'Dark', 'Light')] [string] $Theme = '', [string] $UpdateSource)
 
 $ErrorActionPreference = 'Stop'
 
@@ -556,8 +560,8 @@ function New-EmtDialogButtons([string] $OkText, [string] $OkStyle = '') {
 
 function Show-EmtConfirm {
     <# Shows the confirmation dialog (New-EmtConfirmWindow). Returns $true if the user confirms. #>
-    param([string] $Title, [string] $Text, [string] $OkText, [string] $RequireWord)
-    [bool](New-EmtConfirmWindow -Title $Title -Text $Text -OkText $OkText -RequireWord $RequireWord).ShowDialog()
+    param([string] $Title, [string] $Text, [string] $OkText, [string] $RequireWord, [string] $OkStyle = 'DangerButton')
+    [bool](New-EmtConfirmWindow -Title $Title -Text $Text -OkText $OkText -RequireWord $RequireWord -OkStyle $OkStyle).ShowDialog()
 }
 
 function New-EmtConfirmWindow {
@@ -567,12 +571,12 @@ function New-EmtConfirmWindow {
         With -RequireWord the OK button is enabled only after the user types the word.
         The focus is on Cancel: Enter does not confirm a delete by mistake.
     #>
-    param([string] $Title, [string] $Text, [string] $OkText, [string] $RequireWord)
+    param([string] $Title, [string] $Text, [string] $OkText, [string] $RequireWord, [string] $OkStyle = 'DangerButton')
     $w = New-EmtDialog -Title $Title -Width 700
     $root = New-Object System.Windows.Controls.DockPanel
     $root.Margin = '18,16,18,14'
 
-    $b = New-EmtDialogButtons -OkText $OkText -OkStyle 'DangerButton'
+    $b = New-EmtDialogButtons -OkText $OkText -OkStyle $OkStyle
     $ok = $b.Ok; $cancel = $b.Cancel
     [void]$root.Children.Add($b.Panel)
     if ($RequireWord) {
@@ -773,8 +777,12 @@ function New-EmtAboutWindow {
 
 function Show-EmtAbout {
     $w = New-EmtAboutWindow
+    $script:AboutWindow = $w
+    $script:UpdateAfterAbout = $false
     Start-EmtUpdateCheck
-    try { [void]$w.ShowDialog() } finally { $script:AboutUpdate = $null }
+    try { [void]$w.ShowDialog() } finally { $script:AboutUpdate = $null; $script:AboutWindow = $null }
+    # The link "Update" in the window "About" closes the window first: the update dialogs open over the main window.
+    if ($script:UpdateAfterAbout) { $script:UpdateAfterAbout = $false; Start-EmtSelfUpdate }
 }
 
 #region ---------- Update check ----------
@@ -783,10 +791,38 @@ function Show-EmtAbout {
 # an Exchange operation can run at the same time.
 
 $script:Update               = $null   # the running request: @{ Client; Task; Watch }
-$script:UpdateInfo           = $null   # a newer release: @{ Version; Url }
+$script:UpdateInfo           = $null   # a newer release: @{ Version; Url; ZipUrl; Sha256; Size; Notes }
 $script:AboutUpdate          = $null   # the status line of the open window "About"
+$script:AboutWindow          = $null
+$script:UpdateAfterAbout     = $false
 $script:UpdateLogged         = ''      # the last result in the log: the same result is not written again
 $script:UpdateTimeoutSeconds = 5
+$script:Download             = $null   # the running download of an update: @{ Client; Task; Watch; Work; Zip; Info }
+$script:DownloadTimeoutSeconds = 120
+$script:UpdateCloseAt        = $null   # the installer runs: the timer closes the window at this time
+$script:UpdateResultPath     = Join-Path (Split-Path $SettingsPath) 'update-result.json'
+# The source of the releases: GitHub. -UpdateSource <folder> is only for a test: release.json and the ZIP file
+# in a local folder. All the checks of the package are the same.
+$script:UpdateApi    = (Get-EmtLinks).Api
+$script:UpdatePrefix = (Get-EmtLinks).GitHub + '/releases/download/'
+if ($UpdateSource) {
+    $updateDir = (Resolve-Path -LiteralPath $UpdateSource).ProviderPath.TrimEnd('\')
+    $script:UpdateApi    = ([uri](Join-Path $updateDir 'release.json')).AbsoluteUri
+    $script:UpdatePrefix = ([uri]($updateDir + '\')).AbsoluteUri
+}
+
+function New-EmtWebClient([string] $Accept = 'application/vnd.github+json') {
+    # PowerShell 5.1 can use old TLS versions only: GitHub needs TLS 1.2.
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $wc = New-Object System.Net.WebClient
+    $wc.Encoding = [Text.Encoding]::UTF8
+    $wc.Headers['User-Agent'] = 'ExchangeMessageTrail/' + (Get-EmtVersion)
+    $wc.Headers['Accept'] = $Accept
+    # The proxy of Windows with the Windows account of the user (a company proxy can require it).
+    $wc.Proxy = [Net.WebRequest]::GetSystemWebProxy()
+    $wc.Proxy.Credentials = [Net.CredentialCache]::DefaultCredentials
+    $wc
+}
 
 function Set-EmtSetting([string] $Name, $Value) {
     <# Writes one key to settings.json at once. The other keys stay. #>
@@ -804,16 +840,8 @@ function Test-EmtUpdateCheckOn {
 function Start-EmtUpdateCheck {
     if ($script:Update) { return }
     try {
-        # PowerShell 5.1 can use old TLS versions only: GitHub needs TLS 1.2.
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-        $wc = New-Object System.Net.WebClient
-        $wc.Encoding = [Text.Encoding]::UTF8
-        $wc.Headers['User-Agent'] = 'ExchangeMessageTrail/' + (Get-EmtVersion)
-        $wc.Headers['Accept'] = 'application/vnd.github+json'
-        # The proxy of Windows with the Windows account of the user (a company proxy can require it).
-        $wc.Proxy = [Net.WebRequest]::GetSystemWebProxy()
-        $wc.Proxy.Credentials = [Net.CredentialCache]::DefaultCredentials
-        $task = $wc.DownloadStringTaskAsync([uri](Get-EmtLinks).Api)
+        $wc = New-EmtWebClient
+        $task = $wc.DownloadStringTaskAsync([uri]$script:UpdateApi)
         $script:Update = @{ Client = $wc; Task = $task; Watch = [Diagnostics.Stopwatch]::StartNew() }
     } catch {
         Complete-EmtUpdateCheck -Problem $_.Exception.Message
@@ -842,9 +870,9 @@ function Receive-EmtUpdateCheck {
 }
 
 function Complete-EmtUpdateCheck([string] $Json, [string] $Problem) {
-    $state = 'Unknown'; $version = ''; $url = ''
+    $state = 'Unknown'; $version = ''; $url = ''; $rel = $null
     if (-not $Problem) {
-        $rel = ConvertFrom-EmtReleaseJson $Json
+        $rel = ConvertFrom-EmtReleaseJson $Json -DownloadPrefix $script:UpdatePrefix
         if ($rel) {
             $r = Get-EmtUpdateState -Current (Get-EmtVersion) -Tag $rel.Tag
             $state = $r.State; $version = $r.Version; $url = $rel.Url
@@ -856,7 +884,10 @@ function Complete-EmtUpdateCheck([string] $Json, [string] $Problem) {
     $toLog = $key -ne $script:UpdateLogged
     $script:UpdateLogged = $key
     switch ($state) {
-        'Newer'  { if ($toLog) { Write-EmtLog (T 'log.updateNewer' $version $url) 'Ok' }; $script:UpdateInfo = @{ Version = $version; Url = $url } }
+        'Newer'  {
+            if ($toLog) { Write-EmtLog (T 'log.updateNewer' $version $url) 'Ok' }
+            $script:UpdateInfo = @{ Version = $version; Url = $url; ZipUrl = $rel.ZipUrl; Sha256 = $rel.Sha256; Size = $rel.Size; Notes = $rel.Notes }
+        }
         'Latest' { if ($toLog) { Write-EmtLog (T 'log.updateLatest' (Get-EmtVersion)) }; $script:UpdateInfo = $null }
         default  { if ($toLog) { Write-EmtLog (T 'log.updateFailed' $Problem) 'Warn' } }
     }
@@ -888,6 +919,13 @@ function Set-EmtAboutUpdate([string] $State, [string] $Problem) {
         # Orange, as the notice at the bottom of the main window. The style still underlines the link on hover.
         Set-EmtBrush $h 'Text.Orange' ([System.Windows.Documents.TextElement]::ForegroundProperty)
         [void]$t.Inlines.Add($h)
+        if ($script:UpdateInfo.ZipUrl) {
+            [void]$t.Inlines.Add((New-Object System.Windows.Documents.Run '  ·  '))
+            [void]$t.Inlines.Add((New-EmtLink (T 'update.install') '' {
+                $script:UpdateAfterAbout = $true
+                if ($script:AboutWindow) { $script:AboutWindow.Close() }
+            }))
+        }
     } elseif ($State -eq 'Latest') {
         $t.Text = T 'update.latest'
     } else {
@@ -897,16 +935,27 @@ function Set-EmtAboutUpdate([string] $State, [string] $Problem) {
 }
 
 function Show-EmtUpdateNotice {
-    <# The line at the bottom of the main window: a newer version, the link "Download" and "Skip this version". #>
+    <#
+        The line at the bottom of the main window: a newer version, the link "Update" (or "Download" if the release
+        has no ZIP file of EMT) and "Skip this version".
+    #>
     $lblUpdate.Inlines.Clear()
     $i = $script:UpdateInfo
-    if (-not $i -or $i.Version -eq [string](Read-EmtSettings)['UpdateSkip']) { $lblUpdate.Visibility = 'Collapsed'; return }
+    # No notice during an update (for example, after a language change).
+    if (-not $i -or $script:Download -or $script:UpdateCloseAt -or $i.Version -eq [string](Read-EmtSettings)['UpdateSkip']) {
+        $lblUpdate.Visibility = 'Collapsed'; return
+    }
     $text = New-Object System.Windows.Documents.Run ((T 'update.notice' $i.Version) + ' ')
     Set-EmtBrush $text 'Text.Orange' ([System.Windows.Documents.TextElement]::ForegroundProperty)
     [void]$lblUpdate.Inlines.Add($text)
-    $download = New-EmtLink (T 'update.download') $i.Url ${function:Open-EmtUpdatePage}
-    $download.ToolTip = $i.Url
-    [void]$lblUpdate.Inlines.Add($download)
+    if ($i.ZipUrl) {
+        $install = New-EmtLink (T 'update.install') '' { Start-EmtSelfUpdate }
+        [void]$lblUpdate.Inlines.Add($install)
+    } else {
+        $download = New-EmtLink (T 'update.download') $i.Url ${function:Open-EmtUpdatePage}
+        $download.ToolTip = $i.Url
+        [void]$lblUpdate.Inlines.Add($download)
+    }
     [void]$lblUpdate.Inlines.Add((New-Object System.Windows.Documents.Run '  ·  '))
     [void]$lblUpdate.Inlines.Add((New-EmtLink (T 'update.skip') $i.Version {
         param($s, $e)
@@ -923,6 +972,168 @@ function Start-EmtUpdateCheckAtStart {
     if (-not (Test-EmtUpdateDue -Enabled (Test-EmtUpdateCheckOn) -LastCheck ([string]$last))) { return }
     Set-EmtSetting 'UpdateLastCheck' ((Get-Date).ToUniversalTime().ToString('o', [Globalization.CultureInfo]::InvariantCulture))
     Start-EmtUpdateCheck
+}
+
+#endregion
+
+#region ---------- Update in one click ----------
+# Start-EmtSelfUpdate: confirmation, then the download of the ZIP file (the timer examines it).
+# Install-EmtUpdate: the checksum, the package check, then src\Update-Emt.ps1 replaces the files and EMT closes.
+# Receive-EmtUpdateResult: at the next start, the result of the update goes to the log and to audit.csv.
+
+function Get-EmtUpdateBackupPath {
+    Join-Path $env:LOCALAPPDATA ('ExchangeMessageTrail\backup\EMT-' + (Get-EmtVersion))
+}
+
+function Start-EmtSelfUpdate {
+    $i = $script:UpdateInfo
+    # An update runs (download, check, or the installer waits for EMT to close): no second start.
+    if (-not $i -or -not $i.ZipUrl -or $script:Download -or $script:UpdateCloseAt) { return }
+    if ($script:Job) { [void](Show-EmtMessage -Text (T 'update.busy') -Kind Warn); return }
+    # The folder of EMT must be writable (not, for example, "Program Files" without administrator rights).
+    $probe = Join-Path $PSScriptRoot ('.emt-write-test-' + [guid]::NewGuid().ToString('n'))
+    try { [IO.File]::WriteAllText($probe, ''); Remove-Item -LiteralPath $probe -Force }
+    catch {
+        Write-EmtLog (T 'update.noWrite' $PSScriptRoot) 'Warn'
+        [void](Show-EmtMessage -Text (T 'update.noWrite' $PSScriptRoot) -Kind Warn)
+        try { Start-Process -FilePath $i.Url } catch { }
+        return
+    }
+    $text = T 'update.confirm' (Get-EmtVersion) $i.Version (Get-EmtUpdateBackupPath)
+    $notes = Get-EmtReleaseNotes $i.Notes
+    if ($notes) { $text += "`r`n`r`n" + (T 'update.whatsNew') + "`r`n`r`n" + $notes }
+    if (-not (Show-EmtConfirm -Title (T 'update.confirmTitle') -Text $text -OkText (T 'update.install') -OkStyle 'AccentButton')) { return }
+    $work = ''
+    # During the update, the tabs are disabled (no operation can start), and the notice with "Update" closes.
+    $mainTabs.IsEnabled = $false
+    $lblUpdate.Visibility = 'Collapsed'
+    try {
+        $work = Join-Path $env:TEMP ('EMT-update-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $work | Out-Null
+        $zip = Join-Path $work ([IO.Path]::GetFileName(([uri]$i.ZipUrl).LocalPath))
+        $wc = New-EmtWebClient 'application/octet-stream'
+        Set-EmtUpdateProgress 0 (T 'update.downloading' $i.Version 0)
+        $script:Download = @{ Client = $wc; Work = $work; Zip = $zip; Info = $i; Watch = [Diagnostics.Stopwatch]::StartNew()
+                              Task = $wc.DownloadFileTaskAsync([uri]$i.ZipUrl, $zip) }
+    } catch {
+        Stop-EmtSelfUpdate $_.Exception.Message $work
+    }
+}
+
+function Set-EmtUpdateProgress([double] $Value, [string] $Text, [switch] $Render) {
+    <#
+        The progress bar and the status text of the update: download 0-80 %, check 90 %, installation 100 %.
+        -Render: show the change now, before a step that blocks the window for some time.
+    #>
+    $progress.Value = $Value
+    Set-EmtStatusText $Text
+    if ($Render) { $window.Dispatcher.Invoke([Action]{ }, [System.Windows.Threading.DispatcherPriority]::Background) }
+}
+
+function Receive-EmtUpdateDownload {
+    <# The timer calls it. While the download runs, it shows the progress (the size of the file part on the disk). #>
+    $d = $script:Download
+    if (-not $d) { return }
+    $problem = ''
+    if ($d.Task.IsCompleted) {
+        if ([string]$d.Task.Status -ne 'RanToCompletion') {
+            $ex = $d.Task.Exception
+            while ($ex -and $ex.InnerException) { $ex = $ex.InnerException }
+            $problem = if ($ex) { $ex.Message } else { [string]$d.Task.Status }
+        }
+    } elseif ($d.Watch.Elapsed.TotalSeconds -ge $script:DownloadTimeoutSeconds) {
+        try { $d.Client.CancelAsync() } catch { }
+        $problem = T 'update.timeout' $script:DownloadTimeoutSeconds
+    } else {
+        $pct = 0
+        if ($d.Info.Size -gt 0 -and (Test-Path -LiteralPath $d.Zip)) {
+            $pct = [math]::Min(99, [math]::Floor(100 * (Get-Item -LiteralPath $d.Zip).Length / $d.Info.Size))
+        }
+        Set-EmtUpdateProgress (0.8 * $pct) (T 'update.downloading' $d.Info.Version $pct)
+        return
+    }
+    try { $d.Client.Dispose() } catch { }
+    if ($problem) { Stop-EmtSelfUpdate $problem $d.Work; return }
+    Install-EmtUpdate $d
+}
+
+function Stop-EmtSelfUpdate([string] $Problem, [string] $Work) {
+    <# The update stops before a file of EMT changes. #>
+    $script:Download = $null
+    $mainTabs.IsEnabled = $true
+    $progress.Value = 0
+    Set-EmtStatusText ''
+    Show-EmtUpdateNotice
+    if ($Work) { Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-EmtLog (T 'update.notInstalled' $Problem) 'Warn'
+    [void](Show-EmtMessage -Text (T 'update.notInstalled' $Problem) -Kind Warn)
+}
+
+function ConvertTo-EmtArgument([string] $Value) {
+    <# One argument of a command line. Start-Process does not put quotes around a value with spaces. #>
+    if ($Value -match '[\s"]' -or -not $Value) { '"' + ($Value -replace '"', '\"') + '"' } else { $Value }
+}
+
+function Install-EmtUpdate($d) {
+    Set-EmtUpdateProgress 90 (T 'update.verifying') -Render
+    try {
+        if ($d.Info.Sha256 -and (Get-FileHash -LiteralPath $d.Zip -Algorithm SHA256).Hash -ne $d.Info.Sha256) { throw (T 'update.hashBad') }
+        $pkgDir = Join-Path $d.Work 'package'
+        Expand-Archive -LiteralPath $d.Zip -DestinationPath $pkgDir -Force
+        $pkg = Test-EmtPackage -Path $pkgDir -Version $d.Info.Version
+        if ($pkg.Problem) { throw $pkg.Problem }
+        # The installer of this version runs from the temporary folder: the EMT folder changes.
+        $updater = Join-Path $d.Work 'Update-Emt.ps1'
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'src\Update-Emt.ps1') -Destination $updater
+        # Not "$log": the script has the log control $log (a name of a window control must not get another value).
+        $updateLog = Join-Path $AppDir ('logs\EMT_update_{0:yyyyMMdd_HHmmss}.log' -f (Get-Date))
+        $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', $updater,
+                     '-ProcessId', $PID, '-Source', $pkg.Root, '-Target', $PSScriptRoot, '-Backup', (Get-EmtUpdateBackupPath),
+                     '-ResultPath', $script:UpdateResultPath, '-FromVersion', (Get-EmtVersion), '-ToVersion', $d.Info.Version,
+                     '-LogPath', $updateLog) | ForEach-Object { ConvertTo-EmtArgument ([string]$_) }
+        # The log line first: after the start of the installer, EMT must close without other steps.
+        Write-EmtLog (T 'log.updateStarted' (Get-EmtVersion) $d.Info.Version) 'Ok'
+        Receive-EmtLog
+        Start-Process -FilePath 'powershell.exe' -ArgumentList ($argList -join ' ') -WindowStyle Hidden
+    } catch {
+        Stop-EmtSelfUpdate $_.Exception.Message $d.Work
+        return
+    }
+    $script:Download = $null
+    # The installer waits until this process closes. The window stays open 1.5 s: the user sees the last step.
+    # The timer closes it. No operation runs (the tabs are disabled): Closing does not stop.
+    Set-EmtUpdateProgress 100 (T 'update.installing') -Render
+    $script:UpdateCloseAt = (Get-Date).AddSeconds(1.5)
+}
+
+function Receive-EmtUpdateResult {
+    <# At the start: the result of the last update (src\Update-Emt.ps1) goes to the log and to audit.csv. #>
+    Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'EMT-update-*' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    $path = $script:UpdateResultPath
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    $r = $null
+    try { $r = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
+    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    if (-not $r) { return }
+    $from = [string](Get-EmtProp $r 'From'); $to = [string](Get-EmtProp $r 'To')
+    $err = [string](Get-EmtProp $r 'Error'); $backup = [string](Get-EmtProp $r 'Backup')
+    $res = [string](Get-EmtProp $r 'Result')
+    switch ($res) {
+        'OK'         { Write-EmtLog (T 'log.updateDone' $from $to $backup) 'Ok' }
+        'RolledBack' { $m = T 'log.updateRolledBack' $from $to $err; Write-EmtLog $m 'Error'; [void](Show-EmtMessage -Text $m -Kind Error) }
+        default      {
+            # No copy: the installer stopped before a change (for example, EMT did not close). The files are the same.
+            $m = if ($backup) { T 'log.updateBroken' $from $to $err $backup } else { T 'log.updateNotChanged' $from $to $err }
+            Write-EmtLog $m 'Error'; [void](Show-EmtMessage -Text $m -Kind Error)
+        }
+    }
+    try {
+        Write-EmtAudit -Path $AuditPath -Record @{
+            Action = 'Update'; Result = $(if ($res) { $res } else { 'Failed' })
+            Details = ("$from -> $to " + $err).Trim()
+        }
+    } catch { Write-EmtLog (T 'log.auditFailed' $_.Exception.Message) 'Error' }
 }
 
 #endregion
@@ -2468,6 +2679,8 @@ $timer.Add_Tick({
     if ((Get-Date).Date -ne $script:PeriodMarkDay) { $script:PeriodMarkDay = (Get-Date).Date; Update-EmtPeriodMarks }
     Receive-EmtLog
     if ($script:Update) { Receive-EmtUpdateCheck }
+    if ($script:Download) { Receive-EmtUpdateDownload }
+    if ($script:UpdateCloseAt -and (Get-Date) -ge $script:UpdateCloseAt) { $script:UpdateCloseAt = $null; $window.Close() }
     if ($script:Job) {
         $progress.Value = [int]$Sync.Progress
         $st = [string]$Sync.Status
@@ -2544,6 +2757,7 @@ $window.Add_ContentRendered({
     Write-EmtLog (T 'log.auditFile' $AuditPath)
     foreach ($m in $script:Migrated) { Write-EmtLog (T 'log.migrated' $m) 'Ok' }
     Update-EmtShortcut
+    Receive-EmtUpdateResult
     Start-EmtUpdateCheckAtStart
     if ($tbServer.Text) { $btnConnect.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
 })

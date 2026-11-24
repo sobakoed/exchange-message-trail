@@ -299,6 +299,18 @@ The window asks the GitHub API for the last release (`Get-EmtLinks`, key `Api`).
 | Result | `ConvertFrom-EmtReleaseJson` (the tag and the release page of the EMT repository only) and `Get-EmtUpdateState` (Newer, Latest, Unknown). The log gets one line. |
 | Notice | `Show-EmtUpdateNotice`: the line `lblUpdate` at the bottom of the window. **Skip this version** keeps the version in `UpdateSkip`. |
 
+### Update in one click
+
+| Step | Code |
+|---|---|
+| Release data | `ConvertFrom-EmtReleaseJson`: `ZipUrl` only for `ExchangeMessageTrail-<tag version>.zip` from the downloads of the EMT repository; `Sha256` from the GitHub `digest`; `Notes`. |
+| Start | `Start-EmtSelfUpdate`: no running operation, the EMT folder is writable, `Show-EmtConfirm` with `Get-EmtReleaseNotes`. |
+| Download | `WebClient.DownloadFileTaskAsync` to `%TEMP%\EMT-update-<guid>`. The timer calls `Receive-EmtUpdateDownload` (120 s). |
+| Checks | `Install-EmtUpdate`: `Get-FileHash` (if GitHub gives the SHA-256), `Expand-Archive`, `Test-EmtPackage` (the files and `Get-EmtVersion` of the package). |
+| Install | `src\Update-Emt.ps1` runs from the temporary folder: it waits for the EMT process, copies the EMT folder to `%LOCALAPPDATA%\ExchangeMessageTrail\backup\EMT-<version>`, mirrors `src`, `gui`, `help`, adds the files of `Lang` and the root files, removes old files, unblocks, starts `EMT.cmd`. On an error: `robocopy /MIR` from the copy. |
+| Result | `update-result.json` next to `settings.json`. At the start, `Receive-EmtUpdateResult` writes the log line and the audit row `Update`, and removes old `EMT-update-*` folders. |
+| Test | `ExchangeMessageTrail.ps1 -UpdateSource <folder>`: `release.json` and the ZIP file from a local folder. The checks are the same. |
+
 ## Code rules
 
 - Use `Set-StrictMode -Version 2.0` in the core. Use `Get-EmtProp` to read a property that can be missing.

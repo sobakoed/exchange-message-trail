@@ -314,6 +314,17 @@ The procedure uses the English interface. Select **English** in the language lis
 8. Clear **Check for updates at start**. Make sure that `settings.json` has `"UpdateCheck": false`.
 9. Set `Get-EmtVersion` back to the correct version.
 
+### Update in one click
+
+1. Make a test folder with the ZIP file of a newer version and `release.json` (the answer of the GitHub API with
+   `tag_name` and an asset `ExchangeMessageTrail-X.Y.Z.zip`, `browser_download_url` = the file URI of the ZIP file).
+2. Start `EMT.cmd -UpdateSource <test folder>`.
+3. Click **?** → **About**, then click **Update**.
+4. Make sure that the dialog shows the versions and the text "What is new". Click **Update**.
+5. Make sure that EMT closes and starts again in the new version.
+6. Make sure that the log shows "EMT is updated" and that `audit.csv` has the row `Update`, `OK`.
+7. Make sure that the shortcut is in the EMT folder and the copy is in `%LOCALAPPDATA%\ExchangeMessageTrail\backup`.
+
 ### Cancel
 
 1. On the tab **Delete**, select **Search all mailboxes**.

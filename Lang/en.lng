@@ -471,6 +471,23 @@ update.timeout = No answer in {0} s.
 log.updateNewer = Update check: version {0} is available. {1}
 log.updateLatest = Update check: you have the latest version ({0}).
 log.updateFailed = Update check failed: {0}
+update.install = Update
+update.confirmTitle = Update EMT
+update.confirm = Update EMT from version {0} to version {1}? EMT closes and starts again. A copy of the current version stays in the folder {2}.
+update.whatsNew = What is new:
+update.busy = An operation runs. Wait until it ends, then update EMT.
+update.noWrite = EMT cannot write to its folder: {0}. Start EMT as an administrator, or update EMT manually. The release page opens.
+update.downloading = Downloading the update {0}… {1} %
+update.verifying = Checking the update…
+update.installing = Installing the update… EMT starts again.
+update.notInstalled = The update is not installed: {0}
+update.hashBad = the checksum of the file is not correct.
+update.pkgBad = the archive does not contain EMT {0}.
+log.updateStarted = Update {0} → {1}: EMT closes and starts again.
+log.updateDone = EMT is updated: {0} → {1}. The copy of the earlier version: {2}
+log.updateRolledBack = The update {0} → {1} failed: {2}. The earlier version is restored.
+log.updateBroken = The update {0} → {1} failed: {2}. The copy of the earlier version: {3}
+log.updateNotChanged = The update {0} → {1} failed: {2}. The files of EMT did not change.
 
 # ---- Shortcut ----
 log.shortcutMade = The shortcut with the EMT icon: {0}. Copy it to the desktop or to the Start menu if necessary.

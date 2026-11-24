@@ -1833,3 +1833,166 @@ Describe 'Classic window removed (2.3.1)' {
         [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8) | Should -Match "\`$s\.Remove\('Window'\)"
     }
 }
+
+Describe 'Update in one click (2.3.2)' {
+    BeforeAll {
+        $root = Split-Path -Parent $PSScriptRoot
+        $main = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8)
+        $updater = Join-Path $root 'src\Update-Emt.ps1'
+        $dl = 'https://github.com/sobakoed/exchange-message-trail/releases/download/v9.0.0/'
+        function New-Release([string] $Name = 'ExchangeMessageTrail-9.0.0.zip', [string] $Url = ($dl + 'ExchangeMessageTrail-9.0.0.zip'), [string] $Digest = '') {
+            $asset = [ordered]@{ name = $Name; browser_download_url = $Url; size = 980574 }
+            if ($Digest) { $asset.digest = $Digest }
+            [ordered]@{ tag_name = 'v9.0.0'; html_url = 'https://github.com/sobakoed/exchange-message-trail/releases/tag/v9.0.0'
+                        body = "**New**`r`n`r`n- A **new** ``thing``.`r`n`r`n**Download**`r`n`r`n1. Download it."
+                        assets = @(@{ name = 'other.txt'; browser_download_url = ($dl + 'other.txt') }, $asset) } | ConvertTo-Json -Depth 5
+        }
+        function New-Package([string] $Dir, [string] $Version, [string[]] $Skip = @()) {
+            foreach ($f in 'EMT.cmd', 'ExchangeMessageTrail.ps1', 'src\EMT.Core.ps1', 'src\Update-Emt.ps1', 'gui\MainWindow.xaml', 'Lang\en.lng', 'help\en.html') {
+                if ($f -in $Skip) { continue }
+                $path = Join-Path $Dir $f
+                New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
+                $text = if ($f -eq 'src\EMT.Core.ps1') { "function Get-EmtVersion { '$Version' }" } else { "$f $Version" }
+                Set-Content -LiteralPath $path -Value $text -Encoding UTF8
+            }
+        }
+        function Get-Done { $p = Get-Process -Id $PID; $q = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c exit' -PassThru -WindowStyle Hidden; $q.WaitForExit(); $q.Id }
+    }
+    It 'ConvertFrom-EmtReleaseJson finds the ZIP file of the version and its SHA-256' {
+        $h = 'a' * 64
+        $r = ConvertFrom-EmtReleaseJson (New-Release -Digest "sha256:$h")
+        $r.ZipUrl | Should -Be ($dl + 'ExchangeMessageTrail-9.0.0.zip')
+        $r.Sha256 | Should -Be $h.ToUpperInvariant()
+        $r.Size | Should -Be 980574
+        $r.Notes | Should -Match 'Download'
+    }
+    It 'ConvertFrom-EmtReleaseJson gives no ZIP file for <Name>' -ForEach @(
+        @{ Name = 'another host';    Zip = 'ExchangeMessageTrail-9.0.0.zip'; Url = 'https://evil.example/ExchangeMessageTrail-9.0.0.zip' }
+        @{ Name = 'another repo';    Zip = 'ExchangeMessageTrail-9.0.0.zip'; Url = 'https://github.com/evil/exchange-message-trail/releases/download/v9.0.0/ExchangeMessageTrail-9.0.0.zip' }
+        @{ Name = 'another version'; Zip = 'ExchangeMessageTrail-8.0.0.zip'; Url = 'https://github.com/sobakoed/exchange-message-trail/releases/download/v9.0.0/ExchangeMessageTrail-8.0.0.zip' }
+        @{ Name = 'another file';    Zip = 'ExchangeMessageTrail-9.0.0.zip'; Url = 'https://github.com/sobakoed/exchange-message-trail/releases/download/v9.0.0/x.zip' }
+        @{ Name = 'http';            Zip = 'ExchangeMessageTrail-9.0.0.zip'; Url = 'http://github.com/sobakoed/exchange-message-trail/releases/download/v9.0.0/ExchangeMessageTrail-9.0.0.zip' }
+    ) {
+        (ConvertFrom-EmtReleaseJson (New-Release -Name $Zip -Url $Url)).ZipUrl | Should -BeNullOrEmpty
+    }
+    It 'ConvertFrom-EmtReleaseJson ignores a digest that is not SHA-256' {
+        (ConvertFrom-EmtReleaseJson (New-Release -Digest 'md5:abc')).Sha256 | Should -BeNullOrEmpty
+    }
+    It 'Get-EmtReleaseNotes removes the part "Download" and the Markdown marks' {
+        $n = Get-EmtReleaseNotes (ConvertFrom-Json (New-Release)).body
+        $n | Should -Be ("New`n`n- A new thing.")
+        (Get-EmtReleaseNotes ('x' * 50) -Max 10) | Should -Be ('x' * 10 + ' …')
+        Get-EmtReleaseNotes '' | Should -BeNullOrEmpty
+    }
+    It 'Test-EmtPackage accepts EMT of the version, also in one subfolder' {
+        $d = Join-Path $TestDrive 'pkg1'
+        New-Package (Join-Path $d 'ExchangeMessageTrail-9.0.0') '9.0.0'
+        $r = Test-EmtPackage -Path $d -Version '9.0.0'
+        $r.Problem | Should -BeNullOrEmpty
+        $r.Root | Should -Be (Join-Path $d 'ExchangeMessageTrail-9.0.0')
+    }
+    It 'Test-EmtPackage rejects another version and a package without a file' {
+        $d = Join-Path $TestDrive 'pkg2'; New-Package $d '8.0.0'
+        (Test-EmtPackage -Path $d -Version '9.0.0').Problem | Should -Not -BeNullOrEmpty
+        $d = Join-Path $TestDrive 'pkg3'; New-Package $d '9.0.0' -Skip 'src\Update-Emt.ps1'
+        (Test-EmtPackage -Path $d -Version '9.0.0').Problem | Should -Not -BeNullOrEmpty
+    }
+    It 'Update-Emt.ps1 installs the package, keeps the files of the user and makes a copy' {
+        $t = Join-Path $TestDrive 'u1'
+        $target = Join-Path $t 'EMT'; $source = Join-Path $t 'new'; $backup = Join-Path $t 'backup\EMT-1.0.0'
+        New-Package $target '1.0.0'
+        Set-Content (Join-Path $target 'src\old-only.ps1') 'old' -Encoding UTF8
+        Set-Content (Join-Path $target 'Lang\de.lng') 'user language' -Encoding UTF8
+        Set-Content (Join-Path $target 'Exchange Message Trail.lnk') 'shortcut' -Encoding UTF8
+        Set-Content (Join-Path $target 'EMT-Classic.cmd') 'classic' -Encoding UTF8
+        New-Item -ItemType Directory (Join-Path $t 'backup\EMT-0.9.0') -Force | Out-Null
+        New-Package $source '2.0.0'
+        $result = Join-Path $t 'result.json'
+        & $updater -ProcessId (Get-Done) -Source $source -Target $target -Backup $backup -ResultPath $result `
+                   -FromVersion '1.0.0' -ToVersion '2.0.0' -LogPath (Join-Path $t 'update.log') -NoStart
+        $r = Get-Content $result -Raw | ConvertFrom-Json
+        $r.Result | Should -Be 'OK'
+        Get-Content (Join-Path $target 'src\EMT.Core.ps1') | Should -Match "'2\.0\.0'"
+        Join-Path $target 'src\old-only.ps1' | Should -Not -Exist
+        Join-Path $target 'Lang\de.lng' | Should -Exist
+        Join-Path $target 'Exchange Message Trail.lnk' | Should -Exist
+        Join-Path $target 'EMT-Classic.cmd' | Should -Not -Exist
+        Get-Content (Join-Path $backup 'src\EMT.Core.ps1') | Should -Match "'1\.0\.0'"
+        Join-Path $t 'backup\EMT-0.9.0' | Should -Not -Exist
+    }
+    It 'Update-Emt.ps1 restores the earlier version if the copy of the new files fails' {
+        $t = Join-Path $TestDrive 'u2'
+        $target = Join-Path $t 'EMT'; $source = Join-Path $t 'new'; $backup = Join-Path $t 'backup\EMT-1.0.0'
+        New-Package $target '1.0.0'
+        Set-Content (Join-Path $target 'Exchange Message Trail.lnk') 'shortcut' -Encoding UTF8
+        # The package has no folder "help": the copy fails after "src" and "gui" are replaced.
+        New-Package $source '2.0.0' -Skip 'help\en.html'
+        Remove-Item (Join-Path $source 'help') -Recurse -Force -ErrorAction SilentlyContinue
+        $result = Join-Path $t 'result.json'
+        & $updater -ProcessId (Get-Done) -Source $source -Target $target -Backup $backup -ResultPath $result -NoStart
+        $r = Get-Content $result -Raw | ConvertFrom-Json
+        $r.Result | Should -Be 'RolledBack'
+        $r.Error | Should -Match 'help'
+        Get-Content (Join-Path $target 'src\EMT.Core.ps1') | Should -Match "'1\.0\.0'"
+        Get-Content (Join-Path $target 'gui\MainWindow.xaml') | Should -Match '1\.0\.0'
+        Join-Path $target 'help\en.html' | Should -Exist
+        Join-Path $target 'Exchange Message Trail.lnk' | Should -Exist
+    }
+    It 'Update-Emt.ps1 does not change files if EMT does not close' {
+        $t = Join-Path $TestDrive 'u3'
+        $target = Join-Path $t 'EMT'; $source = Join-Path $t 'new'
+        New-Package $target '1.0.0'; New-Package $source '2.0.0'
+        $result = Join-Path $t 'result.json'
+        & $updater -ProcessId $PID -Source $source -Target $target -Backup (Join-Path $t 'backup\EMT-1.0.0') -ResultPath $result -WaitSeconds 1 -NoStart
+        $r = Get-Content $result -Raw | ConvertFrom-Json
+        $r.Result | Should -Be 'Failed'
+        # No copy: EMT tells that the files did not change.
+        $r.Backup | Should -BeNullOrEmpty
+        Get-Content (Join-Path $target 'src\EMT.Core.ps1') | Should -Match "'1\.0\.0'"
+    }
+    It 'the window checks the folder rights, the checksum and the package, then starts the installer and closes' {
+        $main | Should -Match '\.emt-write-test-'
+        $main | Should -Match "Get-FileHash -LiteralPath \`$d\.Zip -Algorithm SHA256"
+        $main | Should -Match 'Test-EmtPackage -Path \$pkgDir'
+        $main | Should -Match "src\\Update-Emt\.ps1"
+        $main | Should -Match "Show-EmtConfirm -Title \(T 'update\.confirmTitle'\)"
+        $main | Should -Match 'if \(\$script:Job\) \{ \[void\]\(Show-EmtMessage -Text \(T ''update\.busy''\)'
+        $main | Should -Match 'Receive-EmtUpdateResult'
+        $main | Should -Match "Action = 'Update'"
+        # The progress: download 0-80 %, check 90 %, installation 100 %; the window closes 1.5 s later.
+        $main | Should -Match "Set-EmtUpdateProgress 90 \(T 'update\.verifying'\) -Render"
+        $main | Should -Match "Set-EmtUpdateProgress 100 \(T 'update\.installing'\) -Render"
+        $main | Should -Match '\$mainTabs\.IsEnabled = \$false'
+        # The window keeps each value of the release that the update uses (the size: the progress of the download).
+        foreach ($k in 'Version', 'Url', 'ZipUrl', 'Sha256', 'Size', 'Notes') {
+            $main | Should -Match ('\$script:UpdateInfo = @\{[^}]*\b' + $k + ' = ') -Because $k
+        }
+        # During an update: the notice with "Update" is closed, and a second start is not possible.
+        $main | Should -Match "\`$lblUpdate\.Visibility = 'Collapsed'"
+        $main | Should -Match '-or \$script:Download -or \$script:UpdateCloseAt\) \{ return \}'
+    }
+    It 'the release contains the installer' {
+        [IO.File]::ReadAllText((Join-Path $root 'tools\Make-Release.ps1')) | Should -Match "'src'"
+        $updater | Should -Exist
+    }
+}
+
+Describe 'The names of the window controls (lesson of 2.3.2)' {
+    It 'the script gives no other value to a variable with the name of a window control' {
+        # PowerShell finds variables in the calling scopes: a local "$log = 'C:\...'" in a function hides
+        # the log control $log for each function that the function calls (the error "FontWeight" of 2.3.2).
+        $root = Split-Path -Parent $PSScriptRoot
+        $xaml = [IO.File]::ReadAllText((Join-Path $root 'gui\MainWindow.xaml'), [Text.Encoding]::UTF8)
+        $names = @([regex]::Matches($xaml, 'x:Name="([A-Za-z0-9_]+)"') | ForEach-Object { $_.Groups[1].Value })
+        $names.Count | Should -BeGreaterThan 50
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'ExchangeMessageTrail.ps1'), [ref]$null, [ref]$null)
+        $bad = @($ast.FindAll({ param($n)
+            ($n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+             $n.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+             $n.Left.VariablePath.UserPath -in $names) -or
+            ($n -is [System.Management.Automation.Language.ForEachStatementAst] -and $n.Variable.VariablePath.UserPath -in $names) -or
+            ($n -is [System.Management.Automation.Language.ParameterAst] -and $n.Name.VariablePath.UserPath -in $names)
+        }, $true) | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Extent.Text.Split([char]10)[0])" })
+        $bad | Should -BeNullOrEmpty -Because ($bad -join '; ')
+    }
+}

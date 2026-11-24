@@ -19,7 +19,7 @@ Set-StrictMode -Version 2.0
 function Get-EmtSearchPrefix { 'EMT_' }
 
 # The version of EMT. A unit test compares it with the first section of CHANGELOG.md.
-function Get-EmtVersion { '2.3.1' }
+function Get-EmtVersion { '2.3.2' }
 
 # The links of the window "About". A unit test compares the TON address with README.md.
 # Api: the last release (the update check). It is public: no token, no user data.
@@ -38,21 +38,83 @@ function Get-EmtLinks {
 function ConvertFrom-EmtReleaseJson {
     <#
         Reads the answer of the GitHub API "releases/latest".
-        Returns @{ Tag = 'v2.3.1'; Url = <the page of the release> }, or $null if the answer is not correct.
+        Returns Tag ('v2.3.1'), Url (the page of the release), ZipUrl, Sha256 and Size (the ZIP file of the release),
+        Notes (the release text). Returns $null if the answer is not correct.
         The page must be a release page of the EMT repository. If not, Url is the page of the last release.
+        The ZIP file must be "ExchangeMessageTrail-<the version of the tag>.zip" and its address must start with
+        -DownloadPrefix (the downloads of the EMT repository). If not, ZipUrl is empty: no update in one click.
+        -DownloadPrefix is different only for a test with a local folder (ExchangeMessageTrail.ps1 -UpdateSource).
     #>
-    param([AllowEmptyString()] [string] $Json)
+    param(
+        [AllowEmptyString()] [string] $Json,
+        [string] $DownloadPrefix = ((Get-EmtLinks).GitHub + '/releases/download/')
+    )
     if (-not $Json) { return $null }
     try { $j = $Json | ConvertFrom-Json } catch { return $null }
     if (-not $j -or -not ($j.PSObject.Properties.Name -contains 'tag_name')) { return $null }
     $tag = [string]$j.tag_name
     if ($tag -notmatch '^v?\d+\.\d+\.\d+$') { return $null }
     $links = Get-EmtLinks
-    $url = if ($j.PSObject.Properties.Name -contains 'html_url') { [string]$j.html_url } else { '' }
+    $names = @($j.PSObject.Properties.Name)
+    $url = if ($names -contains 'html_url') { [string]$j.html_url } else { '' }
     if (-not $url.StartsWith($links.GitHub + '/releases/', [StringComparison]::Ordinal) -or $url -match '[\s"<>]') {
         $url = $links.Releases
     }
-    [pscustomobject]@{ Tag = $tag; Url = $url }
+    $zipName = 'ExchangeMessageTrail-{0}.zip' -f ($tag -replace '^[vV]', '')
+    $zipUrl = ''; $sha = ''; [long]$size = 0
+    if ($names -contains 'assets') {
+        foreach ($a in @($j.assets)) {
+            if (-not $a) { continue }
+            $an = @($a.PSObject.Properties.Name)
+            if (-not ($an -contains 'name') -or [string]$a.name -ne $zipName -or -not ($an -contains 'browser_download_url')) { continue }
+            $u = [string]$a.browser_download_url
+            if (-not $u.StartsWith($DownloadPrefix, [StringComparison]::OrdinalIgnoreCase) -or $u -match '[\s"<>]' -or
+                -not $u.EndsWith('/' + $zipName, [StringComparison]::Ordinal)) { continue }
+            $zipUrl = $u
+            # GitHub gives the SHA-256 of a file as "sha256:<64 hex digits>" (files of 2025 and later).
+            if ($an -contains 'digest' -and [string]$a.digest -match '^sha256:([0-9a-fA-F]{64})$') { $sha = $Matches[1].ToUpperInvariant() }
+            # The size in bytes: the progress of the download.
+            if ($an -contains 'size') { [void][long]::TryParse([string]$a.size, [ref]$size) }
+            break
+        }
+    }
+    $notes = if ($names -contains 'body') { [string]$j.body } else { '' }
+    [pscustomobject]@{ Tag = $tag; Url = $url; ZipUrl = $zipUrl; Sha256 = $sha; Size = $size; Notes = $notes }
+}
+
+function Get-EmtReleaseNotes {
+    <#
+        The text "What is new" of a release for the update dialog: the release text without the part
+        "Download" and without the Markdown marks ** and `. Not more than -Max characters.
+    #>
+    param([AllowEmptyString()] [string] $Body, [int] $Max = 3000)
+    $t = ([string]$Body) -replace "`r`n", "`n"
+    $i = $t.IndexOf('**Download**', [StringComparison]::Ordinal)
+    if ($i -ge 0) { $t = $t.Substring(0, $i) }
+    $t = ($t -replace '\*\*', '' -replace '`', '').Trim()
+    if ($t.Length -gt $Max) { $t = $t.Substring(0, $Max).TrimEnd() + ' …' }
+    $t
+}
+
+function Test-EmtPackage {
+    <#
+        Examines an extracted ZIP file of a release. The folder can contain the EMT files,
+        or one folder with them (ExchangeMessageTrail-X.Y.Z).
+        Returns Root (the folder with EMT.cmd) and Problem (empty if the package is EMT of -Version).
+    #>
+    param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [string] $Version)
+    $root = $Path
+    if (-not (Test-Path -LiteralPath (Join-Path $root 'EMT.cmd'))) {
+        $dirs = @(Get-ChildItem -LiteralPath $Path -Directory -ErrorAction SilentlyContinue)
+        if ($dirs.Count -eq 1) { $root = $dirs[0].FullName }
+    }
+    foreach ($f in 'EMT.cmd', 'ExchangeMessageTrail.ps1', 'src\EMT.Core.ps1', 'src\Update-Emt.ps1', 'gui\MainWindow.xaml', 'Lang\en.lng') {
+        if (-not (Test-Path -LiteralPath (Join-Path $root $f))) { return [pscustomobject]@{ Root = $root; Problem = (T 'update.pkgBad' $Version) } }
+    }
+    $core = [IO.File]::ReadAllText((Join-Path $root 'src\EMT.Core.ps1'))
+    $m = [regex]::Match($core, "function Get-EmtVersion \{ '(\d+\.\d+\.\d+)' \}")
+    if (-not $m.Success -or $m.Groups[1].Value -ne $Version) { return [pscustomobject]@{ Root = $root; Problem = (T 'update.pkgBad' $Version) } }
+    [pscustomobject]@{ Root = $root; Problem = '' }
 }
 
 function Get-EmtUpdateState {
@@ -1779,8 +1841,8 @@ function Get-EmtRuleMatch {
         -SenderDn: the LegacyExchangeDN of an internal sender. A rule made in Outlook keeps the sender
         as "Name" [EX:/o=.../cn=Recipients/cn=...], without the SMTP address.
     #>
-    param($Rule, [string] $Sender, [string] $Subject, [string] $SenderDn)
-    $s = ([string]$Sender).ToLowerInvariant()
+    param($Rule, [Alias('Sender')] [string] $SenderAddress, [string] $Subject, [string] $SenderDn)
+    $s = ([string]$SenderAddress).ToLowerInvariant()
     $ex = if ($SenderDn) { '[ex:' + $SenderDn.ToLowerInvariant() + ']' } else { '' }
     $subj = ([string]$Subject).ToLowerInvariant()
     $from      = @(@(Get-EmtProp $Rule 'From') | Where-Object { $_ })
@@ -1804,7 +1866,7 @@ function Get-EmtMailboxFindings {
         The findings of the mailbox check. Data: Rules, Junk, Box (Get-Mailbox), Stats (Get-MailboxStatistics)
         and an error text for each. Returns Severity (Alert / Warn / Info), Area and Text.
     #>
-    param([Parameter(Mandatory)] $Data, [string] $Sender, [string] $Subject)
+    param([Parameter(Mandatory)] $Data, [Alias('Sender')] [string] $SenderAddress, [string] $Subject)
     $out = New-Object System.Collections.Generic.List[object]
     $add = { param($sev, $area, $text) $out.Add([pscustomobject]@{ Severity = $sev; Area = $area; Text = $text }) }
 
@@ -1818,7 +1880,7 @@ function Get-EmtMailboxFindings {
         $fwd  = @(@(@(Get-EmtProp $r 'ForwardTo') + @(Get-EmtProp $r 'RedirectTo') + @(Get-EmtProp $r 'ForwardAsAttachmentTo')) |
                   Where-Object { $_ } | ForEach-Object { [string]$_ })
         if (-not $move -and -not $del -and -not $fwd.Count) { continue }
-        $match = Get-EmtRuleMatch -Rule $r -Sender $Sender -Subject $Subject -SenderDn ([string](Get-EmtProp $Data 'SenderDn'))
+        $match = Get-EmtRuleMatch -Rule $r -Sender $SenderAddress -Subject $Subject -SenderDn ([string](Get-EmtProp $Data 'SenderDn'))
         $sev = if ($match -in 'All', 'Yes') { 'Alert' } elseif ($match -eq 'Unknown') { 'Warn' } else { 'Info' }
         $suffix = T "find.match$match"
         if ($del)       { & $add $sev 'Rules' ((T 'find.ruleDelete' $name) + ' ' + $suffix) }
@@ -1830,8 +1892,8 @@ function Get-EmtMailboxFindings {
     if ($Data.JunkError) { & $add 'Warn' 'Junk' (T 'find.notChecked' $Data.JunkError) }
     elseif ($Data.Junk) {
         if ((Get-EmtProp $Data.Junk 'Enabled') -eq $false) { & $add 'Info' 'Junk' (T 'find.junkOff') }
-        if (Test-EmtAddressInList $Sender @(Get-EmtProp $Data.Junk 'BlockedSendersAndDomains')) { & $add 'Alert' 'Junk' (T 'find.junkBlocked' $Sender) }
-        if (Test-EmtAddressInList $Sender @(Get-EmtProp $Data.Junk 'TrustedSendersAndDomains')) { & $add 'Info' 'Junk' (T 'find.junkTrusted' $Sender) }
+        if (Test-EmtAddressInList $SenderAddress @(Get-EmtProp $Data.Junk 'BlockedSendersAndDomains')) { & $add 'Alert' 'Junk' (T 'find.junkBlocked' $SenderAddress) }
+        if (Test-EmtAddressInList $SenderAddress @(Get-EmtProp $Data.Junk 'TrustedSendersAndDomains')) { & $add 'Info' 'Junk' (T 'find.junkTrusted' $SenderAddress) }
     }
 
     # ---- Mailbox forwarding ----
@@ -1873,7 +1935,7 @@ function Get-EmtMailboxFindings {
 
 function Invoke-EmtMailboxCheck {
     <# Reads the rules, the junk e-mail settings, the forwarding and the quota of one mailbox. Read-only. #>
-    param([Parameter(Mandatory)] [string] $Mailbox, [string] $Sender, [string] $Subject)
+    param([Parameter(Mandatory)] [string] $Mailbox, [Alias('Sender')] [string] $SenderAddress, [string] $Subject)
     Write-EmtLog (T 'log.checkMailbox' $Mailbox)
     $rules = Invoke-EmtReadOnly 'Get-InboxRule' @{ Mailbox = $Mailbox }
     Set-EmtProgress 25 (T 'progress.checkMailbox' $Mailbox)
@@ -1885,8 +1947,8 @@ function Invoke-EmtMailboxCheck {
     # The internal address of the sender for the rule condition "From". An external sender is not found: no DN.
     # Get-Mailbox, not Get-Recipient: the Get-Recipient result has no LegacyExchangeDN.
     $senderDn = ''
-    if ($Sender) {
-        $who = Invoke-EmtReadOnly 'Get-Mailbox' @{ Identity = $Sender }
+    if ($SenderAddress) {
+        $who = Invoke-EmtReadOnly 'Get-Mailbox' @{ Identity = $SenderAddress }
         $first = @($who.Value)[0]
         if ($first) { $senderDn = [string](Get-EmtProp $first 'LegacyExchangeDN') }
     }
@@ -1898,11 +1960,11 @@ function Invoke-EmtMailboxCheck {
         Stats = @($stats.Value)[0]; StatsError = $stats.Error
     }
     Set-EmtProgress 100 (T 'progress.done')
-    $findings = @(Get-EmtMailboxFindings -Data $data -Sender $Sender -Subject $Subject)
+    $findings = @(Get-EmtMailboxFindings -Data $data -Sender $SenderAddress -Subject $Subject)
     $alerts = @($findings | Where-Object Severity -eq 'Alert').Count
     Write-EmtLog (T 'log.checkMailboxDone' $Mailbox $alerts) $(if ($alerts) { 'Warn' } else { 'Ok' })
     # Data, Sender and Subject: the window makes the findings again after a language change.
-    [pscustomobject]@{ Mailbox = $Mailbox; Findings = $findings; Data = $data; Sender = $Sender; Subject = $Subject }
+    [pscustomobject]@{ Mailbox = $Mailbox; Findings = $findings; Data = $data; Sender = $SenderAddress; Subject = $Subject }
 }
 
 #endregion

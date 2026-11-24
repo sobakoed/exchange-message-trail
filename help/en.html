@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.3.1">
+<meta name="emt-version" content="2.3.2">
 <title>Exchange Message Trail — User guide</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Version 2.3.1 · User guide</span>
+  <span class="version">Version 2.3.2 · User guide</span>
   <span class="spacer"></span>
   <div class="switch">
     <a class="active" href="en.html">English</a>
@@ -132,8 +132,14 @@
   <div class="callout">
     <b class="label">Update check</b>
     <p>At the start, EMT checks on GitHub for a new version, one time in a day. If there is a new version,
-    a line with the links <b>Download</b> and <b>Skip this version</b> shows at the bottom of the window.
+    a line with the links <b>Update</b> and <b>Skip this version</b> shows at the bottom of the window.
     The window "About" checks for updates each time that it opens.</p>
+    <p><b>Update</b>: EMT shows the version and what is new in it. After you confirm, EMT downloads the ZIP file of the release,
+    examines the checksum and the files, closes and starts again in the new version. A copy of the earlier version stays
+    in the folder <code>%LOCALAPPDATA%\ExchangeMessageTrail\backup</code>. If an error occurs during the installation,
+    EMT restores the earlier version. The shortcut and your language files in the EMT folder stay.
+    During a search or a delete, the update is not possible. If EMT cannot write to its folder
+    (for example, in <code>Program Files</code>), EMT tells you and opens the release page.</p>
     <p>EMT sends only a request to <code>api.github.com</code>. It sends no data about you or about messages.
     If GitHub is not available, EMT shows nothing and only writes a line to the log.
     To stop the check at the start, clear the check box <b>Check for updates at start</b> in the window "About".</p>
@@ -632,7 +638,7 @@
     <p>Make sure that the network is <b>TON</b>. A transfer in a different network is lost.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.3.1 · The screenshots show example data (contoso), not real data.</p>
+    <p>Exchange Message Trail 2.3.2 · The screenshots show example data (contoso), not real data.</p>
     <p>Microsoft, Exchange and Windows are trademarks of the Microsoft group of companies. EMT is not affiliated with Microsoft.</p>
   </footer>
 </section>

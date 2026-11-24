@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.3.2 — 2026-11-24
+
+**Update in one click**
+
+- If there is a new version, the link "Update" shows at the bottom of the window and in the window "About".
+- EMT shows the version and the text "What is new" of the release. The update starts only after you confirm it.
+- EMT downloads the ZIP file of the release from GitHub and examines it: the SHA-256 checksum of GitHub
+  and the files of EMT of the new version.
+- EMT closes. The installer keeps a copy of the current version in `%LOCALAPPDATA%\ExchangeMessageTrail\backup`,
+  copies the new files, unblocks them and starts EMT again. If an error occurs, the installer restores the copy.
+- The shortcut and your language files in the EMT folder stay.
+- The log and `audit.csv` (action `Update`) show the result.
+- During an operation, the update is not possible. If EMT cannot write to its folder (for example, in "Program Files"),
+  EMT tells you and opens the release page.
+
+**Code**
+
+- The mailbox check: the parameter `-Sender` has the name `SenderAddress` now (`$Sender` is a variable of PowerShell).
+  The name `-Sender` stays as an alias.
+
 ## 2.3.1 — 2026-11-24
 
 **Update check**

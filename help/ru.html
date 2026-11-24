@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.3.1">
+<meta name="emt-version" content="2.3.2">
 <title>Exchange Message Trail — Руководство пользователя</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Версия 2.3.1 · Руководство пользователя</span>
+  <span class="version">Версия 2.3.2 · Руководство пользователя</span>
   <span class="spacer"></span>
   <div class="switch">
     <a href="en.html">English</a>
@@ -132,7 +132,13 @@
   <div class="callout">
     <b class="label">Проверка обновлений</b>
     <p>При запуске EMT раз в сутки проверяет на GitHub, есть ли новая версия. Если есть, внизу окна появляется строка
-    со ссылками <b>Скачать</b> и <b>Пропустить эту версию</b>. Окно «О программе» проверяет обновления при каждом открытии.</p>
+    со ссылками <b>Обновить</b> и <b>Пропустить эту версию</b>. Окно «О программе» проверяет обновления при каждом открытии.</p>
+    <p><b>Обновить</b>: EMT показывает номер версии и что нового в ней. После подтверждения EMT скачивает архив релиза,
+    проверяет контрольную сумму и файлы, закрывается и запускается уже новой версией. Копия прежней версии остаётся
+    в папке <code>%LOCALAPPDATA%\ExchangeMessageTrail\backup</code>. Если при установке возникла ошибка,
+    EMT возвращает прежнюю версию. Ярлык и ваши языковые файлы в папке EMT сохраняются.
+    Во время поиска или удаления обновить нельзя. Если у EMT нет прав на запись в свою папку
+    (например, в <code>Program Files</code>), EMT сообщит об этом и откроет страницу релиза.</p>
     <p>EMT отправляет только запрос к <code>api.github.com</code>. Данные о вас и о письмах не передаются.
     Если доступа к GitHub нет, EMT ничего не показывает и только пишет строку в журнал.
     Чтобы отключить проверку при запуске, снимите флажок <b>Проверять обновления при запуске</b> в окне «О программе».</p>
@@ -631,7 +637,7 @@
     <p>Проверьте, что сеть — <b>TON</b>. Перевод в другой сети пропадёт.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.3.1 · На снимках выдуманные данные (contoso), а не реальные.</p>
+    <p>Exchange Message Trail 2.3.2 · На снимках выдуманные данные (contoso), а не реальные.</p>
     <p>Microsoft, Exchange и Windows — товарные знаки группы компаний Microsoft. Проект EMT не связан с Microsoft.</p>
   </footer>
 </section>

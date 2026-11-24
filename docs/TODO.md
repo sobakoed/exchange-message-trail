@@ -25,13 +25,8 @@ Level 2 finds the folder of the message in the recipient mailbox by the message 
 - Find and remove the damaged search action on the server. The full list `Get-ComplianceSearchAction` fails.
 - Examine if `Stop-ComplianceSearch` makes a search complete faster.
 
-## Update in one click
+## Signature of the releases
 
-Now the update check only opens the release page. The next step installs the update:
-
-- download the ZIP file of the release;
-- verify the signature of the ZIP file with the public key in EMT (the private key is not on GitHub);
-- close EMT, keep a copy of the folder, extract the new version, unblock the files, start EMT;
-- if an error occurs, restore the copy.
-
-Without the signature, a stolen GitHub token can publish a malicious release. Do not make this step without the signature.
+The update in one click (2.3.2) has no own signature: the trust is the same as for a manual download from GitHub.
+A stolen GitHub token can publish a malicious release. A signature with an own key (the public key in EMT,
+the private key not on GitHub) prevents this. The owner decided not to use keys now.

@@ -190,12 +190,27 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
 **Update check:**
 
 - At the start, EMT checks on GitHub for a new version, one time in a day.
-- If there is a new version, a line shows at the bottom of the window: **Download** opens the release page,
+- If there is a new version, a line shows at the bottom of the window: **Update** installs it,
   **Skip this version** hides the line until the next version.
 - The window **About** checks for updates each time that it opens.
 - EMT sends only a request to `api.github.com`. It sends no data about you or about messages.
 - If GitHub is not available, EMT shows nothing. The log shows the cause.
 - To stop the check at the start, click **?** → **About**, then clear **Check for updates at start**.
+
+**Update in one click:**
+
+1. Click **Update** at the bottom of the window or in the window **About**.
+2. Read the version and the text "What is new". Click **Update** to confirm.
+3. EMT downloads the ZIP file of the release and examines the SHA-256 checksum and the files.
+4. EMT closes. The installer (`src\Update-Emt.ps1`) keeps a copy of the current version
+   in `%LOCALAPPDATA%\ExchangeMessageTrail\backup`, copies the new files and starts EMT again.
+5. Make sure that the log shows "EMT is updated".
+
+If an error occurs, the installer restores the earlier version, and the log shows the cause.
+The shortcut and your language files in the EMT folder stay. During an operation, the update is not possible.
+If EMT cannot write to its folder (for example, in "Program Files"), update EMT manually.
+
+> **NOTE:** The update has no own signature. The trust is the same as for a manual download from GitHub.
 
 ## Window
 
@@ -511,6 +526,8 @@ EMT does not remove searches with other names. EMT does not touch a search that 
 |---|---|
 | `%USERPROFILE%\ExchangeMessageTrail\audit.csv` | One row for each message search, mailbox check, search of copies, delete, verification and cleanup |
 | `%USERPROFILE%\ExchangeMessageTrail\logs\EMT_<date>.log` | The full log of one session |
+| `%LOCALAPPDATA%\ExchangeMessageTrail\backup` | The copy of the version before the last update |
+| `%USERPROFILE%\ExchangeMessageTrail\logs\EMT_update_<date>.log` | The log of the installer of an update |
 | `%APPDATA%\ExchangeMessageTrail\settings.json` | The last server, the language, the theme, the options, the timeout, the window size and position, and the update check (`UpdateCheck`, `UpdateLastCheck`, `UpdateSkip`). Senders and subject are not kept. |
 
 At the first start, EMT copies `settings.json` and `audit.csv` of the older version (MailCleaner). The log shows the copy.
@@ -525,6 +542,7 @@ Audit columns: `Timestamp`, `Operator`, `Computer`, `Server`, `Action`, `SearchN
 | SoftDelete, HardDelete, Verify | `Clean`, `RecoverableOnly`, `Visible`, `CheckFailed` |
 | SoftDelete, HardDelete (stopped) | `Cancelled`, `Failed` |
 | CleanupSearches | `OK` |
+| Update (one click) | `OK`, `RolledBack`, `Failed`. `Details` = the versions and the error. |
 
 **Export:** Click **Export to CSV** on a tab to save its data as CSV files.
 
@@ -559,6 +577,7 @@ See [docs/TRANSLATING.md](docs/TRANSLATING.md).
 | `Start Exchange Message Trail in STA mode` | PowerShell runs in MTA mode | Use `EMT.cmd` or the `-STA` parameter |
 | A window says "Exchange Message Trail could not start" | An error at the start. The window shows the cause and the line. | Correct the cause. If the files came in a ZIP file, unblock them (see [Install](#install)). Make sure that the folder `gui` is present. |
 | The window does not operate correctly | A problem of the window | Tell the developer about the problem. Attach the log from `%USERPROFILE%\ExchangeMessageTrail\logs`. |
+| The update failed, the log shows "The earlier version is restored" | An error during the copy of the files | Read `EMT_update_<date>.log`. Update EMT manually. |
 | The update check fails | No access to `api.github.com` (a firewall or a proxy) | No action is necessary: EMT operates without the check. To stop the check, clear **Check for updates at start** in the window **About**. |
 | Kerberos error on connect | The computer is not in the domain, or the server name is not an FQDN | Use the FQDN. Use a domain computer. |
 | A button is disabled | Your account does not have the role | See [Permissions](#permissions) |
