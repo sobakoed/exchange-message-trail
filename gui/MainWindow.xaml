@@ -241,6 +241,8 @@
       <StackPanel Grid.Column="0" Orientation="Horizontal">
         <Ellipse x:Name="dotConn" Width="10" Height="10" Margin="2,0,8,0" VerticalAlignment="Center"/>
         <TextBlock x:Name="lblConn"/>
+        <!-- A new version of EMT: the script fills the text and the links (Show-EmtUpdateNotice). -->
+        <TextBlock x:Name="lblUpdate" Margin="20,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
       <TextBlock x:Name="lblStatus" Grid.Column="1" Margin="12,0,12,0" HorizontalAlignment="Right"
                  TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Fg.Dim}"/>

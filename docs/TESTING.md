@@ -302,15 +302,17 @@ The procedure uses the English interface. Select **English** in the language lis
 10. Push Esc.
 11. Make sure that the screenshot closes.
 
-### Classic window
+### Update check
 
-1. Start `EMT-Classic.cmd`.
-2. Make sure that the classic window (Windows Forms) opens.
-3. Connect to the server.
-4. Make sure that **Find** on the tab **Message search** operates.
-5. Close the classic window.
-6. Start `EMT.cmd`.
-7. Make sure that the theme and the window size are the same as before.
+1. Click **?** → **About**.
+2. Make sure that the line under the version shows "You have the latest version".
+3. Make sure that the log shows a line "Update check".
+4. In `src\EMT.Core.ps1`, set `Get-EmtVersion` to an earlier version for the test. Start EMT again.
+5. Click **?** → **About**.
+6. Make sure that the window shows "Version X.Y.Z is available" and that the bottom line of the main window shows the notice.
+7. Click **Skip this version**. Make sure that the notice closes.
+8. Clear **Check for updates at start**. Make sure that `settings.json` has `"UpdateCheck": false`.
+9. Set `Get-EmtVersion` back to the correct version.
 
 ### Cancel
 

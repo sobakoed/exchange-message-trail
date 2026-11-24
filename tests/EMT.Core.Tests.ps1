@@ -495,8 +495,7 @@ Describe 'Language files (Lang\*.lng)' {
         }
     }
     It 'every text key used in the code and in the window files is in en.lng' {
-        $files = @(Join-Path $root 'ExchangeMessageTrail.ps1'; Join-Path $root 'ExchangeMessageTrail.Classic.ps1'
-                   Join-Path $root 'src\EMT.Core.ps1')
+        $files = @(Join-Path $root 'ExchangeMessageTrail.ps1'; Join-Path $root 'src\EMT.Core.ps1')
         $used = foreach ($f in $files) {
             $src = [IO.File]::ReadAllText($f, [Text.Encoding]::UTF8)
             [regex]::Matches($src, "\bT\s+'([A-Za-z0-9_.]+)'") | ForEach-Object { $_.Groups[1].Value }
@@ -1201,8 +1200,8 @@ Describe 'Window files (gui\*.xaml)' {
             $item.ExtendedProperty('System.AppUserModel.ID') | Should -Be 'ExchangeMessageTrail'
         } finally { Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue }
     }
-    It 'gives the EMT icon and the application ID to both windows' {
-        foreach ($f in 'ExchangeMessageTrail.ps1', 'ExchangeMessageTrail.Classic.ps1') {
+    It 'gives the EMT icon and the application ID to the window' {
+        foreach ($f in 'ExchangeMessageTrail.ps1') {
             $src = [IO.File]::ReadAllText((Join-Path $root $f), [Text.Encoding]::UTF8)
             $src | Should -Match 'emt\.ico' -Because $f
             $src | Should -Match "SetCurrentProcessExplicitAppUserModelID\('ExchangeMessageTrail'\)" -Because $f
@@ -1467,7 +1466,7 @@ Describe 'Message search by a recipient: partial search and the details of a mes
         @($r.Messages)[0].ToGroup | Should -BeTrue
         (Invoke-EmtTrace -Criteria @{ Recipient = 'All@x.com'; Start = $t.AddDays(-1); End = $t.AddDays(1) }).Messages[0].ToGroup | Should -BeFalse
     }
-    It 'makes the second pass without -Partial (the classic window, the search of copies)' {
+    It 'makes the second pass without -Partial (the search of copies)' {
         $r = Invoke-EmtTrace -Criteria $crit
         $r.Partial | Should -BeFalse
         Should -Invoke Find-EmtTrackingEvents -Times 1 -Exactly -ParameterFilter { $CompleteRecipients }
@@ -1548,7 +1547,7 @@ Describe 'Shadow copy (Shadow Redundancy, tested on Exchange 2019)' {
 }
 
 Describe 'Invoke-EmtOperation' {
-    It 'Trace: the classic window does not send Partial, and the search runs (not partial)' {
+    It 'Trace: without the key Partial, the search runs (not partial)' {
         # The core runs in strict mode. A missing key of the parameters must not stop the operation.
         Mock Invoke-EmtTrace { [bool]$Partial }
         Set-StrictMode -Version 2.0
@@ -1614,7 +1613,7 @@ Describe 'Parameters of the operations: the windows and the core' {
     }
 
     It '<File>: each operation exists in the core and gets all required keys' -ForEach @(
-        @{ File = 'ExchangeMessageTrail.ps1' }, @{ File = 'ExchangeMessageTrail.Classic.ps1' }
+        @{ File = 'ExchangeMessageTrail.ps1' }
     ) {
         $calls = @(Get-EmtOperationCalls $File)
         # The parse must find the calls. Without them, the test passes without a check.
@@ -1689,7 +1688,6 @@ Describe 'Tables and defaults of the windows (2.2.2)' {
     BeforeAll {
         $root = Split-Path -Parent $PSScriptRoot
         $main = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8)
-        $classic = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.Classic.ps1'), [Text.Encoding]::UTF8)
         $core = [IO.File]::ReadAllText((Join-Path $root 'src\EMT.Core.ps1'), [Text.Encoding]::UTF8)
     }
     It 'a double-click on the table "Messages" opens the events only from a row, not from the header' {
@@ -1703,10 +1701,9 @@ Describe 'Tables and defaults of the windows (2.2.2)' {
     It 'the main window has no star column: a drag changes only one column' {
         $main | Should -Not -Match 'DataGridLengthUnitType\]::Star'
     }
-    It 'the default timeout is 30 minutes in both windows and in the core' {
+    It 'the default timeout is 30 minutes in the window and in the core' {
         $main | Should -Match '\$script:LastTimeout = 30\b'
         $main | Should -Match '\{ \$n \} else \{ 30 \}'
-        $classic | Should -Match '\$nudTimeout\.Value = 30;'
         [regex]::Matches($core, '\[int\] \$TimeoutMinutes = (\d+)') | ForEach-Object { $_.Groups[1].Value | Should -Be '30' }
     }
 }
@@ -1737,13 +1734,102 @@ Describe 'The window "About" (2.3.0)' {
     It 'the QR code is in the folder help' {
         Join-Path $root 'help\img\donate-ton.png' | Should -Exist
     }
-    It 'both windows have the menu of the button "?" and the key F1' {
-        foreach ($n in 'ExchangeMessageTrail.ps1', 'ExchangeMessageTrail.Classic.ps1') {
+    It 'the window has the menu of the button "?" and the key F1' {
+        foreach ($n in 'ExchangeMessageTrail.ps1') {
             $src = [IO.File]::ReadAllText((Join-Path $root $n), [Text.Encoding]::UTF8)
             $src | Should -Match '\$btnHelp\.Add_Click\(\{ Show-EmtHelpMenu \}\)' -Because $n
             $src | Should -Match 'function Show-EmtAbout' -Because $n
             $src | Should -Match "T 'menu\.about'" -Because $n
             $src | Should -Match 'F1' -Because $n
         }
+    }
+}
+
+Describe 'Update check (2.3.1)' {
+    BeforeAll {
+        $root = Split-Path -Parent $PSScriptRoot
+        $main = [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8)
+        $xaml = [IO.File]::ReadAllText((Join-Path $root 'gui\MainWindow.xaml'), [Text.Encoding]::UTF8)
+        $page = 'https://github.com/sobakoed/exchange-message-trail/releases/tag/v9.0.0'
+    }
+    It 'the API link is the public "latest release" of the EMT repository (https)' {
+        (Get-EmtLinks).Api | Should -Be 'https://api.github.com/repos/sobakoed/exchange-message-trail/releases/latest'
+    }
+    It 'Get-EmtUpdateState: <Tag> against 2.3.1 is <State>' -ForEach @(
+        @{ Tag = 'v2.3.2';  State = 'Newer';   Version = '2.3.2' }
+        @{ Tag = '2.4.0';   State = 'Newer';   Version = '2.4.0' }
+        @{ Tag = 'v2.10.0'; State = 'Newer';   Version = '2.10.0' }
+        @{ Tag = 'v2.3.1';  State = 'Latest';  Version = '2.3.1' }
+        @{ Tag = 'v2.2.9';  State = 'Latest';  Version = '2.2.9' }
+        @{ Tag = 'v3.0';    State = 'Unknown'; Version = '' }
+        @{ Tag = 'latest';  State = 'Unknown'; Version = '' }
+        @{ Tag = '';        State = 'Unknown'; Version = '' }
+    ) {
+        $r = Get-EmtUpdateState -Current '2.3.1' -Tag $Tag
+        $r.State | Should -Be $State
+        $r.Version | Should -Be $Version
+    }
+    It 'ConvertFrom-EmtReleaseJson reads the tag and the release page' {
+        $r = ConvertFrom-EmtReleaseJson ('{"tag_name":"v9.0.0","html_url":"' + $page + '","name":"EMT 9.0.0"}')
+        $r.Tag | Should -Be 'v9.0.0'
+        $r.Url | Should -Be $page
+    }
+    It 'ConvertFrom-EmtReleaseJson gives the page of the last release for a page of another site' {
+        (ConvertFrom-EmtReleaseJson '{"tag_name":"v9.0.0","html_url":"https://evil.example/releases/x"}').Url |
+            Should -Be (Get-EmtLinks).Releases
+        (ConvertFrom-EmtReleaseJson '{"tag_name":"v9.0.0","html_url":"https://github.com/sobakoed/exchange-message-trail.evil/releases/x"}').Url |
+            Should -Be (Get-EmtLinks).Releases
+        (ConvertFrom-EmtReleaseJson '{"tag_name":"v9.0.0"}').Url | Should -Be (Get-EmtLinks).Releases
+    }
+    It 'ConvertFrom-EmtReleaseJson gives $null for an answer that is not correct: <Name>' -ForEach @(
+        @{ Name = 'empty';      Json = '' }
+        @{ Name = 'not JSON';   Json = '<html>proxy error</html>' }
+        @{ Name = 'no tag';     Json = '{"message":"Not Found"}' }
+        @{ Name = 'bad tag';    Json = '{"tag_name":"v9.0.0; calc.exe"}' }
+        @{ Name = 'JSON array'; Json = '[1,2]' }
+    ) {
+        ConvertFrom-EmtReleaseJson $Json | Should -BeNullOrEmpty
+    }
+    It 'Test-EmtUpdateDue: the check runs one time in a day, and not when it is off' {
+        $now = [datetime]'2026-11-24T12:00:00Z'
+        Test-EmtUpdateDue -Enabled $true -LastCheck '' -Now $now | Should -BeTrue
+        Test-EmtUpdateDue -Enabled $true -LastCheck 'not a date' -Now $now | Should -BeTrue
+        Test-EmtUpdateDue -Enabled $true -LastCheck '2026-11-24T02:00:00.0000000Z' -Now $now | Should -BeFalse
+        Test-EmtUpdateDue -Enabled $true -LastCheck '2026-11-23T11:00:00.0000000Z' -Now $now | Should -BeTrue
+        Test-EmtUpdateDue -Enabled $true -LastCheck '2026-11-25T11:00:00.0000000Z' -Now $now | Should -BeTrue
+        Test-EmtUpdateDue -Enabled $false -LastCheck '' -Now $now | Should -BeFalse
+    }
+    It 'the window starts the check at the start, in the window "About" and examines the answer in the timer' {
+        $main | Should -Match 'Start-EmtUpdateCheckAtStart'
+        $main | Should -Match 'function Show-EmtAbout \{[^}]*Start-EmtUpdateCheck'
+        $main | Should -Match 'if \(\$script:Update\) \{ Receive-EmtUpdateCheck \}'
+        $main | Should -Match 'DownloadStringTaskAsync'
+        $main | Should -Match "T 'update\.onStart'"
+        # The same result is not written to the log again (each opening of "About" makes a check).
+        $main | Should -Match '\$toLog = \$key -ne \$script:UpdateLogged'
+        # The check box saves the value on Checked and Unchecked (mouse, Space key, UI automation).
+        $main | Should -Match "Add_Unchecked\(\{ Set-EmtSetting 'UpdateCheck' \`$false \}\)"
+        $xaml | Should -Match 'x:Name="lblUpdate"'
+    }
+    It 'the request does not block the window and does not use the Exchange runspace' {
+        $main | Should -Not -Match 'Invoke-RestMethod|Invoke-WebRequest|\.DownloadString\('
+    }
+}
+
+Describe 'Classic window removed (2.3.1)' {
+    BeforeAll { $root = Split-Path -Parent $PSScriptRoot }
+    It 'the files of the classic window are not in the folder and not in the release' {
+        Join-Path $root 'ExchangeMessageTrail.Classic.ps1' | Should -Not -Exist
+        Join-Path $root 'EMT-Classic.cmd' | Should -Not -Exist
+        [IO.File]::ReadAllText((Join-Path $root 'tools\Make-Release.ps1')) | Should -Not -Match 'Classic'
+    }
+    It 'only CHANGELOG.md tells about the classic window' {
+        $files = @('README.md', 'help\ru.html', 'help\en.html', 'docs\ARCHITECTURE.md', 'docs\TESTING.md', 'docs\TODO.md')
+        foreach ($f in $files) {
+            [IO.File]::ReadAllText((Join-Path $root $f), [Text.Encoding]::UTF8) | Should -Not -Match 'EMT-Classic|Classic\.ps1' -Because $f
+        }
+    }
+    It 'the window removes the key Window of the classic window from the settings' {
+        [IO.File]::ReadAllText((Join-Path $root 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8) | Should -Match "\`$s\.Remove\('Window'\)"
     }
 }

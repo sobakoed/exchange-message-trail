@@ -41,7 +41,8 @@ $out = Join-Path $repo "help\img\$lang"
 if (-not (Test-Path $out)) { New-Item -ItemType Directory -Path $out | Out-Null }
 $tmp = Join-Path $env:TEMP ('EMT-help-' + [guid]::NewGuid().ToString('n'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
-Set-Content -Path (Join-Path $tmp 'settings.json') -Encoding UTF8 -Value (@{ Theme = 'Dark'; Language = $lang; Server = '' } | ConvertTo-Json)
+# No update check: the screenshots must not show a notice of a new version.
+Set-Content -Path (Join-Path $tmp 'settings.json') -Encoding UTF8 -Value (@{ Theme = 'Dark'; Language = $lang; Server = ''; UpdateCheck = $false } | ConvertTo-Json)
 
 $text = [IO.File]::ReadAllText((Join-Path $repo 'ExchangeMessageTrail.ps1'), [Text.Encoding]::UTF8)
 $text = $text.Replace('$PSScriptRoot', "'$repo'")

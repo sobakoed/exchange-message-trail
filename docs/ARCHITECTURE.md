@@ -15,7 +15,6 @@ This document gives the structure of the Exchange Message Trail (EMT) code.
 | `src/New-EmtShortcut.ps1` | Makes the shortcut with the EMT icon and the application ID of the window in the EMT folder. The shortcut opens `EMT.cmd`. EMT makes it at the first start and after a move of the folder (the settings key `ShortcutFolder`). A removed shortcut stays removed. |
 | `Lang/*.lng` | The user interface texts, one file for each language |
 | `EMT.cmd` | The launcher (STA mode, hidden console) |
-| `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms): a fallback for one version |
 | `tests/EMT.Core.Tests.ps1` | The Pester 5 unit tests for the core, the language files and the window files |
 
 All `.ps1` files use UTF-8 with BOM and CRLF. The `.xaml` files use UTF-8 and CRLF.
@@ -249,7 +248,7 @@ shows an orange warning, and the delete confirmation needs the typed word.
 | Console | `EMT.cmd` starts PowerShell with `-WindowStyle Hidden`. The script also hides a console that has only its own process (`GetConsoleProcessList`) and a `-File` start. |
 | Front | The `ContentRendered` handler sets `Topmost` for one moment and activates the window. |
 | Size | `Save-EmtSettings` keeps the normal bounds (`RestoreBounds` when maximized) and the maximized state in the key `WpfWindow` (WPF units). At the start, EMT uses them only if the window is on the screen. |
-| Settings | `Save-EmtSettings` keeps the other keys of `settings.json`. The classic window keeps its size in the key `Window` (pixels). |
+| Settings | `Save-EmtSettings` keeps the other keys of `settings.json` (for example, the update check). It removes the key `Window`: the size of the classic window, removed in 2.3.1. `Set-EmtSetting` writes one key at once. |
 
 ### Tables
 
@@ -287,10 +286,18 @@ The runspace reads `$global:EmtSync.Lang`. Thus a language change also changes t
 The views make all texts at show time (statuses, hints, status lines, findings). They do not keep texts of the old language.
 The audit file uses fixed English values. The language does not change them.
 
-### Classic window
+### Update check
 
-`ExchangeMessageTrail.Classic.ps1` is the earlier window (Windows Forms). It has the same functions and the same core.
-`EMT-Classic.cmd` starts it. It stays for one version as a fallback. A later version removes it.
+The window asks the GitHub API for the last release (`Get-EmtLinks`, key `Api`). No token, no user data.
+
+| Step | Code |
+|---|---|
+| Start | `Start-EmtUpdateCheckAtStart` in the `ContentRendered` handler. `Test-EmtUpdateDue`: the check is on (`UpdateCheck`, on by default) and `UpdateLastCheck` is more than one day ago. The time of the try is kept before the request. |
+| Window "About" | `Show-EmtAbout` starts the check each time. `Set-EmtAboutUpdate` shows the result under the version. |
+| Request | `Start-EmtUpdateCheck`: `WebClient.DownloadStringTaskAsync`, TLS 1.2, the system proxy with the Windows account. The background runspace is not used: an Exchange operation can run at the same time. |
+| Answer | The window timer calls `Receive-EmtUpdateCheck`. After 5 s without an answer, the request stops. |
+| Result | `ConvertFrom-EmtReleaseJson` (the tag and the release page of the EMT repository only) and `Get-EmtUpdateState` (Newer, Latest, Unknown). The log gets one line. |
+| Notice | `Show-EmtUpdateNotice`: the line `lblUpdate` at the bottom of the window. **Skip this version** keeps the version in `UpdateSkip`. |
 
 ## Code rules
 

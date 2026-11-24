@@ -458,6 +458,20 @@ about.license = Лицензия GPL v3. Copyright (C) 2026 3dfx.
 about.trademark = Microsoft и Exchange — товарные знаки группы компаний Microsoft. EMT не связан с Microsoft.
 about.close = Закрыть
 
+# ---- Проверка обновлений ----
+update.checking = Проверка обновлений…
+update.latest = Установлена последняя версия.
+update.newer = Доступна версия {0}.
+update.failed = Не удалось проверить обновления.
+update.onStart = Проверять обновления при запуске
+update.notice = Доступна новая версия EMT: {0}.
+update.download = Скачать
+update.skip = Пропустить эту версию
+update.timeout = Нет ответа за {0} с.
+log.updateNewer = Проверка обновлений: доступна версия {0}. {1}
+log.updateLatest = Проверка обновлений: установлена последняя версия ({0}).
+log.updateFailed = Не удалось проверить обновления: {0}
+
 # ---- Ярлык ----
 log.shortcutMade = Ярлык со значком EMT: {0}. При необходимости скопируйте его на рабочий стол или в меню «Пуск».
 log.shortcutFailed = Ярлык не создан: {0}

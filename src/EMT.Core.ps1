@@ -19,17 +19,71 @@ Set-StrictMode -Version 2.0
 function Get-EmtSearchPrefix { 'EMT_' }
 
 # The version of EMT. A unit test compares it with the first section of CHANGELOG.md.
-function Get-EmtVersion { '2.3.0' }
+function Get-EmtVersion { '2.3.1' }
 
 # The links of the window "About". A unit test compares the TON address with README.md.
+# Api: the last release (the update check). It is public: no token, no user data.
 function Get-EmtLinks {
     [ordered]@{
         GitHub   = 'https://github.com/sobakoed/exchange-message-trail'
         Releases = 'https://github.com/sobakoed/exchange-message-trail/releases/latest'
+        Api      = 'https://api.github.com/repos/sobakoed/exchange-message-trail/releases/latest'
         Telegram = 'https://t.me/mnemo_nic'
         Ton      = 'UQDN9J6d6CebRAJZT9N5MnXw7K9rbH_wfM2pb0hSbF7re9-L'
     }
 }
+
+#region ---------- Update check (pure: the window does the network request) ----------
+
+function ConvertFrom-EmtReleaseJson {
+    <#
+        Reads the answer of the GitHub API "releases/latest".
+        Returns @{ Tag = 'v2.3.1'; Url = <the page of the release> }, or $null if the answer is not correct.
+        The page must be a release page of the EMT repository. If not, Url is the page of the last release.
+    #>
+    param([AllowEmptyString()] [string] $Json)
+    if (-not $Json) { return $null }
+    try { $j = $Json | ConvertFrom-Json } catch { return $null }
+    if (-not $j -or -not ($j.PSObject.Properties.Name -contains 'tag_name')) { return $null }
+    $tag = [string]$j.tag_name
+    if ($tag -notmatch '^v?\d+\.\d+\.\d+$') { return $null }
+    $links = Get-EmtLinks
+    $url = if ($j.PSObject.Properties.Name -contains 'html_url') { [string]$j.html_url } else { '' }
+    if (-not $url.StartsWith($links.GitHub + '/releases/', [StringComparison]::Ordinal) -or $url -match '[\s"<>]') {
+        $url = $links.Releases
+    }
+    [pscustomobject]@{ Tag = $tag; Url = $url }
+}
+
+function Get-EmtUpdateState {
+    <#
+        Compares the current version with the tag of the last release.
+        State: Newer (the release is newer), Latest (the same or older), Unknown (the tag is not a version).
+    #>
+    param([Parameter(Mandatory)] [string] $Current, [AllowEmptyString()] [string] $Tag)
+    $v = ([string]$Tag).Trim() -replace '^[vV]', ''
+    $new = $null; $cur = $null
+    if ($v -notmatch '^\d+\.\d+\.\d+$' -or -not [version]::TryParse($v, [ref]$new) -or -not [version]::TryParse($Current, [ref]$cur)) {
+        return [pscustomobject]@{ State = 'Unknown'; Version = '' }
+    }
+    [pscustomobject]@{ State = $(if ($new -gt $cur) { 'Newer' } else { 'Latest' }); Version = $v }
+}
+
+function Test-EmtUpdateDue {
+    <#
+        True if the check at the start must run now: the check is on, and the last check was
+        more than one day ago (or never, or the saved time is not correct, or it is in the future).
+    #>
+    param([bool] $Enabled = $true, [AllowEmptyString()] [string] $LastCheck, [datetime] $Now = (Get-Date))
+    if (-not $Enabled) { return $false }
+    $last = [datetime]::MinValue
+    if (-not [datetime]::TryParse([string]$LastCheck, [Globalization.CultureInfo]::InvariantCulture,
+                                  [Globalization.DateTimeStyles]::RoundtripKind, [ref]$last)) { return $true }
+    $age = $Now.ToUniversalTime() - $last.ToUniversalTime()
+    ($age.TotalHours -ge 24) -or ($age.TotalSeconds -lt 0)
+}
+
+#endregion
 
 # Up to this number of mailboxes, the search uses Search-Mailbox (seconds) instead of Compliance Search (minutes).
 function Get-EmtQuickSearchLimit { 10 }

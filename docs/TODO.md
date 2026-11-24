@@ -25,7 +25,13 @@ Level 2 finds the folder of the message in the recipient mailbox by the message 
 - Find and remove the damaged search action on the server. The full list `Get-ComplianceSearchAction` fails.
 - Examine if `Stop-ComplianceSearch` makes a search complete faster.
 
-## Classic window
+## Update in one click
 
-- Remove `ExchangeMessageTrail.Classic.ps1` and `EMT-Classic.cmd` when the WPF window operates on the servers without problems.
-  Remove also the key `Window` (classic window size) from `settings.json` and the classic file from the language key test.
+Now the update check only opens the release page. The next step installs the update:
+
+- download the ZIP file of the release;
+- verify the signature of the ZIP file with the public key in EMT (the private key is not on GitHub);
+- close EMT, keep a copy of the folder, extract the new version, unblock the files, start EMT;
+- if an error occurs, restore the copy.
+
+Without the signature, a stolen GitHub token can publish a malicious release. Do not make this step without the signature.

@@ -46,7 +46,7 @@ trap {
 }
 
 # One Add-Type for all Win32 functions: each Add-Type starts the C# compiler (about 0.1 s).
-# Only the classes that are not loaded yet (the other EMT window can have loaded some in this session).
+# Only the classes that are not loaded yet (an earlier start of EMT in this session can have loaded some).
 $win32 = [ordered]@{
     EmtConsole = @'
 [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
@@ -163,10 +163,11 @@ function Read-EmtSettings {
 function Save-EmtSettings {
     <#
         Senders and subject are not kept: they can be confidential.
-        The window size is in WPF units (key WpfWindow). The classic window keeps its size in pixels (key Window).
-        Other keys of the file stay: the classic window can use the same file.
+        The window size is in WPF units (key WpfWindow). Other keys of the file stay (for example, the update check).
+        The key Window was the size of the classic window (removed in 2.3.1): it is removed from the file.
     #>
     $s = Read-EmtSettings
+    $s.Remove('Window')
     $s.Server          = $tbServer.Text.Trim()
     $s.Language        = [string]$Sync.Lang
     $s.Theme           = $script:Theme
@@ -422,6 +423,7 @@ function Update-EmtLanguage {
     if ($script:Result) { Show-EmtResultViews $script:Result } else { Clear-EmtResultViews }
     if ($script:Check) { Show-EmtCheckView $script:Check }
     Update-EmtTabTitles
+    Show-EmtUpdateNotice
     Set-UiState
 }
 
@@ -676,6 +678,9 @@ function New-EmtAboutWindow {
     $name.FontWeight = 'SemiBold'
     [void]$names.Children.Add($name)
     [void]$names.Children.Add((New-EmtText (T 'about.version' (Get-EmtVersion)) 'Fg.Dim' 0 '0,2,0,0'))
+    # The result of the update check. The check starts when the window opens (Show-EmtAbout).
+    $script:AboutUpdate = New-EmtText (T 'update.checking') 'Fg.Dim' 0 '0,2,0,0'
+    [void]$names.Children.Add($script:AboutUpdate)
     [void]$names.Children.Add((New-EmtText (T 'about.description') 'Fg' 0 '0,8,0,0'))
     [void]$head.Children.Add($names)
     [void]$root.Children.Add($head)
@@ -699,6 +704,14 @@ function New-EmtAboutWindow {
         [void]$line.Inlines.Add($h)
         [void]$list.Children.Add($line)
     }
+    # The update check at the start: on or off. The value is in settings.json at once.
+    $onStart = New-Object System.Windows.Controls.CheckBox
+    $onStart.Content = T 'update.onStart'; $onStart.Margin = '0,8,0,0'
+    $onStart.IsChecked = Test-EmtUpdateCheckOn
+    # Checked and Unchecked: a mouse click, the Space key and UI automation change the value the same way.
+    $onStart.Add_Checked({ Set-EmtSetting 'UpdateCheck' $true })
+    $onStart.Add_Unchecked({ Set-EmtSetting 'UpdateCheck' $false })
+    [void]$list.Children.Add($onStart)
     [void]$root.Children.Add($list)
 
     # The support of the project: a card with the QR code and the TON address.
@@ -758,7 +771,161 @@ function New-EmtAboutWindow {
     $w
 }
 
-function Show-EmtAbout { [void](New-EmtAboutWindow).ShowDialog() }
+function Show-EmtAbout {
+    $w = New-EmtAboutWindow
+    Start-EmtUpdateCheck
+    try { [void]$w.ShowDialog() } finally { $script:AboutUpdate = $null }
+}
+
+#region ---------- Update check ----------
+# The window asks the GitHub API for the last release. The request does not block the window:
+# the timer of the window examines the answer (Receive-EmtUpdateCheck). The background runspace is not used:
+# an Exchange operation can run at the same time.
+
+$script:Update               = $null   # the running request: @{ Client; Task; Watch }
+$script:UpdateInfo           = $null   # a newer release: @{ Version; Url }
+$script:AboutUpdate          = $null   # the status line of the open window "About"
+$script:UpdateLogged         = ''      # the last result in the log: the same result is not written again
+$script:UpdateTimeoutSeconds = 5
+
+function Set-EmtSetting([string] $Name, $Value) {
+    <# Writes one key to settings.json at once. The other keys stay. #>
+    $s = Read-EmtSettings
+    $s[$Name] = $Value
+    try { $s | ConvertTo-Json | Set-Content -Path $SettingsPath -Encoding UTF8 } catch { }
+}
+
+function Test-EmtUpdateCheckOn {
+    <# The update check at the start is on by default. #>
+    $s = Read-EmtSettings
+    if ($s.ContainsKey('UpdateCheck')) { [bool]$s.UpdateCheck } else { $true }
+}
+
+function Start-EmtUpdateCheck {
+    if ($script:Update) { return }
+    try {
+        # PowerShell 5.1 can use old TLS versions only: GitHub needs TLS 1.2.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $wc = New-Object System.Net.WebClient
+        $wc.Encoding = [Text.Encoding]::UTF8
+        $wc.Headers['User-Agent'] = 'ExchangeMessageTrail/' + (Get-EmtVersion)
+        $wc.Headers['Accept'] = 'application/vnd.github+json'
+        # The proxy of Windows with the Windows account of the user (a company proxy can require it).
+        $wc.Proxy = [Net.WebRequest]::GetSystemWebProxy()
+        $wc.Proxy.Credentials = [Net.CredentialCache]::DefaultCredentials
+        $task = $wc.DownloadStringTaskAsync([uri](Get-EmtLinks).Api)
+        $script:Update = @{ Client = $wc; Task = $task; Watch = [Diagnostics.Stopwatch]::StartNew() }
+    } catch {
+        Complete-EmtUpdateCheck -Problem $_.Exception.Message
+    }
+}
+
+function Receive-EmtUpdateCheck {
+    <# The timer calls it. It does nothing while the request runs. #>
+    $u = $script:Update
+    if (-not $u) { return }
+    $json = ''; $problem = ''
+    if ($u.Task.IsCompleted) {
+        if ([string]$u.Task.Status -eq 'RanToCompletion') { $json = [string]$u.Task.Result }
+        else {
+            $ex = $u.Task.Exception
+            while ($ex -and $ex.InnerException) { $ex = $ex.InnerException }
+            $problem = if ($ex) { $ex.Message } else { [string]$u.Task.Status }
+        }
+    } elseif ($u.Watch.Elapsed.TotalSeconds -ge $script:UpdateTimeoutSeconds) {
+        try { $u.Client.CancelAsync() } catch { }
+        $problem = T 'update.timeout' $script:UpdateTimeoutSeconds
+    } else { return }
+    $script:Update = $null
+    try { $u.Client.Dispose() } catch { }
+    Complete-EmtUpdateCheck -Json $json -Problem $problem
+}
+
+function Complete-EmtUpdateCheck([string] $Json, [string] $Problem) {
+    $state = 'Unknown'; $version = ''; $url = ''
+    if (-not $Problem) {
+        $rel = ConvertFrom-EmtReleaseJson $Json
+        if ($rel) {
+            $r = Get-EmtUpdateState -Current (Get-EmtVersion) -Tag $rel.Tag
+            $state = $r.State; $version = $r.Version; $url = $rel.Url
+        }
+        if ($state -eq 'Unknown') { $Problem = T 'update.failed' }
+    }
+    # The log gets a line only when the result changes: each opening of the window "About" makes a check.
+    $key = "$state|$version|$Problem"
+    $toLog = $key -ne $script:UpdateLogged
+    $script:UpdateLogged = $key
+    switch ($state) {
+        'Newer'  { if ($toLog) { Write-EmtLog (T 'log.updateNewer' $version $url) 'Ok' }; $script:UpdateInfo = @{ Version = $version; Url = $url } }
+        'Latest' { if ($toLog) { Write-EmtLog (T 'log.updateLatest' (Get-EmtVersion)) }; $script:UpdateInfo = $null }
+        default  { if ($toLog) { Write-EmtLog (T 'log.updateFailed' $Problem) 'Warn' } }
+    }
+    Show-EmtUpdateNotice
+    Set-EmtAboutUpdate -State $state -Problem $Problem
+}
+
+function New-EmtLink([string] $Text, [string] $Tag, [scriptblock] $OnClick) {
+    $h = New-Object System.Windows.Documents.Hyperlink
+    [void]$h.Inlines.Add((New-Object System.Windows.Documents.Run $Text))
+    $h.Tag = $Tag
+    $h.Add_Click($OnClick)
+    $h
+}
+
+function Open-EmtUpdatePage {
+    param($s, $e)
+    try { Start-Process -FilePath ([string]$s.Tag) } catch { [void](Show-EmtMessage -Text $_.Exception.Message -Kind Warn) }
+}
+
+function Set-EmtAboutUpdate([string] $State, [string] $Problem) {
+    <# The status line of the window "About". #>
+    $t = $script:AboutUpdate
+    if (-not $t) { return }
+    $t.Inlines.Clear(); $t.ToolTip = $null
+    if ($State -eq 'Newer' -and $script:UpdateInfo) {
+        $h = New-EmtLink (T 'update.newer' $script:UpdateInfo.Version) $script:UpdateInfo.Url ${function:Open-EmtUpdatePage}
+        $h.ToolTip = $script:UpdateInfo.Url
+        # Orange, as the notice at the bottom of the main window. The style still underlines the link on hover.
+        Set-EmtBrush $h 'Text.Orange' ([System.Windows.Documents.TextElement]::ForegroundProperty)
+        [void]$t.Inlines.Add($h)
+    } elseif ($State -eq 'Latest') {
+        $t.Text = T 'update.latest'
+    } else {
+        $t.Text = T 'update.failed'
+        if ($Problem) { $t.ToolTip = $Problem }
+    }
+}
+
+function Show-EmtUpdateNotice {
+    <# The line at the bottom of the main window: a newer version, the link "Download" and "Skip this version". #>
+    $lblUpdate.Inlines.Clear()
+    $i = $script:UpdateInfo
+    if (-not $i -or $i.Version -eq [string](Read-EmtSettings)['UpdateSkip']) { $lblUpdate.Visibility = 'Collapsed'; return }
+    $text = New-Object System.Windows.Documents.Run ((T 'update.notice' $i.Version) + ' ')
+    Set-EmtBrush $text 'Text.Orange' ([System.Windows.Documents.TextElement]::ForegroundProperty)
+    [void]$lblUpdate.Inlines.Add($text)
+    $download = New-EmtLink (T 'update.download') $i.Url ${function:Open-EmtUpdatePage}
+    $download.ToolTip = $i.Url
+    [void]$lblUpdate.Inlines.Add($download)
+    [void]$lblUpdate.Inlines.Add((New-Object System.Windows.Documents.Run '  ·  '))
+    [void]$lblUpdate.Inlines.Add((New-EmtLink (T 'update.skip') $i.Version {
+        param($s, $e)
+        Set-EmtSetting 'UpdateSkip' ([string]$s.Tag)
+        Show-EmtUpdateNotice
+    }))
+    $lblUpdate.Visibility = 'Visible'
+}
+
+function Start-EmtUpdateCheckAtStart {
+    <# At the start: not more than one time in a day. The time of the try is kept: no new try at each start without a network. #>
+    $last = (Read-EmtSettings)['UpdateLastCheck']
+    if ($last -is [datetime]) { $last = $last.ToUniversalTime().ToString('o', [Globalization.CultureInfo]::InvariantCulture) }
+    if (-not (Test-EmtUpdateDue -Enabled (Test-EmtUpdateCheckOn) -LastCheck ([string]$last))) { return }
+    Set-EmtSetting 'UpdateLastCheck' ((Get-Date).ToUniversalTime().ToString('o', [Globalization.CultureInfo]::InvariantCulture))
+    Start-EmtUpdateCheck
+}
+
+#endregion
 
 function Show-EmtHelpMenu {
     <# The menu of the button "?": the user guide (F1) and the window "About". #>
@@ -2300,6 +2467,7 @@ $timer.Interval = [TimeSpan]::FromMilliseconds(400)
 $timer.Add_Tick({
     if ((Get-Date).Date -ne $script:PeriodMarkDay) { $script:PeriodMarkDay = (Get-Date).Date; Update-EmtPeriodMarks }
     Receive-EmtLog
+    if ($script:Update) { Receive-EmtUpdateCheck }
     if ($script:Job) {
         $progress.Value = [int]$Sync.Progress
         $st = [string]$Sync.Status
@@ -2376,6 +2544,7 @@ $window.Add_ContentRendered({
     Write-EmtLog (T 'log.auditFile' $AuditPath)
     foreach ($m in $script:Migrated) { Write-EmtLog (T 'log.migrated' $m) 'Ok' }
     Update-EmtShortcut
+    Start-EmtUpdateCheckAtStart
     if ($tbServer.Text) { $btnConnect.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))) }
 })
 

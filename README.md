@@ -7,15 +7,15 @@
 [![Telegram](https://img.shields.io/badge/Telegram-%40mnemo__nic-26A5E4?logo=telegram&logoColor=white)](https://t.me/mnemo_nic)
 [![Donate: TON](https://img.shields.io/badge/donate-TON-0098EA)](#support)
 
-Exchange Message Trail is a Windows tool for Microsoft Exchange Server 2016 and 2019 (on-premises).
-It can possibly also operate with Exchange Server Subscription Edition (SE). This is not tested.
-It answers these questions:
+Exchange Message Trail (EMT) is a Windows tool for Microsoft Exchange Server 2016 and 2019 on-premises.
+It searches for messages, tracks their delivery and deletes them.
+EMT can possibly operate with Exchange Server Subscription Edition (SE), but this is not tested.
 
-- Did a user send a message?
+EMT helps to answer these questions:
+
+- Did the user send the message?
 - Did the message arrive?
-- Why did the message not arrive? At which step did the delivery stop?
-
-When it is necessary, EMT also deletes a message from the mailboxes.
+- If not, at which step did the delivery stop, and why?
 
 The window has two tabs:
 
@@ -125,7 +125,6 @@ You can also copy the repository folder (`git clone`) to the computer.
 | `gui/` | The window: the layout (`MainWindow.xaml`), the styles (`Styles.xaml`) the themes (`Theme.Dark.xaml`, `Theme.Light.xaml`) and the icon (`emt.ico`). |
 | `help/` | The user guide: `en.html`, `ru.html`, the style, the script and the screenshots (`img/en`, `img/ru`). See [User guide](#user-guide). |
 | `tools/` | Only for the development: `Make-HelpScreenshots.ps1` makes the screenshots of the user guide again. `Make-Release.ps1` makes the ZIP file of a release. A server does not need this folder. |
-| `ExchangeMessageTrail.Classic.ps1`, `EMT-Classic.cmd` | The classic window (Windows Forms) with the same functions. A fallback for one version. See [Troubleshooting](#troubleshooting). |
 | `src/` | The program logic without the window (`EMT.Core.ps1`). `New-EmtShortcut.ps1` makes a shortcut with the EMT icon. |
 | `src/EMT.Core.ps1` | The Exchange operations: message search, mailbox check, search of copies, delete, cleanup. |
 | `src/EMT.Strings.ps1` | The language loader and the check of language files. |
@@ -187,6 +186,16 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
 2. Click **Connect**.
 3. Make sure that the bottom line shows a green indicator and "Connected".
 4. Make sure that the log shows no warning about a missing role.
+
+**Update check:**
+
+- At the start, EMT checks on GitHub for a new version, one time in a day.
+- If there is a new version, a line shows at the bottom of the window: **Download** opens the release page,
+  **Skip this version** hides the line until the next version.
+- The window **About** checks for updates each time that it opens.
+- EMT sends only a request to `api.github.com`. It sends no data about you or about messages.
+- If GitHub is not available, EMT shows nothing. The log shows the cause.
+- To stop the check at the start, click **?** → **About**, then clear **Check for updates at start**.
 
 ## Window
 
@@ -502,7 +511,7 @@ EMT does not remove searches with other names. EMT does not touch a search that 
 |---|---|
 | `%USERPROFILE%\ExchangeMessageTrail\audit.csv` | One row for each message search, mailbox check, search of copies, delete, verification and cleanup |
 | `%USERPROFILE%\ExchangeMessageTrail\logs\EMT_<date>.log` | The full log of one session |
-| `%APPDATA%\ExchangeMessageTrail\settings.json` | The last server, the language, the theme, the options, the timeout and the window size and position. Senders and subject are not kept. |
+| `%APPDATA%\ExchangeMessageTrail\settings.json` | The last server, the language, the theme, the options, the timeout, the window size and position, and the update check (`UpdateCheck`, `UpdateLastCheck`, `UpdateSkip`). Senders and subject are not kept. |
 
 At the first start, EMT copies `settings.json` and `audit.csv` of the older version (MailCleaner). The log shows the copy.
 
@@ -549,7 +558,8 @@ See [docs/TRANSLATING.md](docs/TRANSLATING.md).
 |---|---|---|
 | `Start Exchange Message Trail in STA mode` | PowerShell runs in MTA mode | Use `EMT.cmd` or the `-STA` parameter |
 | A window says "Exchange Message Trail could not start" | An error at the start. The window shows the cause and the line. | Correct the cause. If the files came in a ZIP file, unblock them (see [Install](#install)). Make sure that the folder `gui` is present. |
-| The window does not operate correctly | A problem of the WPF window | Start `EMT-Classic.cmd`: the classic window has the same functions. Tell the developer about the problem. |
+| The window does not operate correctly | A problem of the window | Tell the developer about the problem. Attach the log from `%USERPROFILE%\ExchangeMessageTrail\logs`. |
+| The update check fails | No access to `api.github.com` (a firewall or a proxy) | No action is necessary: EMT operates without the check. To stop the check, clear **Check for updates at start** in the window **About**. |
 | Kerberos error on connect | The computer is not in the domain, or the server name is not an FQDN | Use the FQDN. Use a domain computer. |
 | A button is disabled | Your account does not have the role | See [Permissions](#permissions) |
 | The message search finds nothing | Wrong period, wrong address, or the log data is too old | Read the hints in the log. Make the period larger. Make sure that the date is in the last 30 days. |

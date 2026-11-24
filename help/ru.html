@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.3.0">
+<meta name="emt-version" content="2.3.1">
 <title>Exchange Message Trail — Руководство пользователя</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Версия 2.3.0 · Руководство пользователя</span>
+  <span class="version">Версия 2.3.1 · Руководство пользователя</span>
   <span class="spacer"></span>
   <div class="switch">
     <a href="en.html">English</a>
@@ -130,9 +130,12 @@
     <tr><td><code>-Theme</code></td><td><code>Dark</code> или <code>Light</code>. По умолчанию <code>Dark</code>.</td></tr>
   </table>
   <div class="callout">
-    <b class="label">Классическое окно</b>
-    <p><code>EMT-Classic.cmd</code> запускает прежнее окно (Windows Forms) с теми же функциями.
-    Используйте его, только если обычное окно не работает. В одной из следующих версий его уберут.</p>
+    <b class="label">Проверка обновлений</b>
+    <p>При запуске EMT раз в сутки проверяет на GitHub, есть ли новая версия. Если есть, внизу окна появляется строка
+    со ссылками <b>Скачать</b> и <b>Пропустить эту версию</b>. Окно «О программе» проверяет обновления при каждом открытии.</p>
+    <p>EMT отправляет только запрос к <code>api.github.com</code>. Данные о вас и о письмах не передаются.
+    Если доступа к GitHub нет, EMT ничего не показывает и только пишет строку в журнал.
+    Чтобы отключить проверку при запуске, снимите флажок <b>Проверять обновления при запуске</b> в окне «О программе».</p>
   </div>
 </section>
 
@@ -552,7 +555,7 @@
     <tr><th>Файл</th><th>Содержимое</th></tr>
     <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\audit.csv</code></td><td>Строка на каждый поиск писем, проверку ящика, поиск копий, удаление, проверку и очистку</td></tr>
     <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\logs\EMT_&lt;дата&gt;.log</code></td><td>Полный лог одного сеанса</td></tr>
-    <tr><td><code>%APPDATA%\ExchangeMessageTrail\settings.json</code></td><td>Последний сервер, язык, тема, флажки, таймаут и размер окна. Отправители и темы не сохраняются.</td></tr>
+    <tr><td><code>%APPDATA%\ExchangeMessageTrail\settings.json</code></td><td>Последний сервер, язык, тема, флажки, таймаут, размер и положение окна, проверка обновлений. Отправители и темы не сохраняются.</td></tr>
   </table>
   <p>Кнопка <span class="btn">Экспорт в CSV</span> сохраняет данные вкладки в CSV-файлы.</p>
   <div class="callout warn">
@@ -583,7 +586,7 @@
     <tr><td>Поиск писем ничего не находит</td><td>Не тот период или адрес, или записи журнала уже удалены</td><td>Прочитайте подсказки в логе. Увеличьте период.</td></tr>
     <tr><td>Доставлено, но пользователь не видит письмо</td><td>Правило, фильтр нежелательной почты или пересылка</td><td>Используйте <a href="#mailbox">проверку ящика</a>.</td></tr>
     <tr><td>Найдено 0 копий, а письмо есть</td><td>Письмо не проиндексировано или тема другая</td><td>Включите <b>Искать во всех ящиках</b>. Сократите текст темы.</td></tr>
-    <tr><td>Окно работает неправильно</td><td>Проблема окна</td><td>Запустите <code>EMT-Classic.cmd</code>. Сообщите разработчику о проблеме.</td></tr>
+    <tr><td>Окно работает неправильно</td><td>Проблема окна</td><td>Сообщите разработчику о проблеме. Приложите журнал из папки <code>%USERPROFILE%\ExchangeMessageTrail\logs</code>.</td></tr>
   </table>
 </section>
 
@@ -628,7 +631,7 @@
     <p>Проверьте, что сеть — <b>TON</b>. Перевод в другой сети пропадёт.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.3.0 · На снимках выдуманные данные (contoso), а не реальные.</p>
+    <p>Exchange Message Trail 2.3.1 · На снимках выдуманные данные (contoso), а не реальные.</p>
     <p>Microsoft, Exchange и Windows — товарные знаки группы компаний Microsoft. Проект EMT не связан с Microsoft.</p>
   </footer>
 </section>

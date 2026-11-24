@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.3.1 — 2026-11-24
+
+**Update check**
+
+- At the start, EMT checks on GitHub for a new version, one time in a day. If there is a new version,
+  a line at the bottom of the window shows it, with the links "Download" and "Skip this version".
+- The window "About" shows the result of the check under the version. It checks each time that it opens.
+- The check box "Check for updates at start" in the window "About" stops the check at the start. It is on by default.
+- EMT sends only a request to `api.github.com`, without data about the user or the messages.
+  If GitHub is not available, EMT shows nothing and writes the cause to the log.
+
+**Classic window removed**
+
+- The classic window (Windows Forms) is removed: `ExchangeMessageTrail.Classic.ps1` and `EMT-Classic.cmd`.
+  Only the usual window stays. EMT removes the key `Window` of the classic window from `settings.json`.
+
+**Texts**
+
+- The user guide: `settings.json` keeps the window size and position.
+- README: a new introduction.
+
 ## 2.3.0 — 2026-11-14
 
 **Window "About"**

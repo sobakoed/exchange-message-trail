@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.3.0">
+<meta name="emt-version" content="2.3.1">
 <title>Exchange Message Trail — User guide</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Version 2.3.0 · User guide</span>
+  <span class="version">Version 2.3.1 · User guide</span>
   <span class="spacer"></span>
   <div class="switch">
     <a class="active" href="en.html">English</a>
@@ -130,9 +130,13 @@
     <tr><td><code>-Theme</code></td><td><code>Dark</code> or <code>Light</code>. The default theme is <code>Dark</code>.</td></tr>
   </table>
   <div class="callout">
-    <b class="label">Classic window</b>
-    <p><code>EMT-Classic.cmd</code> starts the earlier window (Windows Forms). It has the same functions.
-    Use it only if the usual window does not operate. A later version removes it.</p>
+    <b class="label">Update check</b>
+    <p>At the start, EMT checks on GitHub for a new version, one time in a day. If there is a new version,
+    a line with the links <b>Download</b> and <b>Skip this version</b> shows at the bottom of the window.
+    The window "About" checks for updates each time that it opens.</p>
+    <p>EMT sends only a request to <code>api.github.com</code>. It sends no data about you or about messages.
+    If GitHub is not available, EMT shows nothing and only writes a line to the log.
+    To stop the check at the start, clear the check box <b>Check for updates at start</b> in the window "About".</p>
   </div>
 </section>
 
@@ -552,7 +556,7 @@
     <tr><th>File</th><th>Content</th></tr>
     <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\audit.csv</code></td><td>One row for each message search, mailbox check, search of copies, delete, verification and cleanup</td></tr>
     <tr><td><code>%USERPROFILE%\ExchangeMessageTrail\logs\EMT_&lt;date&gt;.log</code></td><td>The full log of one session</td></tr>
-    <tr><td><code>%APPDATA%\ExchangeMessageTrail\settings.json</code></td><td>The last server, the language, the theme, the options, the timeout and the window size. Senders and subjects are not kept.</td></tr>
+    <tr><td><code>%APPDATA%\ExchangeMessageTrail\settings.json</code></td><td>The last server, the language, the theme, the options, the timeout, the window size and position, and the update check. Senders and subjects are not kept.</td></tr>
   </table>
   <p>Click <span class="btn">Export to CSV</span> to save the data of a tab as CSV files.</p>
   <div class="callout warn">
@@ -583,7 +587,7 @@
     <tr><td>The message search finds nothing</td><td>The period, the address, or the log data is too old</td><td>Read the hints in the log. Make the period larger.</td></tr>
     <tr><td>Delivered, but the user does not see the message</td><td>A rule, the junk e-mail filter or forwarding</td><td>Use the <a href="#mailbox">mailbox check</a>.</td></tr>
     <tr><td>Found 0 copies, but the message exists</td><td>The message is unindexed, or the subject is different</td><td>Use <b>Search all mailboxes</b>. Make the subject text shorter.</td></tr>
-    <tr><td>The window does not operate correctly</td><td>A problem of the window</td><td>Start <code>EMT-Classic.cmd</code>. Tell the developer about the problem.</td></tr>
+    <tr><td>The window does not operate correctly</td><td>A problem of the window</td><td>Tell the developer about the problem. Attach the log from the folder <code>%USERPROFILE%\ExchangeMessageTrail\logs</code>.</td></tr>
   </table>
 </section>
 
@@ -628,7 +632,7 @@
     <p>Make sure that the network is <b>TON</b>. A transfer in a different network is lost.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.3.0 · The screenshots show example data (contoso), not real data.</p>
+    <p>Exchange Message Trail 2.3.1 · The screenshots show example data (contoso), not real data.</p>
     <p>Microsoft, Exchange and Windows are trademarks of the Microsoft group of companies. EMT is not affiliated with Microsoft.</p>
   </footer>
 </section>

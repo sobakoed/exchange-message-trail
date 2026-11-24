@@ -31,8 +31,8 @@ $repo = Split-Path -Parent $PSScriptRoot
 
 # The files and the folders of the ZIP file.
 $include = @(
-    'EMT.cmd', 'EMT-Classic.cmd',
-    'ExchangeMessageTrail.ps1', 'ExchangeMessageTrail.Classic.ps1',
+    'EMT.cmd',
+    'ExchangeMessageTrail.ps1',
     'src', 'gui', 'Lang', 'help',
     'LICENSE', 'README.md', 'CHANGELOG.md'
 )
