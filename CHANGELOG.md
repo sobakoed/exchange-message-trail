@@ -21,7 +21,7 @@
 
 **Changelog**
 
-- The older versions use the English names of the buttons and the check boxes.
+- The entries of the older versions in this file now use the English names of the buttons and the check boxes.
 
 ## 2.3.2 — 2026-11-24
 
