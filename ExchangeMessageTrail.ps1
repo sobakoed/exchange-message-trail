@@ -169,13 +169,14 @@ function Save-EmtSettings {
         Senders and subject are not kept: they can be confidential.
         The window size is in WPF units (key WpfWindow). Other keys of the file stay (for example, the update check).
         The key Window was the size of the classic window (removed in 2.3.1): it is removed from the file.
+        The key IncludeForwards was the check box "Include forwards" (removed in 2.3.3): it is removed from the file.
     #>
     $s = Read-EmtSettings
     $s.Remove('Window')
+    $s.Remove('IncludeForwards')
     $s.Server          = $tbServer.Text.Trim()
     $s.Language        = [string]$Sync.Lang
     $s.Theme           = $script:Theme
-    $s.IncludeForwards = [bool]$chkForwards.IsChecked
     $s.AllMailboxes    = [bool]$chkAll.IsChecked
     $s.TimeoutMinutes  = Get-EmtTimeout
     # The window: the normal size and position, also when the window is maximized.
@@ -870,6 +871,8 @@ function Receive-EmtUpdateCheck {
 }
 
 function Complete-EmtUpdateCheck([string] $Json, [string] $Problem) {
+    # A problem here is a network problem: add the hint about the access to the internet.
+    if ($Problem) { $Problem = Format-EmtUpdateProblem $Problem }
     $state = 'Unknown'; $version = ''; $url = ''; $rel = $null
     if (-not $Problem) {
         $rel = ConvertFrom-EmtReleaseJson $Json -DownloadPrefix $script:UpdatePrefix
@@ -1442,7 +1445,6 @@ Set-EmtTip $btnYesterday    'tip.yesterday'
 Set-EmtTip $btnWeek         'tip.week'
 Set-EmtTip $btnDays14       'tip.days14'
 Set-EmtTip $btnDelShowCriteria 'tip.show'
-Set-EmtTip $chkForwards     'tip.forwards'
 Set-EmtTip $chkOnly         'tip.only'
 Set-EmtTip $chkAll          'tip.all'
 Set-EmtTip $btnSoft         'tip.soft'
@@ -1623,7 +1625,6 @@ function Get-EmtCriteria {
         Keywords        = $tbKeywords.Text.Trim()
         Start           = Get-EmtPeriodValue $dtStart $tbStartTime
         End             = Get-EmtPeriodEnd (Get-EmtPeriodValue $dtEnd $tbEndTime)      # the end includes its minute
-        IncludeForwards = [bool]$chkForwards.IsChecked
         AllMailboxes    = [bool]$chkAll.IsChecked
         OnlyRecipient   = [bool]$chkOnly.IsChecked -and $chkOnly.IsEnabled
     }
@@ -2536,8 +2537,6 @@ foreach ($c in $tbSenders, $tbSubject, $tbRecipient, $tbMessageId, $tbAttachment
 }
 foreach ($d in $dtStart, $dtEnd) { $d.Add_SelectedDateChanged({ Invoke-EmtInvalidate }) }
 foreach ($tb in $tbStartTime, $tbEndTime) { $tb.Add_TextChanged({ Invoke-EmtInvalidate }) }
-$chkForwards.Add_Checked({ Invoke-EmtInvalidate })
-$chkForwards.Add_Unchecked({ Invoke-EmtInvalidate })
 # "All mailboxes" and "Only the recipient mailbox" exclude each other.
 $chkAll.Add_Checked({ $chkOnly.IsChecked = $false; Invoke-EmtInvalidate })
 $chkAll.Add_Unchecked({ Invoke-EmtInvalidate })
@@ -2594,7 +2593,7 @@ $script:Compact = @(
        HasResult = { [bool]$script:Result }
        Fields = { @(@('crit.senders', $tbSenders.Text), @('crit.recipient', $tbRecipient.Text), @('crit.subject', $tbSubject.Text),
                     @('crit.messageId', $tbMessageId.Text), @('crit.attachment', $tbAttachment.Text), @('crit.keywords', $tbKeywords.Text)) }
-       Options = { @(foreach ($x in $chkForwards, $chkOnly, $chkAll) { if ($x.IsChecked -and $x.IsEnabled) { [string]$x.Content } }) }
+       Options = { @(foreach ($x in $chkOnly, $chkAll) { if ($x.IsChecked -and $x.IsEnabled) { [string]$x.Content } }) }
        Period = @($dtStart, $tbStartTime, $dtEnd, $tbEndTime) }
 )
 
@@ -2784,7 +2783,6 @@ $defaultServer = if ($Server) { $Server }
                  elseif ($env:ExchangeInstallPath) { [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName }
                  else { '' }
 $tbServer.Text = $defaultServer
-if ($settings.ContainsKey('IncludeForwards')) { $chkForwards.IsChecked = [bool]$settings.IncludeForwards }
 if ($settings.ContainsKey('AllMailboxes'))    { $chkAll.IsChecked = [bool]$settings.AllMailboxes }
 $script:LastTimeout = 30
 if ($settings.ContainsKey('TimeoutMinutes')) {

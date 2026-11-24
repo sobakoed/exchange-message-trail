@@ -75,17 +75,6 @@ Describe 'Get-EmtKqlDateRange' {
     }
 }
 
-Describe 'Get-EmtBaseSubject' {
-    It 'removes reply and forward prefixes' {
-        Get-EmtBaseSubject 'FW: RE: Отчёт' | Should -Be 'отчёт'
-        Get-EmtBaseSubject 'Пересл: Отв: Отчёт' | Should -Be 'отчёт'
-        Get-EmtBaseSubject 'Fwd:Report' | Should -Be 'report'
-    }
-    It 'keeps a tag in square brackets' {
-        Get-EmtBaseSubject 'FW: [EXTERNAL] Report' | Should -Be '[external] report'
-    }
-}
-
 Describe 'Get-EmtLargeDeleteWarning' {
     It 'gives no warning for a small delete' { Get-EmtLargeDeleteWarning -Items 50 -Messages 4 | Should -Be '' }
     It 'warns for many items'    { Get-EmtLargeDeleteWarning -Items 101 -Messages 1 | Should -Match 'БОЛЬШОЙ ОБЪЁМ' }
@@ -149,7 +138,7 @@ Describe 'Complete-EmtCriteria' {
         $c.Subject         | Should -Be 'x'
         $c.Senders         | Should -Be @('a@x.com')
         $c.MessageId       | Should -Be ''
-        $c.IncludeForwards | Should -BeTrue
+        $c.ContainsKey('IncludeForwards') | Should -BeFalse
     }
 }
 
@@ -400,38 +389,27 @@ Describe 'Find-EmtTrackingEvents' {
             $all
         }
     }
-    It 'finds the original and the forward when forwards are included' {
-        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
-        @($r.Events | Select-Object -ExpandProperty MessageId -Unique) | Should -Be @('<1@x.com>', '<2@x.com>')
-    }
-    It 'finds only the original when forwards are excluded' {
+    It 'takes only the messages of the given senders, not a forward from another sender (2.3.3)' {
         $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1)
         @($r.Events | Select-Object -ExpandProperty MessageId -Unique) | Should -Be @('<1@x.com>')
     }
-    It 'finds the message by subject when the sender is wrong' {
-        $r = Find-EmtTrackingEvents -Senders 'wrong@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
-        @($r.Events | Select-Object -ExpandProperty MessageId -Unique).Count | Should -Be 2
+    It 'gives no messages when the log has no messages from the senders (no messages of other senders with this subject)' {
+        $r = Find-EmtTrackingEvents -Senders 'wrong@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1)
+        @($r.Events).Count | Should -Be 0
+    }
+    It 'has no parameter IncludeForwards (the search for forwards was removed in 2.3.3)' {
+        (Get-Command Find-EmtTrackingEvents).Parameters.ContainsKey('IncludeForwards') | Should -BeFalse
+        Get-Command Get-EmtBaseSubject -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
     }
     It 'does not do a second pass by MessageId without a recipient filter' {
-        $null = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards -CompleteRecipients
+        $null = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Отчёт за квартал' -Start $t.Date -End $t.Date.AddDays(1) -CompleteRecipients
         # One sender query + one subject query on one server.
         Should -Invoke Get-MessageTrackingLog -Times 2 -Exactly
     }
     It 'does a second pass by MessageId with a recipient filter' {
-        $null = Find-EmtTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards -CompleteRecipients
+        $null = Find-EmtTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1) -CompleteRecipients
         # One subject query + one query for each of the two messages.
         Should -Invoke Get-MessageTrackingLog -Times 3 -Exactly
-    }
-    It 'does not take a message from another sender with a different subject as a forward' {
-        Mock Get-MessageTrackingLog {
-            @(
-                New-Ev '<1@x.com>' 'a@x.com' 'Итоги'             'RECEIVE' @('b@x.com') $t
-                New-Ev '<2@x.com>' 'b@x.com' 'FW: Итоги'         'RECEIVE' @('c@x.com') $t
-                New-Ev '<9@x.com>' 'z@x.com' 'Итоги года для HR' 'RECEIVE' @('d@x.com') $t
-            ) | Where-Object { -not $Sender -or $_.Sender -eq $Sender }
-        }
-        $r = Find-EmtTrackingEvents -Senders 'a@x.com' -Subject 'Итоги' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
-        @($r.Events | Select-Object -ExpandProperty MessageId -Unique | Sort-Object) | Should -Be @('<1@x.com>', '<2@x.com>')
     }
     It 'matches a subject with square brackets as text' {
         Mock Get-MessageTrackingLog {
@@ -453,7 +431,7 @@ Describe 'Find-EmtTrackingEvents' {
         @($r.Events).Count | Should -Be 1
     }
     It 'does not do a second pass without -CompleteRecipients' {
-        $null = Find-EmtTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1) -IncludeForwards
+        $null = Find-EmtTrackingEvents -Subject 'Отчёт за квартал' -Recipient 'b@x.com' -Start $t.Date -End $t.Date.AddDays(1)
         Should -Invoke Get-MessageTrackingLog -Times 1 -Exactly
     }
 }
@@ -869,13 +847,30 @@ Describe 'Recipient in the query and in the search scope' {
         Mock Invoke-EmtQuickSearch { [pscustomobject]@{ Mailbox = 'b@x.com'; Items = 0; SizeKB = 0; Error = '' } }
         Mock New-EmtComplianceSearchRun { throw 'must not search all mailboxes' }
         $r = Invoke-EmtSearch -Criteria @{
-            Senders = @('a@x.com'); Recipient = 'b@x.com'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11'; IncludeForwards = $false
+            Senders = @('a@x.com'); Recipient = 'b@x.com'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11'
         }
         @($r.Locations | Sort-Object) | Should -Be @('a@x.com', 'b@x.com')
         # Nothing found anywhere: no list of mailboxes without the message.
         @($r.Missing).Count | Should -Be 0
         $r.Query | Should -Match 'to:b@x\.com'
         Should -Invoke New-EmtComplianceSearchRun -Times 0 -Exactly
+    }
+    It 'puts only the given senders into the KQL, also with other senders in the tracking log (2.3.3)' {
+        Mock Get-EmtCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
+        $ev = @(
+            New-Ev '<1@x.com>' 'a@x.com' 'Отчёт'     'DELIVER' @('b@x.com') ([datetime]'2026-11-10 10:00')
+            New-Ev '<2@x.com>' 'z@x.com' 'FW: Отчёт' 'DELIVER' @('c@x.com') ([datetime]'2026-11-10 11:00')
+        )
+        Mock Find-EmtTrackingEvents { [pscustomobject]@{ Events = $ev; Servers = @('EXCH1'); Errors = @() } }
+        Mock Get-EmtAcceptedDomains { @('x.com') }
+        Mock Resolve-EmtRecipients { @($Addresses | ForEach-Object { [pscustomobject]@{ Address = $_; Kind = 'Internal'; Mailbox = $_; Type = 'UserMailbox' } }) }
+        Mock Invoke-EmtQuickSearch { [pscustomobject]@{ Mailbox = 'b@x.com'; Items = 1; SizeKB = 1; Error = '' } }
+        # An old caller can still give the key IncludeForwards: it has no effect.
+        $r = Invoke-EmtSearch -Criteria @{
+            Senders = @('a@x.com'); Subject = 'Отчёт'; Start = [datetime]'2026-11-10'; End = [datetime]'2026-11-11'; IncludeForwards = $true
+        }
+        $r.Query | Should -Match '\(from:a@x\.com\)'
+        $r.Query | Should -Not -Match 'z@x\.com'
     }
     It 'marks a result that the tracking log does not confirm' {
         Mock Get-EmtCapabilities { [pscustomobject]@{ Tracking = $true; Search = $true; Verify = $true; SoftDelete = $true; HardDelete = $true } }
@@ -1742,6 +1737,27 @@ Describe 'The window "About" (2.3.0)' {
             $src | Should -Match "T 'menu\.about'" -Because $n
             $src | Should -Match 'F1' -Because $n
         }
+    }
+}
+
+Describe 'Update check: the hint about the access to the internet (2.3.3)' {
+    It 'adds the account to a network problem' {
+        $global:EmtLang = 'en'
+        try {
+            Format-EmtUpdateProblem 'No answer in 5 s.' -Account 'CONTOSO\jsmith' |
+                Should -Be 'No answer in 5 s. Possibly the account CONTOSO\jsmith cannot connect to the internet.'
+            Format-EmtUpdateProblem 'Unable to connect to the remote server' -Account 'CONTOSO\jsmith' |
+                Should -Be 'Unable to connect to the remote server. Possibly the account CONTOSO\jsmith cannot connect to the internet.'
+        } finally { $global:EmtLang = 'ru' }
+    }
+    It 'uses the account of the process when no account is given' {
+        Format-EmtUpdateProblem 'x' | Should -Match ([regex]::Escape([Security.Principal.WindowsIdentity]::GetCurrent().Name))
+    }
+    It 'the window adds the hint only to a network problem, not to a release that is not correct' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\ExchangeMessageTrail.ps1') -Raw -Encoding UTF8
+        $m = [regex]::Match($src, '(?s)function Complete-EmtUpdateCheck.*?\n    \$state = ')
+        $m.Success | Should -BeTrue
+        $m.Value | Should -Match 'if \(\$Problem\) \{ \$Problem = Format-EmtUpdateProblem \$Problem \}'
     }
 }
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.3.3 — 2026-11-24
+
+**The search for forwards is removed because it was not safe**
+
+- The check box "Include forwards (FW:)" on the tab **Delete** is removed because the function was not safe.
+- The tracking log has no link between a message and its forward. EMT found a forward only by the same subject
+  from another sender. Thus a different message with a similar subject from another person was also a "forward",
+  and the delete included all messages of this person with this text.
+- If the tracking log had no messages from the senders (for example, because of an error in the address),
+  EMT used all messages with this subject from all senders.
+- Now the search and the delete use only the senders that you give. Forwards and replies from other people stay.
+  To delete them, search with their sender.
+- EMT removes the key `IncludeForwards` from `settings.json`.
+
+**Update check**
+
+- If the check fails, the log and the window "About" also show the account of EMT:
+  possibly this account cannot connect to the internet. For example, an administrator account often has no proxy.
+
+**Changelog**
+
+- The older versions use the English names of the buttons and the check boxes.
+
 ## 2.3.2 — 2026-11-24
 
 **Update in one click**
@@ -435,7 +458,7 @@ Recipient and safety.
 
 Partial addresses.
 
-- **Отправители** and **Получатель** accept a part of an address or a name.
+- **Senders** and **Recipient** accept a part of an address or a name.
   MailCleaner finds the full address in the Exchange address book (`Get-Recipient -Anr`) before the search.
 - One match: the full address goes in the field. More matches: a selection window. No match: an error, no search.
 - The tracking log and the KQL query get only full addresses. No wildcards.
@@ -476,7 +499,7 @@ Code audit and window audit.
 - Safety check before a hard delete: `Search-Mailbox` must not find more items than the search.
 - A stopped delete writes an audit row with `Cancelled` or `Failed`. A cancelled hard delete gives the partial counts.
 - Verification after a delete examines the mailboxes again when the index lags.
-- The confirmation window shows the messages. A large delete shows a warning and needs the word `УДАЛИТЬ`.
+- The confirmation window shows the messages. A large delete shows a warning and needs the word `DELETE`.
 - Senders and subject are not kept in `settings.json`.
 
 **Window**
@@ -484,11 +507,11 @@ Code audit and window audit.
 - Table columns: the user can change the width and the order. A sort keeps the widths. Ctrl+C copies rows.
 - Initial column widths from the content, also for hidden tabs.
 - The tab name shows the row count.
-- New layout: timeout and cleanup in the top line; **Сегодня** and **Вчера** next to the end date;
-  actions bottom left; status, progress and **Отмена** bottom right.
+- New layout: timeout and cleanup in the top line; **Today** and **Yesterday** next to the end date;
+  actions bottom left; status, progress and **Cancel** bottom right.
 - The criteria can be typed before the connection. Enter starts the search.
-- **Только ящик получателя** and **Искать во всех ящиках** exclude each other.
-- Button states after a delete. The Connect button shows **Переподключиться**.
+- **Recipient mailbox only** and **Search all mailboxes** exclude each other.
+- Button states after a delete. The Connect button shows **Reconnect**.
 - The summary line is red with errors. Its tooltip shows the full text.
 - The search button needs only `Search-Mailbox`. The soft delete needs the Compliance Search role.
 - Export: a file name for the quick search, and a new file `*-errors.csv`.
@@ -498,7 +521,7 @@ Code audit and window audit.
 
 Search speed.
 
-- New check box **Только ящик получателя**: the search and the delete use only the recipient mailbox.
+- New check box **Recipient mailbox only**: the search and the delete use only the recipient mailbox.
 - Quick search with `Search-Mailbox` for 1 to 10 mailboxes. A Compliance Search is made only for a soft delete.
 - The tracking log is read once. The second pass by message ID occurs only with a recipient filter.
 - Duplicate tracking events are removed.

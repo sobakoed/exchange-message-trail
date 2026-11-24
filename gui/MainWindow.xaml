@@ -193,7 +193,6 @@
                   <Button x:Name="btnSearch" DockPanel.Dock="Right" Style="{DynamicResource AccentButton}"
                           MinWidth="130" Tag="crit.findCopies"/>
                   <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <CheckBox x:Name="chkForwards" Tag="crit.forwards" IsChecked="True" Margin="0,0,18,0"/>
                     <CheckBox x:Name="chkOnly" Tag="crit.only" IsEnabled="False" Margin="0,0,18,0"/>
                     <CheckBox x:Name="chkAll" Tag="crit.all"/>
                   </StackPanel>

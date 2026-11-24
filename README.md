@@ -194,7 +194,8 @@ powershell.exe -STA -ExecutionPolicy Bypass -File .\ExchangeMessageTrail.ps1 -Se
   **Skip this version** hides the line until the next version.
 - The window **About** checks for updates each time that it opens.
 - EMT sends only a request to `api.github.com`. It sends no data about you or about messages.
-- If GitHub is not available, EMT shows nothing. The log shows the cause.
+- If GitHub is not available, EMT shows nothing. The log shows the cause and the account of EMT:
+  possibly this account cannot connect to the internet (for example, an administrator account).
 - To stop the check at the start, click **?** → **About**, then clear **Check for updates at start**.
 
 **Update in one click:**
@@ -413,14 +414,13 @@ Use this procedure, for example, for a message that is older than the tracking l
 
 | Check box | Function |
 |---|---|
-| Include forwards (FW:) | Adds the forwarded copies from other senders |
 | Recipient mailbox only | Searches and deletes only in the mailbox in **Recipient** |
 | Search all mailboxes | Searches all mailboxes |
 
 The last two check boxes exclude each other.
 
-- **Forwarded copy:** a message from another sender with the same base subject.
-  The base subject is the subject without `RE:`, `FW:`, `Fwd:`, `AW:`, `WG:`, `Отв:`, `Пересл:` and similar prefixes.
+- **Senders:** EMT finds and deletes only the messages of the senders that you give.
+  Forwards and replies from other people stay. To delete them, search with their sender.
 - **Subject text:** EMT reads the subject as text. Square brackets, `*` and `?` have no special meaning.
 - **Recipient:** EMT adds the recipient to the KQL query. Without the recipient, `from:sender` finds all messages of the sender.
 - **Period:** Compliance Search and `Search-Mailbox` use full days only. The KQL range covers the local days and the UTC days.
@@ -567,7 +567,7 @@ See [docs/TRANSLATING.md](docs/TRANSLATING.md).
 - The tracking log keeps data for 30 days by default. The maximum period is 31 days.
 - The tracking log does not show what occurs in the mailbox after the delivery. Use the [mailbox check](#mailbox-check).
 - EMT does not delete unindexed items. The summary line shows their number.
-- EMT does not find a forwarded copy with a changed subject.
+- EMT does not delete forwards and replies from other senders. The tracking log has no link between a message and its forward.
 - `Search-Mailbox` is not available in Exchange Online. EMT is for on-premises Exchange only.
 
 ## Troubleshooting

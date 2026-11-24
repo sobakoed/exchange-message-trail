@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="emt-version" content="2.3.2">
+<meta name="emt-version" content="2.3.3">
 <title>Exchange Message Trail — User guide</title>
 <link rel="stylesheet" href="help.css">
 <link rel="icon" type="image/svg+xml" href="img/emt.svg">
@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="logo"><img src="img/emt.svg" class="mark" alt="">Exchange Message Trail</div>
-  <span class="version">Version 2.3.2 · User guide</span>
+  <span class="version">Version 2.3.3 · User guide</span>
   <span class="spacer"></span>
   <div class="switch">
     <a class="active" href="en.html">English</a>
@@ -141,7 +141,8 @@
     During a search or a delete, the update is not possible. If EMT cannot write to its folder
     (for example, in <code>Program Files</code>), EMT tells you and opens the release page.</p>
     <p>EMT sends only a request to <code>api.github.com</code>. It sends no data about you or about messages.
-    If GitHub is not available, EMT shows nothing and only writes a line to the log.
+    If GitHub is not available, EMT shows nothing and only writes a line to the log, with the account of EMT:
+    possibly this account cannot connect to the internet. For example, an administrator account often has no proxy.
     To stop the check at the start, clear the check box <b>Check for updates at start</b> in the window "About".</p>
   </div>
 </section>
@@ -402,10 +403,11 @@
     <tr><th>Criterion or option</th><th>Function</th></tr>
     <tr><td>Attachment name</td><td>A file name in the message</td></tr>
     <tr><td>Words in the text</td><td>A phrase in the text of the message</td></tr>
-    <tr><td>Include forwards (FW:)</td><td>Adds the messages with the same subject from other senders</td></tr>
     <tr><td>Recipient mailbox only</td><td>Searches and deletes only in the mailbox of the field <b>Recipient</b></td></tr>
     <tr><td>Search all mailboxes</td><td>Searches in all mailboxes of the organization. This is slow.</td></tr>
   </table>
+  <p>EMT finds and deletes only the messages of the senders in the criteria. Forwards and replies from other people stay.
+  To delete them, search with their sender.</p>
   <p>A line over the result shows the source of the criteria: green = from the tracking log, orange = typed by the user.
   A change of a criterion clears the result.</p>
   <table>
@@ -638,7 +640,7 @@
     <p>Make sure that the network is <b>TON</b>. A transfer in a different network is lost.</p>
   </div>
   <footer>
-    <p>Exchange Message Trail 2.3.2 · The screenshots show example data (contoso), not real data.</p>
+    <p>Exchange Message Trail 2.3.3 · The screenshots show example data (contoso), not real data.</p>
     <p>Microsoft, Exchange and Windows are trademarks of the Microsoft group of companies. EMT is not affiliated with Microsoft.</p>
   </footer>
 </section>

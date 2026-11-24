@@ -19,7 +19,7 @@ Set-StrictMode -Version 2.0
 function Get-EmtSearchPrefix { 'EMT_' }
 
 # The version of EMT. A unit test compares it with the first section of CHANGELOG.md.
-function Get-EmtVersion { '2.3.2' }
+function Get-EmtVersion { '2.3.3' }
 
 # The links of the window "About". A unit test compares the TON address with README.md.
 # Api: the last release (the update check). It is public: no token, no user data.
@@ -115,6 +115,17 @@ function Test-EmtPackage {
     $m = [regex]::Match($core, "function Get-EmtVersion \{ '(\d+\.\d+\.\d+)' \}")
     if (-not $m.Success -or $m.Groups[1].Value -ne $Version) { return [pscustomobject]@{ Root = $root; Problem = (T 'update.pkgBad' $Version) } }
     [pscustomobject]@{ Root = $root; Problem = '' }
+}
+
+function Format-EmtUpdateProblem {
+    <#
+        A network problem of the update check, with a hint: possibly the account cannot connect to the internet.
+        For example, an administrator account often has no proxy or no access to the internet.
+    #>
+    param([AllowEmptyString()] [string] $Problem, [string] $Account = [Security.Principal.WindowsIdentity]::GetCurrent().Name)
+    $p = ([string]$Problem).Trim()
+    if ($p -and $p -notmatch '[.!?]$') { $p += '.' }
+    ($p + ' ' + (T 'update.noInternet' $Account)).Trim()
 }
 
 function Get-EmtUpdateState {
@@ -283,13 +294,6 @@ function Get-EmtKqlDateRange {
     }
 }
 
-function Get-EmtBaseSubject {
-    <# Subject without reply/forward prefixes (RE:, FW:, Fwd:, AW:, WG:, Отв:, Пересл: …), lower case. #>
-    param([string] $Subject)
-    $rx = '^\s*((re|fw|fwd|aw|wg|tr|rv|sv|vs|отв|ответ|пересл|переслано)\s*(\[\d+\])?\s*:\s*)+'
-    (([string]$Subject) -replace $rx, '').Trim().ToLowerInvariant()
-}
-
 function ConvertTo-EmtKqlPhrase {
     param([string] $Text)
     '"' + ($Text -replace '"', '').Trim() + '"'
@@ -336,7 +340,7 @@ function Complete-EmtCriteria {
     param([Parameter(Mandatory)] [hashtable] $Criteria)
     $c = @{
         Senders = @(); Subject = ''; Recipient = ''; MessageId = ''; Attachment = ''; Keywords = ''
-        Start = [datetime]::MinValue; End = [datetime]::MinValue; IncludeForwards = $true; AllMailboxes = $false
+        Start = [datetime]::MinValue; End = [datetime]::MinValue; AllMailboxes = $false
         OnlyRecipient = $false
     }
     foreach ($k in @($Criteria.Keys)) { $c[$k] = $Criteria[$k] }
@@ -685,7 +689,7 @@ function Find-EmtTrackingEvents {
     param(
         [string[]] $Senders = @(), [string] $Subject, [string] $Recipient, [string] $MessageId,
         [Parameter(Mandatory)] [datetime] $Start, [Parameter(Mandatory)] [datetime] $End,
-        [switch] $IncludeForwards, [switch] $CompleteRecipients
+        [switch] $CompleteRecipients
     )
     $servers = @(Get-EmtTransportServers)
     Write-EmtLog (T 'log.trackServers' $servers.Count)
@@ -720,25 +724,11 @@ function Find-EmtTrackingEvents {
     $pattern = '*' + [System.Management.Automation.WildcardPattern]::Escape([string]$Subject) + '*'
     $hits = @($raw | Where-Object { -not $Subject -or ([string]$_.MessageSubject) -like $pattern })
 
+    # Only the messages of the given senders. A message from another sender with the same subject
+    # (for example, a forward) is not taken: the subject alone cannot tell a forward from a different message.
+    # The search for forwards was removed in 2.3.3 for this reason.
     if ($Senders.Count) {
-        $orig = @($hits | Where-Object { ([string]$_.Sender).ToLowerInvariant() -in $Senders })
-        if ($orig.Count) {
-            if ($IncludeForwards) {
-                # A forward is a message from another sender with the same base subject
-                # (subject without RE:/FW: prefixes). A different subject that only contains the text is not a forward.
-                $bases = @($orig | ForEach-Object { Get-EmtBaseSubject $_.MessageSubject } | Sort-Object -Unique)
-                $fw = @($hits | Where-Object {
-                    ([string]$_.Sender).ToLowerInvariant() -notin $Senders -and (Get-EmtBaseSubject $_.MessageSubject) -in $bases
-                })
-                $hits = @($orig) + @($fw)
-            } else {
-                $hits = $orig
-            }
-        } elseif ($IncludeForwards -and $Subject) {
-            Write-EmtLog (T 'log.noOriginal') 'Warn'
-        } else {
-            $hits = @()
-        }
+        $hits = @($hits | Where-Object { ([string]$_.Sender).ToLowerInvariant() -in $Senders })
     }
     # Events without MessageId (for example NOTIFYMAPI) are not messages. They stay in the event list only.
     $ids   = @($hits | ForEach-Object { [string]$_.MessageId } | Where-Object { $_ } | Sort-Object -Unique)
@@ -975,7 +965,7 @@ function Invoke-EmtSearch {
     if ($caps.Tracking) {
         $tracking = Find-EmtTrackingEvents -Senders $senders -Subject $Criteria.Subject -Recipient $Criteria.Recipient `
                         -MessageId $Criteria.MessageId -Start $Criteria.Start -End $Criteria.End `
-                        -IncludeForwards:([bool]$Criteria.IncludeForwards) -CompleteRecipients:(-not $onlyMailbox)
+                        -CompleteRecipients:(-not $onlyMailbox)
         & $stage (T 'stage.tracking')
     } else {
         Write-EmtLog (T 'log.noTrackRights') 'Warn'
@@ -1000,7 +990,8 @@ function Invoke-EmtSearch {
 
     # ---- 3. KQL ----
     $kqlSenders = @($senders)
-    if (($Criteria.IncludeForwards -or -not $kqlSenders.Count) -and $trackSenders.Count) { $kqlSenders += $trackSenders }
+    # The senders from the tracking log only when the criteria have no sender.
+    if (-not $kqlSenders.Count -and $trackSenders.Count) { $kqlSenders += $trackSenders }
     $kqlSubject = $Criteria.Subject
     if (-not $kqlSubject -and $Criteria.MessageId -and $summary.Count) { $kqlSubject = $summary[0].Subject }
     $kqlRecipients = @()
